@@ -10,3 +10,7 @@ config/admin-initial-password.txt
 config/docs-basic-auth-password.txt
 fern/node_modules/
 .pytest_cache/
+data/
+docs/server-audit.md
+PROGRESS.md
+docs/INTERFACES.md
