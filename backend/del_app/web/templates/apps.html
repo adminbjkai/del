@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}Applications{% endblock %}
+{% block content %}
+<h1>Applications <span class="count-pill">{{ apps | length }}</span></h1>
+<p class="muted">Click a column header to sort. Filtering and pagination happen
+  instantly in your browser; use <code>?search=</code> in the URL for a deep link
+  that prefills the filter below.</p>
+
+<table class="table" data-enhanced data-empty="No applications found." data-search-placeholder="Filter apps…"{% if search %} data-prefill="{{ search }}"{% endif %}>
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th data-filter="status">Status</th>
+      <th data-filter="kind">Kind</th>
+      <th>Domains</th>
+      <th>Host ports</th>
+      <th>Resources</th>
+      <th>Warnings</th>
+      <th data-filter="protected">Protected</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for app in apps %}
+    <tr>
+      <td><a href="/apps/{{ app.slug }}">{{ app.name }}</a><div class="muted mono" style="font-size:.75rem">{{ app.slug }}</div></td>
+      <td data-filter-value="{{ app.status }}"><span class="badge">{{ app.status }}</span></td>
+      <td data-filter-value="{{ app.kind }}">{{ app.kind or '—' }}</td>
+      <td>{{ m.domain_links(app.domains) }}</td>
+      <td>{{ m.joinlist(app.ports) }}</td>
+      <td>{{ app.res_count }}</td>
+      <td data-sort-value="{{ app.warn_count }}">{% if app.warn_count %}<span class="badge badge-amber">{{ app.warn_count }}</span>{% else %}0{% endif %}</td>
+      <td data-filter-value="{{ 'yes' if app.protected else 'no' }}">{% if app.protected %}<span class="badge badge-blue">protected</span>{% else %}—{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

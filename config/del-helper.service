@@ -1,0 +1,40 @@
+[Unit]
+Description=DEL privileged helper daemon (allowlisted root operations over unix socket)
+Documentation=file:/apps/del/docs/ARCHITECTURE.md
+After=network.target docker.service
+Wants=docker.service
+
+[Service]
+Type=simple
+# Runs as root: the whole point of this helper is to perform host-level privileged
+# operations (systemctl, nginx, rm under approved roots, docker). It compensates
+# with a fixed op allowlist and double argument validation, not privilege drop.
+User=root
+Group=root
+ExecStart=/usr/bin/python3 /apps/del/helper/del_helper.py /run/del/helper.sock /apps/del/config/helper-policy.json
+Restart=on-failure
+RestartSec=2
+TimeoutStopSec=15
+
+# /run/del is created and owned root:root; helper chmods the socket 0660 root:bjkai.
+RuntimeDirectory=del
+RuntimeDirectoryMode=0755
+
+# --- hardening (kept compatible with needing real root + docker + nginx + rm) ---
+NoNewPrivileges=false
+PrivateTmp=true
+ProtectHome=no
+ProtectSystem=false
+ProtectKernelModules=true
+ProtectKernelTunables=false
+ProtectControlGroups=false
+ProtectClock=true
+RestrictSUIDSGID=true
+RestrictRealtime=true
+LockPersonality=true
+MemoryDenyWriteExecute=true
+RestrictNamespaces=false
+SystemCallArchitectures=native
+
+[Install]
+WantedBy=multi-user.target

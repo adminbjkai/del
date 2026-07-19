@@ -1,0 +1,118 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}{{ app.get('name', app.get('slug')) }}{% endblock %}
+{% macro confidence_badge(a) -%}
+  {% set lvl = a.get('level') or 'possible' %}
+  <span class="badge badge-confidence-{{ lvl }}" title="confidence {{ a.get('confidence') }}">{{ lvl }}</span>
+{%- endmacro %}
+{% block content %}
+{% if removed %}
+<div class="flash flash-info" style="margin-bottom:1rem">
+  This application was <strong>not present in the latest scan</strong> — it has been removed
+  (or is no longer discoverable). This page shows its last-known state for history/audit.
+  Resources listed here no longer exist unless marked preserved in its final removal job.
+</div>
+{% endif %}
+<h1>{{ app.get('name', app.get('slug')) }}</h1>
+<p class="muted">slug: {{ app.get('slug') }} · status: {{ app.get('status') }}
+  {% if app.get('protected') %}<span class="badge badge-blue">protected</span>{% endif %}
+</p>
+
+<div class="action-bar">
+  {% if app.get('protected') %}
+    <button class="btn btn-danger" disabled title="This app is protected and cannot be removed">Plan removal</button>
+    <span class="muted">Protected apps cannot be removed through DEL.</span>
+  {% else %}
+    <a class="btn btn-danger" href="/apps/{{ app.get('slug') }}/plan">Plan removal</a>
+  {% endif %}
+  <a class="btn" href="/manifests/{{ app.get('slug') }}">Edit manifest</a>
+</div>
+
+<section class="panel">
+  <h2>Overview</h2>
+  <dl class="kv">
+    <dt>Kind</dt><dd>{{ app.get('kind') or '—' }}</dd>
+    <dt>Domains</dt><dd>{{ m.domain_links(app.get('domains')) }}</dd>
+    <dt>First seen</dt><dd>{{ app.get('first_seen') or '—' }}</dd>
+    <dt>Last seen</dt><dd>{{ app.get('last_seen') or '—' }}</dd>
+    <dt>Manifest</dt><dd>{{ app.get('manifest_path') or '—' }}</dd>
+    <dt>Resources</dt><dd>{{ associations | length }}</dd>
+  </dl>
+</section>
+
+{% set shared_items = sections.get('shared', []) %}
+{% if shared_items %}
+<div class="box box-warning">
+  <strong>{{ shared_items | length }} shared resource(s).</strong> These are used by
+  more than one application. Removing this app should preserve them — review carefully
+  before planning removal.
+</div>
+{% endif %}
+
+{% for section_key, section_title in [('docker', 'Docker'), ('systemd', 'systemd'), ('nginx', 'Nginx'), ('scheduled', 'Scheduled'), ('processes', 'Processes'), ('files', 'Files / Storage'), ('shared', 'Shared resources')] %}
+{% set items = sections.get(section_key, []) %}
+<section class="panel">
+  <details {% if items %}open{% endif %}>
+    <summary><strong>{{ section_title }}</strong> <span class="count-pill">{{ items | length }}</span></summary>
+    {% if items %}
+    <table class="table" data-enhanced data-empty="Nothing found." data-page-size="25">
+      <thead><tr><th>Resource</th>{% if section_key == 'docker' %}<th>Host port(s)</th><th>Container port(s)</th>{% endif %}<th data-filter="confidence">Confidence</th><th data-filter="risk">Risk</th><th data-filter="removal">Removal</th><th data-nosort>Evidence</th><th data-nosort>Actions</th></tr></thead>
+      <tbody>
+        {% for a in items %}
+        <tr>
+          <td>{{ a.get('resource_display') or a.get('resource_key') }}{% if a.get('shared') %} <span class="badge badge-amber">shared</span>{% endif %}</td>
+          {% if section_key == 'docker' %}
+          {% set mappings = a.get('port_mappings') %}
+          <td>{{ mappings | map(attribute='host') | list | join(', ') if mappings else '—' }}</td>
+          <td>{{ mappings | map(attribute='container') | list | join(', ') if mappings else '—' }}</td>
+          {% endif %}
+          <td data-filter-value="{{ a.get('level') }}" data-sort-value="{{ a.get('confidence') }}">{{ confidence_badge(a) }}</td>
+          <td data-filter-value="{{ a.get('data_loss_risk') }}">{{ a.get('data_loss_risk') or '—' }}</td>
+          <td data-filter-value="{{ a.get('removal_eligible') }}">{{ a.get('removal_eligible') or '—' }}</td>
+          <td>
+            <details>
+              <summary>{{ a.get('evidence', []) | length }} item(s)</summary>
+              <ul>
+                {% for ev in a.get('evidence', []) %}
+                <li>[{{ ev.get('source') }}] {{ ev.get('statement') }} (weight {{ ev.get('weight') }})</li>
+                {% endfor %}
+              </ul>
+            </details>
+          </td>
+          <td>
+            <form method="post" action="/apps/{{ app.get('slug') }}/rescan-approve" class="inline-form">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <input type="hidden" name="association_id" value="{{ a.get('id') }}">
+              <button type="submit" name="action" value="approve" class="link-button">approve</button>
+              <button type="submit" name="action" value="exclude" class="link-button danger">exclude</button>
+              <button type="submit" name="action" value="mark-shared" class="link-button">mark shared</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% else %}
+    <p class="muted">Nothing found.</p>
+    {% endif %}
+  </details>
+</section>
+{% endfor %}
+
+<section class="panel">
+  <h2>Removal readiness <span class="count-pill">{{ associations | length }}</span></h2>
+  <table class="table" data-enhanced data-empty="No associated resources." data-page-size="25">
+    <thead><tr><th>Resource</th><th data-filter="confidence">Confidence</th><th data-filter="risk">Risk</th><th data-filter="removal">Removal</th></tr></thead>
+    <tbody>
+      {% for a in associations %}
+      <tr class="{% if a.get('data_loss_risk') == 'data' %}row-danger{% endif %}">
+        <td>{{ a.get('resource_display') or a.get('resource_key') }}</td>
+        <td data-filter-value="{{ a.get('level') }}" data-sort-value="{{ a.get('confidence') }}">{{ confidence_badge(a) }}</td>
+        <td data-filter-value="{{ a.get('data_loss_risk') }}">{{ a.get('data_loss_risk') or '—' }}</td>
+        <td data-filter-value="{{ a.get('removal_eligible') }}">{{ a.get('removal_eligible') or '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

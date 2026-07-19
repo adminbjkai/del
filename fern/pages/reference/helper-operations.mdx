@@ -1,0 +1,116 @@
+---
+title: Helper Operations
+subtitle: The complete allowlist the privileged helper will execute
+slug: reference/helper-operations
+---
+
+Every privileged action DEL can take on the host is a **typed operation** sent as
+JSON over the unix socket `/run/del/helper.sock` (mode `0660`, owner `root:bjkai`)
+to `del-helper`, a ~600-line stdlib-only root daemon. The web app never runs shell
+as root and never constructs shell strings from user input. `del-helper` re-validates
+every argument against `helper-policy.json` — regardless of what the (HMAC-signed)
+plan claims — and executes exclusively via subprocess argument arrays
+(`shell=False`). Nothing outside this fixed list is possible.
+
+Every operation honors a `dry_run` flag (returns what *would* happen without changing
+anything) and is written to the append-only `/apps/del/logs/helper-audit.log` on
+every request, success or refusal.
+
+## The allowlist
+
+<AccordionGroup>
+  <Accordion title="ping">
+    Health check. No arguments. Confirms the helper socket is reachable.
+  </Accordion>
+  <Accordion title="compose_down — project, config_files[], remove_volumes?, remove_images_mode?">
+    Brings a Compose project down. The config files must exist and be under approved
+    roots.
+  </Accordion>
+  <Accordion title="container_stop — container_id">
+    Stops a running container. The id is validated against `docker inspect`.
+  </Accordion>
+  <Accordion title="container_rm — container_id">
+    Removes a container. The id is validated against `docker inspect`.
+  </Accordion>
+  <Accordion title="image_rm — image_id">
+    Removes an image. **Refused** if any other container still references it.
+  </Accordion>
+  <Accordion title="volume_rm — volume_name">
+    Deletes a named volume. **Refused** unless the plan was approved with the
+    double-confirmation flag (plan option + per-volume checkbox + typed
+    `DELETE VOLUMES` phrase). This is the one irreversible-by-default operation.
+  </Accordion>
+  <Accordion title="network_rm — network_name">
+    Removes a Docker network. **Refuses** `bridge`/`host`/`none` and any network with
+    foreign containers still attached.
+  </Accordion>
+  <Accordion title="systemd_stop — unit">
+    Stops a systemd unit. The unit must appear in the app's approved plan.
+  </Accordion>
+  <Accordion title="systemd_disable — unit">
+    Disables a systemd unit. The unit must appear in the app's approved plan.
+  </Accordion>
+  <Accordion title="systemd_rm_unit — unit">
+    Removes a unit file. Restricted to `/etc/systemd/system` and followed by a
+    `daemon-reload`.
+  </Accordion>
+  <Accordion title="cron_rm — file path or crontab line">
+    Removes a cron entry. `/etc/cron.d` files only under the approved plan; user
+    crontab edits are applied via a `crontab -l` diff.
+  </Accordion>
+  <Accordion title="nginx_rm_site — paths[]">
+    Removes nginx site files (only under `/etc/nginx/sites-{enabled,available}`).
+    Backs them up first, runs `nginx -t`, reloads only if the test passes, and
+    restores automatically on failure.
+  </Accordion>
+  <Accordion title="nginx_test">
+    Read-only `nginx -t`. Never reloads. Safe in both dry-run and live.
+  </Accordion>
+  <Accordion title="nginx_test_reload">
+    Runs `nginx -t` and reloads only if it passes.
+  </Accordion>
+  <Accordion title="path_delete — path">
+    Deletes a file or directory. The path is canonicalized with `realpath` (no symlink
+    escape), must be under an approved deletion root **and not** a protected root,
+    must appear in the approved plan, and mountpoints are refused outright.
+  </Accordion>
+  <Accordion title="path_restore — backup_path, original_path">
+    Restores a prior `backup_tar`/`file_backup` copy back to `original_path` (`cp -a`).
+    `original_path` must be absolute.
+  </Accordion>
+  <Accordion title="tmux_kill — session">
+    Kills a tmux session by its exact name from the plan.
+  </Accordion>
+  <Accordion title="process_term — pid, expected_exe">
+    Terminates a process (TERM, then KILL after a grace period). The pid **and** its
+    executable must still match what the plan expected.
+  </Accordion>
+  <Accordion title="backup_tar — src_path, dest">
+    Tars a path to a backup. `dest` must be under `/apps/del/backups` only.
+  </Accordion>
+  <Accordion title="volume_backup — volume, dest">
+    Archives a volume's contents (`docker run --rm -v vol:/src:ro tar`) into
+    `/apps/del/backups`.
+  </Accordion>
+  <Accordion title="file_backup — path, dest">
+    Makes a timestamped copy of a file before it is edited or removed.
+  </Accordion>
+</AccordionGroup>
+
+## Protected roots
+
+These are **never deletable**, even if a plan lists them. `path_delete` refuses any
+target that canonicalizes to one of them:
+
+`/`, `/bin`, `/boot`, `/dev`, `/etc`, `/home`, `/lib`, `/lib64`, `/opt`, `/proc`,
+`/root`, `/run`, `/sbin`, `/srv`, `/sys`, `/tmp`, `/usr`, `/var`, `/apps`, `/data`,
+and `/apps/del` itself.
+
+`path_delete` additionally requires the target to canonicalize under one of the
+**approved deletion roots** — `/apps`, `/data`, `/srv`, `/var/www`, `/home/bjkai`,
+`/etc/nginx/sites-{available,enabled}`, `/etc/systemd/system`, `/etc/cron.d` — *and*
+to appear in the specific approved plan.
+
+See the [Security Model](/reference/security) for the surrounding auth, HMAC, and
+threat-model detail, and the [Architecture reference](/reference/architecture) for
+how the helper fits into the overall privilege split.

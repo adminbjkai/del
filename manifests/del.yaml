@@ -1,0 +1,19 @@
+id: del
+name: DEL (App Inventory & Uninstaller)
+status: active
+domains:
+  - del.bjk.ai
+repositories:
+  - /apps/del
+host_paths:
+  - /apps/del
+systemd_units:
+  - del-web.service
+  - del-helper.service
+  - del-docs.service
+nginx:
+  - /etc/nginx/sites-available/del.bjk.ai
+  - /etc/nginx/sites-enabled/del.bjk.ai
+notes: |
+  DEL itself. Protected application — must never be removable through DEL.
+  DNS for del.bjk.ai is managed externally in IONOS.

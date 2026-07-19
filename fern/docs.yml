@@ -1,0 +1,60 @@
+instances:
+  - url: del.docs.buildwithfern.com/docs
+
+title: DEL Documentation
+
+navbar-links:
+  - type: minimal
+    text: Live app
+    href: https://del.bjk.ai
+
+navigation:
+  - section: Getting Started
+    contents:
+      - page: Overview
+        path: ./pages/overview.mdx
+      - page: Logging In
+        path: ./pages/guides/logging-in.mdx
+  - section: Using DEL
+    contents:
+      - page: Scanning Your Server
+        path: ./pages/guides/scanning.mdx
+      - page: Browsing the Inventory
+        path: ./pages/guides/browsing.mdx
+      - page: Understanding Confidence
+        path: ./pages/guides/confidence.mdx
+      - page: Removing an Application
+        path: ./pages/guides/removing-an-application.mdx
+      - page: Orphan Review
+        path: ./pages/guides/orphans.mdx
+      - page: Backups & Restore
+        path: ./pages/guides/backups.mdx
+  - section: Administration
+    contents:
+      - page: Installation
+        path: ./pages/installation.mdx
+      - page: Operations
+        path: ./pages/guides/operations.mdx
+      - page: Recovery
+        path: ./pages/guides/recovery.mdx
+      - page: Uninstall DEL
+        path: ./pages/reference/uninstall.mdx
+  - section: Reference
+    contents:
+      - page: Architecture
+        path: ./pages/reference/architecture.mdx
+      - page: Security Model
+        path: ./pages/reference/security.mdx
+      - page: Helper Operations
+        path: ./pages/reference/helper-operations.mdx
+
+colors:
+  accent-primary:
+    dark: "#5a8dff"
+    light: "#2a61d9"
+  background:
+    dark: "#131416"
+    light: "#f3f1ed"
+
+layout:
+  searchbar-placement: header

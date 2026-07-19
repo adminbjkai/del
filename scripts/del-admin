@@ -1,0 +1,111 @@
+#!/apps/del/.venv/bin/python
+"""DEL admin CLI: create-admin, change-password, migrate, rescan, backup-db."""
+from __future__ import annotations
+
+import argparse
+import getpass
+import os
+import sqlite3
+import sys
+from datetime import datetime
+
+sys.path.insert(0, "/apps/del/backend")
+
+from del_app import auth  # noqa: E402
+from del_app.config import get_settings  # noqa: E402
+from del_app.db import run_migrations  # noqa: E402
+
+
+def cmd_create_admin(args: argparse.Namespace) -> None:
+    username = args.username or input("Username: ")
+    if args.password_stdin:
+        password = sys.stdin.readline().rstrip("\n")
+    else:
+        password = getpass.getpass("Password: ")
+        confirm = getpass.getpass("Confirm password: ")
+        if password != confirm:
+            print("Passwords do not match.", file=sys.stderr)
+            sys.exit(1)
+    if not password:
+        print("Password must not be empty.", file=sys.stderr)
+        sys.exit(1)
+    user_id = auth.create_user(username, password)
+    print(f"Created user '{username}' (id={user_id}).")
+
+
+def cmd_change_password(args: argparse.Namespace) -> None:
+    username = args.username or input("Username: ")
+    if args.password_stdin:
+        password = sys.stdin.readline().rstrip("\n")
+    else:
+        password = getpass.getpass("New password: ")
+        confirm = getpass.getpass("Confirm password: ")
+        if password != confirm:
+            print("Passwords do not match.", file=sys.stderr)
+            sys.exit(1)
+    if not password:
+        print("Password must not be empty.", file=sys.stderr)
+        sys.exit(1)
+    auth.change_password(username, password)
+    print(f"Password updated for '{username}'.")
+
+
+def cmd_migrate(args: argparse.Namespace) -> None:
+    run_migrations()
+    print("Migrations applied.")
+
+
+def cmd_rescan(args: argparse.Namespace) -> None:
+    try:
+        from del_app.scanner import run_scan
+    except ImportError:
+        print("del_app.scanner not available yet.", file=sys.stderr)
+        sys.exit(1)
+    scan_id = run_scan()
+    print(f"Scan complete: id={scan_id}")
+
+
+def cmd_backup_db(args: argparse.Namespace) -> None:
+    settings = get_settings()
+    os.makedirs(settings.backups_dir, exist_ok=True)
+    ts = datetime.now().strftime("%Y%m%dT%H%M%S")
+    dest = os.path.join(settings.backups_dir, f"del-{ts}.db")
+    src_conn = sqlite3.connect(settings.db_path)
+    dest_conn = sqlite3.connect(dest)
+    try:
+        src_conn.backup(dest_conn)
+    finally:
+        dest_conn.close()
+        src_conn.close()
+    print(f"Backed up database to {dest}")
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser(prog="del-admin")
+    sub = parser.add_subparsers(dest="command", required=True)
+
+    p = sub.add_parser("create-admin")
+    p.add_argument("--username")
+    p.add_argument("--password-stdin", action="store_true")
+    p.set_defaults(func=cmd_create_admin)
+
+    p = sub.add_parser("change-password")
+    p.add_argument("--username")
+    p.add_argument("--password-stdin", action="store_true")
+    p.set_defaults(func=cmd_change_password)
+
+    p = sub.add_parser("migrate")
+    p.set_defaults(func=cmd_migrate)
+
+    p = sub.add_parser("rescan")
+    p.set_defaults(func=cmd_rescan)
+
+    p = sub.add_parser("backup-db")
+    p.set_defaults(func=cmd_backup_db)
+
+    args = parser.parse_args()
+    args.func(args)
+
+
+if __name__ == "__main__":
+    main()

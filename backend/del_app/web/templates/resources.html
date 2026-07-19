@@ -1,0 +1,265 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}Resources · {{ res_label }}{% endblock %}
+{% block content %}
+<h1>Resources</h1>
+
+<nav class="tabbar">
+  {% for t in type_counts %}
+  <a href="/resources/{{ t.type }}"{% if t.type == res_type %} class="active"{% endif %}>
+    {{ t.label }}<span class="count-pill">{{ t.count }}</span>
+  </a>
+  {% endfor %}
+</nav>
+
+<h2>{{ res_label }} <span class="count-pill">{{ rows | length }}</span></h2>
+
+{% set empty = "No resources of this type in the latest scan." %}
+
+{# ---------- container ---------- #}
+{% if res_type == 'container' %}
+<table class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
+  <thead><tr><th>Name</th><th data-filter="state">State/health</th><th>Image</th><th>Host port(s)</th><th>Container port(s)</th><th>Compose project</th><th>Owner app(s)</th><th data-filter="shared">Shared</th></tr></thead>
+  <tbody>
+    {% for r in rows %}
+    {% set mappings = r.data.get('port_mappings') %}
+    <tr>
+      <td>{{ r.display or r.key }}</td>
+      <td data-filter-value="{{ r.data.get('state') }}"><span class="badge status-{{ r.data.get('state') }}">{{ r.data.get('state') }}</span>{% if r.data.get('health') %} <span class="badge">{{ r.data.get('health') }}</span>{% endif %}</td>
+      <td>{{ m.trunc(r.data.get('image')) }}</td>
+      <td>{{ mappings | map(attribute='host') | list | join(', ') if mappings else '—' }}</td>
+      <td>{{ mappings | map(attribute='container') | list | join(', ') if mappings else '—' }}</td>
+      <td>{{ r.data.get('compose_project') or '—' }}</td>
+      <td>{{ m.owner_cell(r) }}</td>
+      <td data-filter-value="{{ 'yes' if r.shared else 'no' }}">{% if r.shared %}<span class="badge badge-amber">shared</span>{% else %}no{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{# ---------- image ---------- #}
+{% elif res_type == 'image' %}
+<table class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
+  <thead><tr><th>Repo:tag</th><th>ID</th><th>Size</th><th data-filter="dangling">Dangling</th><th>Used by</th><th>Owner app(s)</th></tr></thead>
+  <tbody>
+    {% for r in rows %}
+    <tr>
+      <td>{{ m.trunc(r.data.get('repo_tag') or r.display or r.key) }}</td>
+      <td>{{ m.copy_id(r.key) }}</td>
+      <td data-sort-value="{{ r.data.get('size') }}">{{ r.data.get('size') or '—' }}</td>
+      <td data-filter-value="{{ 'yes' if r.data.get('dangling') else 'no' }}">{% if r.data.get('dangling') %}<span class="badge badge-amber">dangling</span>{% else %}no{% endif %}</td>
+      <td>{{ (r.data.get('containers_using') or []) | length }}</td>
+      <td>{{ m.owner_cell(r) }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{# ---------- volume ---------- #}
+{% elif res_type == 'volume' %}
+<table class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
+  <thead><tr><th>Name</th><th>Mountpoint</th><th>Containers using</th><th data-filter="orphan">Orphan</th><th>Owner app(s)</th><th data-filter="shared">Shared</th></tr></thead>
+  <tbody>
+    {% for r in rows %}
+    {% set using = r.data.get('containers_using') or [] %}
+    <tr>
+      <td>{{ r.display or r.key }}</td>
+      <td>{{ m.trunc(r.path or r.data.get('mountpoint')) }}</td>
+      <td>{{ m.joinlist(using) }}</td>
+      <td data-filter-value="{{ 'orphan' if (r.data.get('orphan_candidate') or not using) else 'no' }}">{% if r.data.get('orphan_candidate') or not using %}<span class="badge badge-amber">orphan</span>{% else %}no{% endif %}</td>
+      <td>{{ m.owner_cell(r) }}</td>
+      <td data-filter-value="{{ 'yes' if r.shared else 'no' }}">{% if r.shared %}<span class="badge badge-amber">shared</span>{% else %}no{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{# ---------- network ---------- #}
+{% elif res_type == 'network' %}
+<table class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
+  <thead><tr><th>Name</th><th data-filter="driver">Driver</th><th>Attached</th><th>Owner app(s)</th><th data-filter="shared">Shared</th></tr></thead>
+  <tbody>
+    {% for r in rows %}
+    <tr>
+      <td>{{ r.display or r.key }}</td>
+      <td data-filter-value="{{ r.data.get('driver') }}">{{ r.data.get('driver') or '—' }}</td>
+      <td>{{ (r.data.get('attached_containers') or []) | length }}</td>
+      <td>{{ m.owner_cell(r) }}</td>
+      <td data-filter-value="{{ 'yes' if (r.shared or r.data.get('shared_across_projects')) else 'no' }}">{% if r.shared or r.data.get('shared_across_projects') %}<span class="badge badge-amber">shared</span>{% else %}no{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{# ---------- nginx_site ---------- #}
+{% elif res_type == 'nginx_site' %}
+<table class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
+  <thead><tr><th>Server names</th><th>Config path</th><th>Upstream port(s)</th><th data-filter="ssl">SSL</th><th>Owner app(s)</th></tr></thead>
+  <tbody>
+    {% for r in rows %}
+    {% set ups = (r.data.get('upstreams') or []) | map(attribute='port') | select | unique | list %}
+    <tr>
+      <td>{{ m.domain_links(r.data.get('server_names')) }}{% if not r.data.get('enabled', r.state == 'enabled') %} <span class="badge badge-grey" title="config file present but not enabled/serving">not enabled</span>{% endif %}</td>
+      <td>{{ m.trunc(r.data.get('file') or r.path) }}</td>
+      <td>{{ m.joinlist(ups) }}</td>
+      <td data-filter-value="{{ 'yes' if r.data.get('ssl_cert') else 'no' }}">{% if r.data.get('ssl_cert') %}<span class="badge badge-ok">ssl</span>{% else %}no{% endif %}</td>
+      <td>{{ m.owner_cell(r) }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{# ---------- systemd_unit / systemd_timer ---------- #}
+{% elif res_type in ('systemd_unit', 'systemd_timer') %}
+<table class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
+  <thead><tr><th>Unit</th><th data-filter="active">Active</th><th>Exec / target</th><th>Working dir</th><th>Owner app(s)</th></tr></thead>
+  <tbody>
+    {% for r in rows %}
+    <tr>
+      <td>{{ r.display or r.key }}</td>
+      <td data-filter-value="{{ r.data.get('active') }}"><span class="badge status-{{ 'running' if r.data.get('active') == 'active' else 'pending' }}">{{ r.data.get('active') or r.state or '—' }}</span></td>
+      <td>{{ m.trunc(r.data.get('exec_start') or r.data.get('activates')) }}</td>
+      <td>{{ m.trunc(r.data.get('working_directory')) }}</td>
+      <td>{{ m.owner_cell(r) }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{# ---------- directory / git_repo ---------- #}
+{% elif res_type in ('directory', 'git_repo') %}
+<table class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
+  <thead><tr><th>Path</th><th>Size</th><th>Git branch</th><th data-filter="dirty">Dirty</th><th>Owner app(s)</th></tr></thead>
+  <tbody>
+    {% for r in rows %}
+    {% set git = r.data.get('git') or {} %}
+    {% set branch = r.data.get('branch') or git.get('branch') %}
+    {% set dirty = r.data.get('dirty') if r.data.get('dirty') is not none else git.get('dirty') %}
+    <tr>
+      <td>{{ m.trunc(r.path or r.key, 60) }}</td>
+      <td data-sort-value="{{ (r.data.get('size_kb') or 0) * 1000 }}">{{ human_size((r.data.get('size_kb') or 0) * 1000) if r.data.get('size_kb') else '—' }}</td>
+      <td>{{ branch or '—' }}</td>
+      <td data-filter-value="{{ 'yes' if dirty else 'no' }}">{% if dirty %}<span class="badge badge-amber">dirty</span>{% elif dirty is not none %}clean{% else %}—{% endif %}</td>
+      <td>{{ m.owner_cell(r) }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{# ---------- port / process ---------- #}
+{% elif res_type in ('port', 'process') %}
+<table class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
+  <thead><tr><th>Port</th><th>Bind addr</th><th data-filter="proto">Proto</th><th>Process</th><th>PID</th><th>Owner app(s)</th></tr></thead>
+  <tbody>
+    {% for r in rows %}
+    <tr>
+      <td>{{ r.data.get('port') or '—' }}</td>
+      <td>{{ r.data.get('addr') or r.data.get('bind') or '—' }}</td>
+      <td data-filter-value="{{ r.data.get('proto') }}">{{ r.data.get('proto') or '—' }}</td>
+      <td>{{ m.trunc(r.data.get('process') or r.data.get('comm')) }}</td>
+      <td>{{ r.data.get('pid') or '—' }}</td>
+      <td>{{ m.owner_cell(r) }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{# ---------- env_file ---------- #}
+{% elif res_type == 'env_file' %}
+<table class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
+  <thead><tr><th>Path</th><th>Variable count</th><th>Owner app(s)</th></tr></thead>
+  <tbody>
+    {% for r in rows %}
+    <tr>
+      <td>{{ m.trunc(r.path or r.key, 60) }}</td>
+      <td data-sort-value="{{ r.data.get('var_count') or 0 }}">{{ r.data.get('var_count') or ((r.data.get('var_names') or []) | length) }} names</td>
+      <td>{{ m.owner_cell(r) }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{# ---------- cron_entry ---------- #}
+{% elif res_type == 'cron_entry' %}
+<table class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
+  <thead><tr><th>Schedule</th><th data-filter="user">User</th><th>Command</th><th>Source</th><th>Owner app(s)</th></tr></thead>
+  <tbody>
+    {% for r in rows %}
+    <tr>
+      <td class="mono">{{ r.data.get('schedule') or '—' }}</td>
+      <td data-filter-value="{{ r.data.get('user') }}">{{ r.data.get('user') or '—' }}</td>
+      <td>{{ m.trunc(r.data.get('command'), 60) }}</td>
+      <td>{{ m.trunc(r.data.get('source')) }}</td>
+      <td>{{ m.owner_cell(r) }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{# ---------- compose_project ---------- #}
+{% elif res_type == 'compose_project' %}
+<table class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
+  <thead><tr><th>Project</th><th>Working dir</th><th>Services</th><th>Owner app(s)</th></tr></thead>
+  <tbody>
+    {% for r in rows %}
+    <tr>
+      <td>{{ r.display or r.key }}</td>
+      <td>{{ m.trunc(r.data.get('working_dir'), 60) }}</td>
+      <td>{{ m.joinlist(r.data.get('services')) }}</td>
+      <td>{{ m.owner_cell(r) }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{# ---------- bind_mount ---------- #}
+{% elif res_type == 'bind_mount' %}
+<table class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
+  <thead><tr><th>Source</th><th>Destination</th><th>Container</th><th>Compose project</th><th>Owner app(s)</th></tr></thead>
+  <tbody>
+    {% for r in rows %}
+    <tr>
+      <td>{{ m.trunc(r.path or r.key, 50) }}</td>
+      <td>{{ m.trunc(r.data.get('destination')) }}</td>
+      <td>{{ r.data.get('container') or '—' }}</td>
+      <td>{{ r.data.get('compose_project') or '—' }}</td>
+      <td>{{ m.owner_cell(r) }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{# ---------- tmux_session ---------- #}
+{% elif res_type == 'tmux_session' %}
+<table class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
+  <thead><tr><th>Session</th><th>Windows</th><th>Created</th><th>Owner app(s)</th></tr></thead>
+  <tbody>
+    {% for r in rows %}
+    <tr>
+      <td>{{ r.data.get('session') or r.display or r.key }}</td>
+      <td>{{ r.data.get('windows') or '—' }}</td>
+      <td>{{ r.data.get('created') or '—' }}</td>
+      <td>{{ m.owner_cell(r) }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+{# ---------- fallback ---------- #}
+{% else %}
+<table class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
+  <thead><tr><th>Display</th><th>Key</th><th>Path</th><th data-filter="state">State</th><th>Owner app(s)</th></tr></thead>
+  <tbody>
+    {% for r in rows %}
+    <tr>
+      <td>{{ r.display or r.key }}</td>
+      <td>{{ m.trunc(r.key) }}</td>
+      <td>{{ m.trunc(r.path, 50) }}</td>
+      <td data-filter-value="{{ r.state }}"><span class="badge">{{ r.state }}</span></td>
+      <td>{{ m.owner_cell(r) }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endif %}
+{% endblock %}

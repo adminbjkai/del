@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}Jobs{% endblock %}
+{% block content %}
+<h1>Jobs <span class="count-pill">{{ jobs | length }}</span></h1>
+<table class="table" data-enhanced data-empty="No jobs yet." data-search-placeholder="Filter jobs…">
+  <thead>
+    <tr>
+      <th>ID</th><th>App</th><th>Plan</th>
+      <th data-filter="mode">Mode</th><th data-filter="status">Status</th>
+      <th>Duration</th><th>Started</th><th>Finished</th>
+    </tr>
+  </thead>
+  <tbody>
+    {% for j in jobs %}
+    <tr>
+      <td><a href="/jobs/{{ j.get('id') }}">{{ j.get('id') }}</a></td>
+      <td>{% if j.get('app_slug') %}<a href="/apps/{{ j.get('app_slug') }}">{{ j.get('app_name') or j.get('app_slug') }}</a>{% else %}—{% endif %}</td>
+      <td><a href="/plans/{{ j.get('plan_id') }}">#{{ j.get('plan_id') }}</a></td>
+      <td data-filter-value="{{ j.get('mode') }}"><span class="badge {{ 'badge-danger' if j.get('mode') == 'live' else 'badge-grey' }}">{{ 'LIVE' if j.get('mode') == 'live' else 'dry-run' }}</span></td>
+      <td data-filter-value="{{ j.get('status') }}"><span class="badge status-{{ j.get('status') }}">{{ j.get('status') }}</span></td>
+      <td>{{ j.get('duration') }}</td>
+      <td>{{ j.get('started') or '—' }}</td>
+      <td>{{ j.get('finished') or '—' }}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+{% endblock %}

@@ -1,0 +1,2654 @@
+{
+  "generated_at": "2026-07-19",
+  "host": "bjkai-2tb-ubuntu",
+  "summary": {
+    "counts": {
+      "docker_containers": 212,
+      "docker_images": 302,
+      "docker_volumes": 160,
+      "docker_volumes_orphan": 65,
+      "docker_networks": 109,
+      "docker_compose_projects": 111,
+      "nginx_sites_available": 219,
+      "nginx_sites_enabled": 162,
+      "nginx_dead_upstreams": 17,
+      "nginx_orphan_available_only": 70,
+      "systemd_services_loaded": 213,
+      "systemd_custom_units": 56,
+      "systemd_failed": 2,
+      "systemd_timers": 19,
+      "cron_entries": 12,
+      "filesystem_project_dirs": 271,
+      "filesystem_abandoned_candidates": 28,
+      "filesystem_dirty_git_repos": 106,
+      "process_listeners": 276,
+      "process_public_listeners": 0
+    }
+  },
+  "docker": {
+    "generated_at": "2026-07-19T15:20:11-04:00",
+    "counts": {
+      "containers": 212,
+      "containers_running": 212,
+      "images": 302,
+      "volumes": 160,
+      "volumes_orphan_candidate": 65,
+      "networks": 109,
+      "compose_projects": 111
+    },
+    "system_df_summary": {
+      "Images": {
+        "TotalCount": "299",
+        "Active": "189",
+        "Size": "323.5GB",
+        "Reclaimable": "76.97GB (23%)"
+      },
+      "Containers": {
+        "TotalCount": "212",
+        "Active": "212",
+        "Size": "12.08GB",
+        "Reclaimable": "0B (0%)"
+      },
+      "Local Volumes": {
+        "TotalCount": "159",
+        "Active": "94",
+        "Size": "52.42GB",
+        "Reclaimable": "19.69GB (37%)"
+      },
+      "Build Cache": {
+        "TotalCount": "879",
+        "Active": "0",
+        "Size": "101.6GB",
+        "Reclaimable": "7.063GB"
+      }
+    },
+    "compose_projects_sample": [
+      {
+        "name": "affine",
+        "containers": [
+          "affine_ai_shim",
+          "affine_postgres",
+          "affine_redis",
+          "affine_server"
+        ],
+        "images": [
+          "ghcr.io/toeverything/affine:stable",
+          "node:20-alpine",
+          "pgvector/pgvector:pg16",
+          "redis"
+        ],
+        "volumes": [],
+        "networks": [
+          "affine_affine_net"
+        ],
+        "working_dirs": [
+          "/apps/AFFiNE/.docker/selfhost"
+        ],
+        "config_files": [
+          "/apps/AFFiNE/.docker/selfhost/compose.override.yml",
+          "/apps/AFFiNE/.docker/selfhost/compose.yml"
+        ],
+        "config_files_exist": {
+          "/apps/AFFiNE/.docker/selfhost/compose.yml": true,
+          "/apps/AFFiNE/.docker/selfhost/compose.override.yml": true
+        },
+        "any_config_missing": false
+      },
+      {
+        "name": "anchor",
+        "containers": [
+          "anchor"
+        ],
+        "images": [
+          "anchor"
+        ],
+        "volumes": [
+          "0dc5b256fa880718153e0e83b28a367f331faad0a7f5446f7479f95b48263fbd",
+          "anchor_anchor_data"
+        ],
+        "networks": [
+          "anchor_default"
+        ],
+        "working_dirs": [
+          "/apps/anchor"
+        ],
+        "config_files": [
+          "/apps/anchor/docker-compose.yml"
+        ],
+        "config_files_exist": {
+          "/apps/anchor/docker-compose.yml": true
+        },
+        "any_config_missing": false
+      },
+      {
+        "name": "appwrite",
+        "containers": [
+          "openruntimes-executor"
+        ],
+        "images": [
+          "openruntimes/executor:0.11.4"
+        ],
+        "volumes": [
+          "appwrite_appwrite-builds",
+          "appwrite_appwrite-functions",
+          "appwrite_appwrite-sites"
+        ],
+        "networks": [
+          "appwrite",
+          "runtimes"
+        ],
+        "working_dirs": [
+          "/apps/appwrite"
+        ],
+        "config_files": [
+          "/apps/appwrite/docker-compose.prod.yml",
+          "/apps/appwrite/docker-compose.yml"
+        ],
+        "config_files_exist": {
+          "/apps/appwrite/docker-compose.yml": true,
+          "/apps/appwrite/docker-compose.prod.yml": true
+        },
+        "any_config_missing": false
+      },
+      {
+        "name": "atlantis",
+        "containers": [
+          "atlantis"
+        ],
+        "images": [
+          "atlantis:prod"
+        ],
+        "volumes": [],
+        "networks": [
+          "atlantis_default"
+        ],
+        "working_dirs": [
+          "/apps/atlantis"
+        ],
+        "config_files": [
+          "/apps/atlantis/docker-compose.yml"
+        ],
+        "config_files_exist": {
+          "/apps/atlantis/docker-compose.yml": true
+        },
+        "any_config_missing": false
+      },
+      {
+        "name": "atomic",
+        "containers": [
+          "atomic-proxy-1",
+          "atomic-server-1",
+          "atomic-web-1"
+        ],
+        "images": [
+          "ghcr.io/kenforthewin/atomic-server:latest",
+          "ghcr.io/kenforthewin/atomic-web:latest",
+          "nginx:1.28-bookworm"
+        ],
+        "volumes": [
+          "atomic_atomic-data"
+        ],
+        "networks": [
+          "atomic_internal"
+        ],
+        "working_dirs": [
+          "/apps/atomic"
+        ],
+        "config_files": [
+          "/apps/atomic/docker-compose.yml"
+        ],
+        "config_files_exist": {
+          "/apps/atomic/docker-compose.yml": true
+        },
+        "any_config_missing": false
+      },
+      {
+        "name": "automation-stack",
+        "containers": [
+          "n8n"
+        ],
+        "images": [
+          "n8nio/n8n:latest"
+        ],
+        "volumes": [
+          "automation-stack_n8n_data"
+        ],
+        "networks": [
+          "automation-stack_default"
+        ],
+        "working_dirs": [
+          "/apps/automation-stack"
+        ],
+        "config_files": [
+          "/apps/automation-stack/docker-compose.yml"
+        ],
+        "config_files_exist": {
+          "/apps/automation-stack/docker-compose.yml": true
+        },
+        "any_config_missing": false
+      },
+      {
+        "name": "b64pdf",
+        "containers": [
+          "b64pdf-app-1"
+        ],
+        "images": [
+          "b64pdf-app"
+        ],
+        "volumes": [],
+        "networks": [
+          "b64pdf_b64pdf_net"
+        ],
+        "working_dirs": [
+          "/apps/b64pdf"
+        ],
+        "config_files": [
+          "/apps/b64pdf/docker-compose.yml"
+        ],
+        "config_files_exist": {
+          "/apps/b64pdf/docker-compose.yml": true
+        },
+        "any_config_missing": false
+      },
+      {
+        "name": "b64pdf2",
+        "containers": [
+          "b64pdf2-b64pdf2-1"
+        ],
+        "images": [
+          "b64pdf2-b64pdf2"
+        ],
+        "volumes": [],
+        "networks": [
+          "b64pdf2_default"
+        ],
+        "working_dirs": [
+          "/apps/b64pdf2"
+        ],
+        "config_files": [
+          "/apps/b64pdf2/docker-compose.yml"
+        ],
+        "config_files_exist": {
+          "/apps/b64pdf2/docker-compose.yml": true
+        },
+        "any_config_missing": false
+      },
+      {
+        "name": "banban",
+        "containers": [
+          "banban"
+        ],
+        "images": [
+          "banban-banban"
+        ],
+        "volumes": [],
+        "networks": [
+          "banban_default"
+        ],
+        "working_dirs": [
+          "/apps/banban"
+        ],
+        "config_files": [
+          "/apps/banban/docker-compose.yml"
+        ],
+        "config_files_exist": {
+          "/apps/banban/docker-compose.yml": true
+        },
+        "any_config_missing": false
+      },
+      {
+        "name": "beszel",
+        "containers": [
+          "beszel",
+          "beszel-agent"
+        ],
+        "images": [
+          "beszel-beszel",
+          "henrygd/beszel-agent"
+        ],
+        "volumes": [],
+        "networks": [
+          "beszel_default",
+          "host"
+        ],
+        "working_dirs": [
+          "/apps/beszel"
+        ],
+        "config_files": [
+          "/apps/beszel/docker-compose.yml"
+        ],
+        "config_files_exist": {
+          "/apps/beszel/docker-compose.yml": true
+        },
+        "any_config_missing": false
+      },
+      {
+        "name": "bewcloud",
+        "containers": [
+          "bewcloud-postgresql-1",
+          "bewcloud-radicale-1",
+          "bewcloud-website-1"
+        ],
+        "images": [
+          "ghcr.io/bewcloud/bewcloud:v4.8.0",
+          "postgres:18.1",
+          "tomsquest/docker-radicale:3.6.0.0"
+        ],
+        "volumes": [
+          "bewcloud_bewcloud-db",
+          "c6b7be99dbd40d71539d8381bcc3e4f5739ba9f19c45414cfe04dd44a1f12471"
+        ],
+        "networks": [
+          "bewcloud_default"
+        ],
+        "working_dirs": [
+          "/apps/bewcloud"
+        ],
+        "config_files": [
+          "/apps/bewcloud/docker-compose.override.yml",
+          "/apps/bewcloud/docker-compose.yml"
+        ],
+        "config_files_exist": {
+          "/apps/bewcloud/docker-compose.yml": true,
+          "/apps/bewcloud/docker-compose.override.yml": true
+        },
+        "any_config_missing": false
+      },
+      {
+        "name": "bitwarden",
+        "containers": [
+          "bitwarden-admin",
+          "bitwarden-api",
+          "bitwarden-attachments",
+          "bitwarden-events",
+          "bitwarden-icons",
+          "bitwarden-identity",
+          "bitwarden-mssql",
+          "bitwarden-nginx",
+          "bitwarden-notifications",
+          "bitwarden-sso",
+          "bitwarden-web"
+        ],
+        "images": [
+          "ghcr.io/bitwarden/admin:2025.12.0",
+          "ghcr.io/bitwarden/api:2025.12.0",
+          "ghcr.io/bitwarden/attachments:2025.12.0",
+          "ghcr.io/bitwarden/events:2025.12.0",
+          "ghcr.io/bitwarden/icons:2025.12.0",
+          "ghcr.io/bitwarden/identity:2025.12.0",
+          "ghcr.io/bitwarden/mssql:2025.12.0",
+          "ghcr.io/bitwarden/nginx:2025.12.0",
+          "ghcr.io/bitwarden/notifications:2025.12.0",
+          "ghcr.io/bitwarden/sso:2025.12.0",
+          "ghcr.io/bitwarden/web:2025.12.0"
+        ],
+        "volumes": [],
+        "networks": [
+          "bitwarden_default",
+          "bitwarden_public"
+        ],
+        "working_dirs": [
+          "/apps/bitwarden/bwdata/docker"
+        ],
+        "config_files": [
+          "/apps/bitwarden/bwdata/docker/docker-compose.yml"
+        ],
+        "config_files_exist": {
+          "/apps/bitwarden/bwdata/docker/docker-compose.yml": false
+        },
+        "any_config_missing": true
+      },
+      {
+        "name": "bjk-ai-flix",
+        "containers": [
+          "bjkflix"
+        ],
+        "images": [
+          "bjk-ai-flix-bjkflix"
+        ],
+        "volumes": [],
+        "networks": [
+          "host"
+        ],
+        "working_dirs": [
+          "/apps/bjk-ai-flix/bjk-ai-flix"
+        ],
+        "config_files": [
+          "/apps/bjk-ai-flix/bjk-ai-flix/docker-compose.yml"
+        ],
+        "config_files_exist": {
+          "/apps/bjk-ai-flix/bjk-ai-flix/docker-compose.yml": true
+        },
+        "any_config_missing": false
+      },
+      {
+        "name": "blinko",
+        "containers": [
+          "blinko-postgres",
+          "blinko-website"
+        ],
+        "images": [
+          "blinkospace/blinko:latest",
+          "postgres:14"
+        ],
+        "volumes": [
+          "blinko_blinko-db-data"
+        ],
+        "networks": [
+          "blinko_blinko-deploy-network"
+        ],
+        "working_dirs": [
+          "/apps/blinko"
+        ],
+        "config_files": [
+          "/apps/blinko/docker-compose.deploy.yml"
+        ],
+        "config_files_exist": {
+          "/apps/blinko/docker-compose.deploy.yml": true
+        },
+        "any_config_missing": false
+      },
+      {
+        "name": "boxbox",
+        "containers": [
+          "filemanager"
+        ],
+        "images": [
+          "boxbox:local"
+        ],
+        "volumes": [
+          "boxbox_filemanager-data",
+          "boxbox_filemanager-temp"
+        ],
+        "networks": [
+          "boxbox_default"
+        ],
+        "working_dirs": [
+          "/apps/BoxBox"
+        ],
+        "config_files": [
+          "/apps/BoxBox/docker-compose.yml"
+        ],
+        "config_files_exist": {
+          "/apps/BoxBox/docker-compose.yml": true
+        },
+        "any_config_missing": false
+      },
+      {
+        "name": "bytestash",
+        "containers": [
+          "bytestash-server-1"
+        ],
+        "images": [
+          "bytestash-server"
+        ],
+        "volumes": [],
+        "networks": [
+          "bytestash_default"
+        ],
+        "working_dirs": [
+          "/apps/bytestash"
+        ],
+        "config_files": [
+          "/apps/bytestash/docker-compose.override.yml",
+          "/apps/bytestash/docker-compose.yaml"
+        ],
+        "config_files_exist": {
+          "/apps/bytestash/docker-compose.yaml": true,
+          "/apps/bytestash/docker-compose.override.yml": true
+        },
+        "any_config_missing": false
+      },
+      {
+        "name": "cap4",
+        "containers": [
+          "cap4-media-server-1",
+          "cap4-minio-1",
+          "cap4-postgres-1",
+          "cap4-web-api-1",
+          "cap4-web-internal-1",
+          "cap4-worker-1"
+        ],
+        "images": [
+          "cap4-media-server:prod",
+          "cap4-web-api:prod",
+          "cap4-worker:prod",
+          "minio/minio:RELEASE.2025-01-20T14-49-07Z",
+          "nginx:alpine",
+          "postgres:16-alpine"
+        ],
+        "volumes": [
+          "cap4_minio_data",
+          "cap4_postgres_data",
+          "cap4_web_dist"
+        ],
+        "networks": [
+          "cap4_default"
+        ],
+        "working_dirs": [
+          "/apps/cap4"
+        ],
+        "config_files": [
+          "/apps/cap4/docker-compose.yml"
+        ],
+        "config_files_exist": {
+          "/apps/cap4/docker-compose.yml": true
+        },
+        "any_config_missing": false
+      },
+      {
+        "name": "catsup",
+        "containers": [
+          "catsup-catsup-1"
+        ],
+        "images": [
+          "catsup-catsup"
+        ],
+        "volumes": [],
+        "networks": [
+          "catsup_default"
+        ],
+        "working_dirs": [
+          "/apps/CatsUp"
+        ],
+        "config_files": [
+          "/apps/CatsUp/docker-compose.yml"
+        ],
+        "config_files_exist": {
+          "/apps/CatsUp/docker-compose.yml": true
+        },
+        "any_config_missing": false
+      },
+      {
+        "name": "cells",
+        "containers": [
+          "cells-cells-1"
+        ],
+        "images": [
+          "cells-cells"
+        ],
+        "volumes": [
+          "cells_cells_data"
+        ],
+        "networks": [
+          "cells_default"
+        ],
+        "working_dirs": [
+          "/apps/cells"
+        ],
+        "config_files": [
+          "/apps/cells/docker-compose.yml"
+        ],
+        "config_files_exist": {
+          "/apps/cells/docker-compose.yml": true
+        },
+        "any_config_missing": false
+      },
+      {
+        "name": "chartdb",
+        "containers": [
+          "chartdb-chartdb-1"
+        ],
+        "images": [
+          "chartdb-chartdb"
+        ],
+        "volumes": [],
+        "networks": [
+          "chartdb_chartdb_net"
+        ],
+        "working_dirs": [
+          "/apps/chartdb"
+        ],
+        "config_files": [
+          "/apps/chartdb/docker-compose.yml"
+        ],
+        "config_files_exist": {
+          "/apps/chartdb/docker-compose.yml": true
+        },
+        "any_config_missing": false
+      }
+    ],
+    "non_compose_containers": [
+      "netmuxd",
+      "anisette",
+      "2fauth"
+    ]
+  },
+  "nginx": {
+    "version": "nginx version: nginx/1.18.0 (Ubuntu)",
+    "nginx_test": "nginx: the configuration file /etc/nginx/nginx.conf syntax is ok\nnginx: configuration file /etc/nginx/nginx.conf test is successful",
+    "counts": {
+      "sites_available": 219,
+      "sites_enabled": 162,
+      "confd": 2,
+      "dead_upstreams": 17,
+      "orphan_available_only": 70,
+      "orphan_enabled_issues": 50
+    },
+    "dead_upstreams": [
+      {
+        "file": "/etc/nginx/sites-enabled/dockhand.bjk.ai",
+        "server_names": [
+          "dockhand.bjk.ai"
+        ],
+        "location": "/",
+        "proxy_pass": "http://127.0.0.1:9230",
+        "port": 9230
+      },
+      {
+        "file": "/etc/nginx/sites-enabled/fizzy.bjk.ai",
+        "server_names": [
+          "fizzy.bjk.ai"
+        ],
+        "location": "/",
+        "proxy_pass": "http://127.0.0.1:8077",
+        "port": 8077
+      },
+      {
+        "file": "/etc/nginx/sites-enabled/manynotes.bjk.ai",
+        "server_names": [
+          "manynotes.bjk.ai"
+        ],
+        "location": "/",
+        "proxy_pass": "http://127.0.0.1:8084",
+        "port": 8084
+      },
+      {
+        "file": "/etc/nginx/sites-enabled/metabase.bjk.ai",
+        "server_names": [
+          "metabase.bjk.ai"
+        ],
+        "location": "/",
+        "proxy_pass": "http://127.0.0.1:3001",
+        "port": 3001
+      },
+      {
+        "file": "/etc/nginx/sites-enabled/netdata.bjk.ai",
+        "server_names": [
+          "netdata.bjk.ai"
+        ],
+        "location": "/",
+        "proxy_pass": "http://127.0.0.1:19999",
+        "port": 19999
+      },
+      {
+        "file": "/etc/nginx/sites-enabled/notecapai.bjk.ai",
+        "server_names": [
+          "notecapai.bjk.ai"
+        ],
+        "location": "/",
+        "proxy_pass": "http://127.0.0.1:9101",
+        "port": 9101
+      },
+      {
+        "file": "/etc/nginx/sites-enabled/shows.bjk.ai",
+        "server_names": [
+          "shows.bjk.ai"
+        ],
+        "location": "/",
+        "proxy_pass": "http://127.0.0.1:8335",
+        "port": 8335
+      },
+      {
+        "file": "/etc/nginx/sites-enabled/stv.bjk.ai.conf",
+        "server_names": [
+          "stv.bjk.ai"
+        ],
+        "location": "/",
+        "proxy_pass": "http://127.0.0.1:8082",
+        "port": 8082
+      },
+      {
+        "file": "/etc/nginx/sites-enabled/stv.bjk.ai.conf",
+        "server_names": [
+          "stv.bjk.ai"
+        ],
+        "location": "/ws",
+        "proxy_pass": "http://127.0.0.1:8766",
+        "port": 8766
+      },
+      {
+        "file": "/etc/nginx/sites-enabled/trflix.bjk.ai",
+        "server_names": [
+          "trflix.bjk.ai"
+        ],
+        "location": "/api/proxy",
+        "proxy_pass": "http://127.0.0.1:8048",
+        "port": 8048
+      },
+      {
+        "file": "/etc/nginx/sites-enabled/trflix.bjk.ai",
+        "server_names": [
+          "trflix.bjk.ai"
+        ],
+        "location": "/files/",
+        "proxy_pass": "http://127.0.0.1:8048",
+        "port": 8048
+      },
+      {
+        "file": "/etc/nginx/sites-enabled/trflix.bjk.ai",
+        "server_names": [
+          "trflix.bjk.ai"
+        ],
+        "location": "/",
+        "proxy_pass": "http://127.0.0.1:8048",
+        "port": 8048
+      },
+      {
+        "file": "/etc/nginx/sites-enabled/twenty.bjk.ai",
+        "server_names": [
+          "twenty.bjk.ai"
+        ],
+        "location": "/",
+        "proxy_pass": "http://127.0.0.1:8036",
+        "port": 8036
+      },
+      {
+        "file": "/etc/nginx/sites-enabled/viniplay.bjk.ai",
+        "server_names": [
+          "viniplay.bjk.ai"
+        ],
+        "location": "/",
+        "proxy_pass": "http://127.0.0.1:8998",
+        "port": 8998
+      },
+      {
+        "file": "/etc/nginx/sites-enabled/zabbix.bjk.ai",
+        "server_names": [
+          "zabbix.bjk.ai"
+        ],
+        "location": "/",
+        "proxy_pass": "http://127.0.0.1:8300",
+        "port": 8300
+      },
+      {
+        "file": "/etc/nginx/sites-enabled/zettelgarden.bjk.ai",
+        "server_names": [
+          "zettelgarden.bjk.ai"
+        ],
+        "location": "/",
+        "proxy_pass": "http://127.0.0.1:9321",
+        "port": 9321
+      },
+      {
+        "file": "/etc/nginx/sites-enabled/zettelgarden.bjk.ai",
+        "server_names": [
+          "zettelgarden.bjk.ai"
+        ],
+        "location": "/api",
+        "proxy_pass": "http://127.0.0.1:8322",
+        "port": 8322
+      }
+    ],
+    "shared_upstream_ports": {
+      "8124": [
+        "2FAuth.bjk.ai",
+        "2fa.bjk.ai"
+      ],
+      "8086": [
+        "api.boxy.bjk.ai",
+        "boxy.bjk.ai"
+      ],
+      "8045": [
+        "64pdf.bjk.ai",
+        "b64pdf.bjk.ai"
+      ],
+      "8029": [
+        "b64pdf2.bjk.ai",
+        "pdf64.bjk.ai"
+      ],
+      "8055": [
+        "baserow.bjk.ai",
+        "n50.bjk.ai",
+        "ppv.bjk.ai"
+      ],
+      "7127": [
+        "fileshare2.bjk.ai",
+        "fs2.bjk.ai"
+      ],
+      "18789": [
+        "192.168.1.164",
+        "openclaw.bjk.ai"
+      ],
+      "8022": [
+        "wbd.bjk.ai",
+        "willbedone.bjk.ai"
+      ]
+    },
+    "duplicate_server_names": {},
+    "orphans_available_only_count": 70,
+    "orphans_enabled_issues_count": 50
+  },
+  "systemd": {
+    "generated": "2026-07-19",
+    "host_scope": "system + user(bjkai)",
+    "counts": {
+      "system_services_loaded": 213,
+      "system_service_unit_files": 354,
+      "user_bjkai_services_loaded": 70,
+      "user_bjkai_service_unit_files": 107,
+      "custom_units": 56,
+      "timers": 19,
+      "failed": 2
+    },
+    "failed": [
+      "notecapai-doc-worker.service",
+      "onlook-web.service"
+    ],
+    "custom_units_count": 56,
+    "custom_units_sample": [
+      {
+        "name": "17tube.service",
+        "path": "/etc/systemd/system/17tube.service",
+        "description": "17tube minimal yt downloader",
+        "exec_start": [
+          "/apps/alltube_custom/.venv/bin/python /apps/alltube_custom/app.py"
+        ],
+        "exec_start_pre": [],
+        "exec_stop": [],
+        "working_directory": "/apps/alltube_custom",
+        "user": "root (default)",
+        "environment_files": [],
+        "environment_var_names": [
+          "HOST",
+          "PORT"
+        ],
+        "restart": "on-failure",
+        "wanted_by": [
+          "multi-user.target"
+        ],
+        "active_state": "active",
+        "unit_file_state": "enabled",
+        "enabled_wants": [
+          "multi-user.target.wants"
+        ],
+        "evidence": [
+          "WorkingDirectory=/apps/alltube_custom",
+          "ExecStart=/apps/alltube_custom/.venv/bin/python /apps/alltube_custom/app.py"
+        ]
+      },
+      {
+        "name": "aionui-webui.service",
+        "path": "/etc/systemd/system/aionui-webui.service",
+        "description": "AionUi WebUI",
+        "exec_start": [
+          "/usr/bin/npm run webui:prod -- --port 3180 --no-sandbox"
+        ],
+        "exec_start_pre": [],
+        "exec_stop": [],
+        "working_directory": "/apps/AionUi",
+        "user": "root (default)",
+        "environment_files": [],
+        "environment_var_names": [
+          "NODE_ENV",
+          "AIONUI_HOST",
+          "AIONUI_PORT"
+        ],
+        "restart": "on-failure",
+        "wanted_by": [
+          "multi-user.target"
+        ],
+        "active_state": "active",
+        "unit_file_state": "enabled",
+        "enabled_wants": [
+          "multi-user.target.wants"
+        ],
+        "evidence": [
+          "WorkingDirectory=/apps/AionUi"
+        ]
+      },
+      {
+        "name": "appletv-remote.service",
+        "path": "/etc/systemd/system/appletv-remote.service",
+        "description": "Apple TV Remote WebSocket Server",
+        "exec_start": [
+          "/usr/bin/python3 server.py"
+        ],
+        "exec_start_pre": [],
+        "exec_stop": [],
+        "working_directory": "/apps/appletv-remote",
+        "user": "bjkai",
+        "environment_files": [],
+        "environment_var_names": [],
+        "restart": "on-failure",
+        "wanted_by": [
+          "multi-user.target"
+        ],
+        "active_state": "active",
+        "unit_file_state": "enabled",
+        "enabled_wants": [
+          "multi-user.target.wants"
+        ],
+        "evidence": [
+          "WorkingDirectory=/apps/appletv-remote"
+        ]
+      },
+      {
+        "name": "astv-remote.service",
+        "path": "/etc/systemd/system/astv-remote.service",
+        "description": "ASTV Master Remote",
+        "exec_start": [
+          "/apps/appletv-remote/venv/bin/python /apps/astv-remote/server.py"
+        ],
+        "exec_start_pre": [],
+        "exec_stop": [],
+        "working_directory": "/apps/astv-remote",
+        "user": "bjkai",
+        "environment_files": [],
+        "environment_var_names": [],
+        "restart": "always",
+        "wanted_by": [
+          "multi-user.target"
+        ],
+        "active_state": "active",
+        "unit_file_state": "enabled",
+        "enabled_wants": [
+          "multi-user.target.wants"
+        ],
+        "evidence": [
+          "WorkingDirectory=/apps/astv-remote",
+          "ExecStart=/apps/appletv-remote/venv/bin/python /apps/astv-remote/server.py"
+        ]
+      },
+      {
+        "name": "atv-remote.service",
+        "path": "/etc/systemd/system/atv-remote.service",
+        "description": "Apple TV Web Remote",
+        "exec_start": [
+          "/apps/appletv-remote/venv/bin/python /apps/appletv-remote/server.py"
+        ],
+        "exec_start_pre": [],
+        "exec_stop": [],
+        "working_directory": "/apps/appletv-remote",
+        "user": "bjkai",
+        "environment_files": [],
+        "environment_var_names": [],
+        "restart": "always",
+        "wanted_by": [
+          "multi-user.target"
+        ],
+        "active_state": "inactive",
+        "unit_file_state": "disabled",
+        "enabled_wants": [],
+        "evidence": [
+          "WorkingDirectory=/apps/appletv-remote",
+          "ExecStart=/apps/appletv-remote/venv/bin/python /apps/appletv-remote/server.py"
+        ]
+      },
+      {
+        "name": "bdl-bjk.service",
+        "path": "/etc/systemd/system/bdl-bjk.service",
+        "description": "bdl.bjk.ai - BJK Flix DL one-button iPhone installer",
+        "exec_start": [
+          "/usr/bin/python3 /apps/bjkflixdl/bdl_server.py"
+        ],
+        "exec_start_pre": [],
+        "exec_stop": [],
+        "working_directory": "/apps/bjkflixdl",
+        "user": "bjkai",
+        "environment_files": [],
+        "environment_var_names": [],
+        "restart": "always",
+        "wanted_by": [
+          "multi-user.target"
+        ],
+        "active_state": "active",
+        "unit_file_state": "enabled",
+        "enabled_wants": [
+          "multi-user.target.wants"
+        ],
+        "evidence": [
+          "WorkingDirectory=/apps/bjkflixdl",
+          "ExecStart=/usr/bin/python3 /apps/bjkflixdl/bdl_server.py"
+        ]
+      },
+      {
+        "name": "bjkai_shorturl_by_claude.service",
+        "path": "/etc/systemd/system/bjkai_shorturl_by_claude.service",
+        "description": "BJK.AI URL Shortener (bjkai_shorturl_by_claude)",
+        "exec_start": [
+          "/apps/bjkai_shorturl_by_claude/target/release/bjkai_shorturl_by_claude"
+        ],
+        "exec_start_pre": [],
+        "exec_stop": [],
+        "working_directory": "/apps/bjkai_shorturl_by_claude",
+        "user": "root",
+        "environment_files": [
+          "/apps/bjkai_shorturl_by_claude/.env"
+        ],
+        "environment_var_names": [],
+        "restart": "always",
+        "wanted_by": [
+          "multi-user.target"
+        ],
+        "active_state": "active",
+        "unit_file_state": "enabled",
+        "enabled_wants": [
+          "multi-user.target.wants"
+        ],
+        "evidence": [
+          "WorkingDirectory=/apps/bjkai_shorturl_by_claude",
+          "ExecStart=/apps/bjkai_shorturl_by_claude/target/release/bjkai_shorturl_by_claude",
+          "EnvironmentFile=/apps/bjkai_shorturl_by_claude/.env"
+        ]
+      },
+      {
+        "name": "bjkflix-dizipal-cf.service",
+        "path": "/etc/systemd/system/bjkflix-dizipal-cf.service",
+        "description": "Refresh dizipal.bid Cloudflare clearance for bjkflix (Turkish provider)",
+        "exec_start": [
+          "/usr/bin/python3 /apps/bjk-ai-flix/bjk-ai-flix/seed_dizipal.py"
+        ],
+        "exec_start_pre": [],
+        "exec_stop": [],
+        "working_directory": "/apps/bjk-ai-flix/bjk-ai-flix",
+        "user": "bjkai",
+        "environment_files": [],
+        "environment_var_names": [
+          "DISPLAY"
+        ],
+        "restart": null,
+        "wanted_by": [],
+        "active_state": "inactive",
+        "unit_file_state": "static",
+        "enabled_wants": [],
+        "evidence": [
+          "WorkingDirectory=/apps/bjk-ai-flix/bjk-ai-flix",
+          "ExecStart=/usr/bin/python3 /apps/bjk-ai-flix/bjk-ai-flix/seed_dizipal.py"
+        ]
+      },
+      {
+        "name": "bjkflix-dizipal-cf.timer",
+        "path": "/etc/systemd/system/bjkflix-dizipal-cf.timer",
+        "description": "Periodically refresh dizipal.bid Cloudflare clearance for bjkflix",
+        "exec_start": [],
+        "exec_start_pre": [],
+        "exec_stop": [],
+        "working_directory": null,
+        "user": "root (default)",
+        "environment_files": [],
+        "environment_var_names": [],
+        "restart": null,
+        "wanted_by": [
+          "timers.target"
+        ],
+        "active_state": "active",
+        "unit_file_state": "enabled",
+        "enabled_wants": [
+          "timers.target.wants"
+        ],
+        "evidence": []
+      },
+      {
+        "name": "bjkflix-ios-refresh.service",
+        "path": "/etc/systemd/system/bjkflix-ios-refresh.service",
+        "description": "Refresh BJK Flix DL on iPhone (AltServer, free 7-day profile)",
+        "exec_start": [
+          "/apps/bjkflixdl/refresh-iphone.sh"
+        ],
+        "exec_start_pre": [],
+        "exec_stop": [],
+        "working_directory": null,
+        "user": "bjkai",
+        "environment_files": [],
+        "environment_var_names": [],
+        "restart": null,
+        "wanted_by": [],
+        "active_state": "inactive",
+        "unit_file_state": "static",
+        "enabled_wants": [],
+        "evidence": [
+          "ExecStart=/apps/bjkflixdl/refresh-iphone.sh"
+        ]
+      },
+      {
+        "name": "bjkflix-ios-refresh.timer",
+        "path": "/etc/systemd/system/bjkflix-ios-refresh.timer",
+        "description": "Re-sign BJK Flix DL every 6 days (before the 7-day expiry)",
+        "exec_start": [],
+        "exec_start_pre": [],
+        "exec_stop": [],
+        "working_directory": null,
+        "user": "root (default)",
+        "environment_files": [],
+        "environment_var_names": [],
+        "restart": null,
+        "wanted_by": [
+          "timers.target"
+        ],
+        "active_state": "active",
+        "unit_file_state": "enabled",
+        "enabled_wants": [
+          "timers.target.wants"
+        ],
+        "evidence": []
+      },
+      {
+        "name": "boxy-docs.service",
+        "path": "/etc/systemd/system/boxy-docs.service",
+        "description": "Boxy documentation site (Fern docs preview server)",
+        "exec_start": [
+          "/usr/local/bin/npx --yes fern-api docs dev --port 3901 --backend-port 3911"
+        ],
+        "exec_start_pre": [],
+        "exec_stop": [],
+        "working_directory": "/apps/boxy",
+        "user": "bjkai",
+        "environment_files": [],
+        "environment_var_names": [
+          "PATH"
+        ],
+        "restart": "on-failure",
+        "wanted_by": [
+          "multi-user.target"
+        ],
+        "active_state": "active",
+        "unit_file_state": "enabled",
+        "enabled_wants": [
+          "multi-user.target.wants"
+        ],
+        "evidence": [
+          "WorkingDirectory=/apps/boxy"
+        ]
+      },
+      {
+        "name": "boxy.service",
+        "path": "/etc/systemd/system/boxy.service",
+        "description": "Boxy File Sharing Service",
+        "exec_start": [
+          "/apps/boxy/target/release/boxy"
+        ],
+        "exec_start_pre": [],
+        "exec_stop": [],
+        "working_directory": "/apps/boxy",
+        "user": "bjkai",
+        "environment_files": [],
+        "environment_var_names": [
+          "BOX_MAX_UPLOAD_BYTES"
+        ],
+        "restart": "always",
+        "wanted_by": [
+          "multi-user.target"
+        ],
+        "active_state": "active",
+        "unit_file_state": "enabled",
+        "enabled_wants": [
+          "multi-user.target.wants"
+        ],
+        "evidence": [
+          "WorkingDirectory=/apps/boxy",
+          "ExecStart=/apps/boxy/target/release/boxy"
+        ]
+      },
+      {
+        "name": "checkmk-agent.socket",
+        "path": "/etc/systemd/system/checkmk-agent.socket",
+        "description": "Checkmk Agent Socket",
+        "exec_start": [],
+        "exec_start_pre": [],
+        "exec_stop": [],
+        "working_directory": null,
+        "user": "root (default)",
+        "environment_files": [],
+        "environment_var_names": [],
+        "restart": null,
+        "wanted_by": [
+          "sockets.target"
+        ],
+        "active_state": "active",
+        "unit_file_state": "enabled",
+        "enabled_wants": [
+          "sockets.target.wants"
+        ],
+        "evidence": []
+      },
+      {
+        "name": "checkmk-agent@.service",
+        "path": "/etc/systemd/system/checkmk-agent@.service",
+        "description": "Checkmk Agent",
+        "exec_start": [
+          "/usr/local/bin/check_mk_agent"
+        ],
+        "exec_start_pre": [],
+        "exec_stop": [],
+        "working_directory": null,
+        "user": "root",
+        "environment_files": [],
+        "environment_var_names": [],
+        "restart": null,
+        "wanted_by": [],
+        "active_state": "unknown",
+        "unit_file_state": "unknown",
+        "enabled_wants": [],
+        "evidence": [
+          "vendor unit copy/alias in /etc (packaged software, not a custom app)"
+        ]
+      },
+      {
+        "name": "claudeclaw-web.service",
+        "path": "/etc/systemd/system/claudeclaw-web.service",
+        "description": "ClaudeClaw web daemon (claudeclaw.bjk.ai)",
+        "exec_start": [
+          "/home/bjkai/.bun/bin/bun run /apps/claudeclaw/src/index.ts start --web --replace-existing"
+        ],
+        "exec_start_pre": [],
+        "exec_stop": [],
+        "working_directory": "/apps/claudeclaw-workspace",
+        "user": "bjkai",
+        "environment_files": [],
+        "environment_var_names": [
+          "HOME",
+          "PATH"
+        ],
+        "restart": "always",
+        "wanted_by": [
+          "multi-user.target"
+        ],
+        "active_state": "active",
+        "unit_file_state": "enabled",
+        "enabled_wants": [
+          "multi-user.target.wants"
+        ],
+        "evidence": [
+          "WorkingDirectory=/apps/claudeclaw-workspace",
+          "ExecStart=/home/bjkai/.bun/bin/bun run /apps/claudeclaw/src/index.ts start --web --replace-existing"
+        ]
+      },
+      {
+        "name": "comfyui.service",
+        "path": "/etc/systemd/system/comfyui.service",
+        "description": "ComfyUI",
+        "exec_start": [
+          "/apps/ComfyUI/.venv/bin/python main.py --listen 127.0.0.1 --port 8188"
+        ],
+        "exec_start_pre": [],
+        "exec_stop": [],
+        "working_directory": "/apps/ComfyUI",
+        "user": "root (default)",
+        "environment_files": [],
+        "environment_var_names": [
+          "PYTHONUNBUFFERED"
+        ],
+        "restart": "on-failure",
+        "wanted_by": [
+          "multi-user.target"
+        ],
+        "active_state": "inactive",
+        "unit_file_state": "disabled",
+        "enabled_wants": [],
+        "evidence": [
+          "WorkingDirectory=/apps/ComfyUI",
+          "ExecStart=/apps/ComfyUI/.venv/bin/python main.py --listen 127.0.0.1 --port 8188"
+        ]
+      },
+      {
+        "name": "docker-events.service",
+        "path": "/etc/systemd/system/docker-events.service",
+        "description": "Docker events logger",
+        "exec_start": [
+          "/usr/bin/docker events --format '{{json .}}'"
+        ],
+        "exec_start_pre": [],
+        "exec_stop": [],
+        "working_directory": null,
+        "user": "root (default)",
+        "environment_files": [],
+        "environment_var_names": [],
+        "restart": "always",
+        "wanted_by": [
+          "multi-user.target"
+        ],
+        "active_state": "inactive",
+        "unit_file_state": "disabled",
+        "enabled_wants": [],
+        "evidence": []
+      },
+      {
+        "name": "fileshare.service",
+        "path": "/etc/systemd/system/fileshare.service",
+        "description": "FileShare - Simple File Sharing Service",
+        "exec_start": [
+          "/apps/fileshare/fileshare"
+        ],
+        "exec_start_pre": [],
+        "exec_stop": [],
+        "working_directory": "/apps/fileshare",
+        "user": "www-data",
+        "environment_files": [],
+        "environment_var_names": [
+          "FILESHARE_HOST",
+          "FILESHARE_PORT",
+          "FILESHARE_BASE_URL",
+          "FILESHARE_UPLOAD_DIR"
+        ],
+        "restart": "always",
+        "wanted_by": [
+          "multi-user.target"
+        ],
+        "active_state": "active",
+        "unit_file_state": "enabled",
+        "enabled_wants": [
+          "multi-user.target.wants"
+        ],
+        "evidence": [
+          "WorkingDirectory=/apps/fileshare",
+          "ExecStart=/apps/fileshare/fileshare",
+          "Environment FILESHARE_UPLOAD_DIR=/apps/fileshare/uploads"
+        ]
+      },
+      {
+        "name": "fileshare2.service",
+        "path": "/etc/systemd/system/fileshare2.service",
+        "description": "FileShare2 - Simple File Sharing Service",
+        "exec_start": [
+          "/apps/fileshare2/target/release/fileshare2"
+        ],
+        "exec_start_pre": [],
+        "exec_stop": [],
+        "working_directory": "/apps/fileshare2",
+        "user": "www-data",
+        "environment_files": [],
+        "environment_var_names": [
+          "FILESHARE_HOST",
+          "FILESHARE_PORT",
+          "FILESHARE_BASE_URL",
+          "FILESHARE_UPLOAD_DIR"
+        ],
+        "restart": "always",
+        "wanted_by": [
+          "multi-user.target"
+        ],
+        "active_state": "active",
+        "unit_file_state": "enabled",
+        "enabled_wants": [
+          "multi-user.target.wants"
+        ],
+        "evidence": [
+          "WorkingDirectory=/apps/fileshare2",
+          "ExecStart=/apps/fileshare2/target/release/fileshare2",
+          "Environment FILESHARE_UPLOAD_DIR=/apps/fileshare2/uploads"
+        ]
+      },
+      {
+        "name": "flixapp.service",
+        "path": "/etc/systemd/system/flixapp.service",
+        "description": "FlixApp uvicorn service",
+        "exec_start": [
+          "/apps/flixapp/start.sh"
+        ],
+        "exec_start_pre": [],
+        "exec_stop": [],
+        "working_directory": "/apps/flixapp",
+        "user": "bjkai",
+        "environment_files": [],
+        "environment_var_names": [],
+        "restart": "on-failure",
+        "wanted_by": [
+          "multi-user.target"
+        ],
+        "active_state": "active",
+        "unit_file_state": "enabled",
+        "enabled_wants": [
+          "multi-user.target.wants"
+        ],
+        "evidence": [
+          "WorkingDirectory=/apps/flixapp",
+          "ExecStart=/apps/flixapp/start.sh"
+        ]
+      },
+      {
+        "name": "glmflix.service",
+        "path": "/etc/systemd/system/glmflix.service",
+        "description": "GLMflix uvicorn service (OMSS gateway + CinePro UI)",
+        "exec_start": [
+          "/apps/glmflix/start.sh"
+        ],
+        "exec_start_pre": [],
+        "exec_stop": [],
+        "working_directory": "/apps/glmflix",
+        "user": "bjkai",
+        "environment_files": [],
+        "environment_var_names": [
+          "GLMFLIX_HOST",
+          "GLMFLIX_PORT"
+        ],
+        "restart": "on-failure",
+        "wanted_by": [
+          "multi-user.target"
+        ],
+        "active_state": "active",
+        "unit_file_state": "enabled",
+        "enabled_wants": [
+          "multi-user.target.wants"
+        ],
+        "evidence": [
+          "WorkingDirectory=/apps/glmflix",
+          "ExecStart=/apps/glmflix/start.sh"
+        ]
+      },
+      {
+        "name": "hls-manager.service",
+        "path": "/etc/systemd/system/hls-manager.service",
+        "description": "HLS Proxy Manager Web Interface",
+        "exec_start": [
+          "/usr/local/bin/gunicorn --workers 1 --threads 8 --timeout 120 --bind 127.0.0.1:8099 hls_manager:app"
+        ],
+        "exec_start_pre": [],
+        "exec_stop": [],
+        "working_directory": "/apps/m3u8_antigravity",
+        "user": "root",
+        "environment_files": [],
+        "environment_var_names": [],
+        "restart": "always",
+        "wanted_by": [
+          "multi-user.target"
+        ],
+        "active_state": "active",
+        "unit_file_state": "enabled",
+        "enabled_wants": [
+          "multi-user.target.wants"
+        ],
+        "evidence": [
+          "WorkingDirectory=/apps/m3u8_antigravity"
+        ]
+      },
+      {
+        "name": "htmls-webapp.service",
+        "path": "/etc/systemd/system/htmls-webapp.service",
+        "description": "HTML Pages Webapp",
+        "exec_start": [
+          "/usr/bin/npm start"
+        ],
+        "exec_start_pre": [],
+        "exec_stop": [],
+        "working_directory": "/apps/htmls",
+        "user": "bjkai",
+        "environment_files": [],
+        "environment_var_names": [],
+        "restart": "always",
+        "wanted_by": [
+          "multi-user.target"
+        ],
+        "active_state": "inactive",
+        "unit_file_state": "disabled",
+        "enabled_wants": [],
+        "evidence": [
+          "WorkingDirectory=/apps/htmls"
+        ]
+      },
+      {
+        "name": "img2.service",
+        "path": "/etc/systemd/system/img2.service",
+        "description": "img2 image sharing service",
+        "exec_start": [
+          "/apps/img2/target/release/img2"
+        ],
+        "exec_start_pre": [],
+        "exec_stop": [],
+        "working_directory": "/apps/img2",
+        "user": "www-data",
+        "environment_files": [],
+        "environment_var_names": [
+          "HOST",
+          "PORT",
+          "UPLOAD_DIR",
+          "DB_PATH"
+        ],
+        "restart": "always",
+        "wanted_by": [
+          "multi-user.target"
+        ],
+        "active_state": "active",
+        "unit_file_state": "enabled",
+        "enabled_wants": [
+          "multi-user.target.wants"
+        ],
+        "evidence": [
+          "WorkingDirectory=/apps/img2",
+          "ExecStart=/apps/img2/target/release/img2",
+          "Environment UPLOAD_DIR=/apps/img2/uploads",
+          "Environment DB_PATH=/apps/img2/data/images.db"
+        ]
+      },
+      {
+        "name": "jsonp.service",
+        "path": "/etc/systemd/system/jsonp.service",
+        "description": "jsonp.bjk.ai Vite Preview",
+        "exec_start": [
+          "/usr/bin/node node_modules/.bin/vite preview"
+        ],
+        "exec_start_pre": [],
+        "exec_stop": [],
+        "working_directory": "/apps/jsonp",
+        "user": "root (default)",
+        "environment_files": [],
+        "environment_var_names": [],
+        "restart": "always",
+        "wanted_by": [
+          "multi-user.target"
+        ],
+        "active_state": "active",
+        "unit_file_state": "enabled",
+        "enabled_wants": [
+          "multi-user.target.wants"
+        ],
+        "evidence": [
+          "WorkingDirectory=/apps/jsonp"
+        ]
+      },
+      {
+        "name": "liam.service",
+        "path": "/etc/systemd/system/liam.service",
+        "description": "Liam Next.js App",
+        "exec_start": [
+          "/bin/bash -lc '/apps/liam/frontend/apps/app/node_modules/.bin/next start -H 127.0.0.1 -p 3901'"
+        ],
+        "exec_start_pre": [],
+        "exec_stop": [],
+        "working_directory": "/apps/liam/frontend/apps/app",
+        "user": "root (default)",
+        "environment_files": [],
+        "environment_var_names": [],
+        "restart": "on-failure",
+        "wanted_by": [
+          "multi-user.target"
+        ],
+        "active_state": "inactive",
+        "unit_file_state": "disabled",
+        "enabled_wants": [],
+        "evidence": [
+          "WorkingDirectory=/apps/liam/frontend/apps/app",
+          "ExecStart=/bin/bash -lc '/apps/liam/frontend/apps/app/node_modules/.bin/next start -H 127.0.0.1 -p 3901'"
+        ]
+      },
+      {
+        "name": "n50-runner.service",
+        "path": "/etc/systemd/system/n50-runner.service",
+        "description": "n50 v11 runner web UI (run_next_set_v11.py button)",
+        "exec_start": [
+          "/usr/bin/python3 /apps/n50/v11-fresh-dir/server.py"
+        ],
+        "exec_start_pre": [],
+        "exec_stop": [],
+        "working_directory": "/apps/n50/v11-fresh-dir",
+        "user": "bjkai",
+        "environment_files": [],
+        "environment_var_names": [
+          "HOME",
+          "N50_PORT"
+        ],
+        "restart": "on-failure",
+        "wanted_by": [
+          "multi-user.target"
+        ],
+        "active_state": "active",
+        "unit_file_state": "enabled",
+        "enabled_wants": [
+          "multi-user.target.wants"
+        ],
+        "evidence": [
+          "WorkingDirectory=/apps/n50/v11-fresh-dir",
+          "ExecStart=/usr/bin/python3 /apps/n50/v11-fresh-dir/server.py"
+        ]
+      },
+      {
+        "name": "neoclaw-forward.service",
+        "path": "/etc/systemd/system/neoclaw-forward.service",
+        "description": "Expose NemoClaw sandbox forward on localhost:28789",
+        "exec_start": [
+          "/usr/local/bin/neoclaw-upstream.sh up"
+        ],
+        "exec_start_pre": [],
+        "exec_stop": [
+          "/usr/local/bin/neoclaw-upstream.sh down"
+        ],
+        "working_directory": null,
+        "user": "root (default)",
+        "environment_files": [],
+        "environment_var_names": [
+          "HOME",
+          "SANDBOX_NAME",
+          "PORT",
+          "PUBLIC_DOMAIN"
+        ],
+        "restart": null,
+        "wanted_by": [
+          "multi-user.target"
+        ],
+        "active_state": "inactive",
+        "unit_file_state": "disabled",
+        "enabled_wants": [],
+        "evidence": []
+      },
+      {
+        "name": "next-auth-docs.service",
+        "path": "/etc/systemd/system/next-auth-docs.service",
+        "description": "Next-Auth Documentation",
+        "exec_start": [
+          "/apps/next-auth/docs/node_modules/.bin/next start -p 3044 -H 127.0.0.1"
+        ],
+        "exec_start_pre": [],
+        "exec_stop": [],
+        "working_directory": "/apps/next-auth/docs",
+        "user": "root",
+        "environment_files": [],
+        "environment_var_names": [
+          "NODE_ENV"
+        ],
+        "restart": "on-failure",
+        "wanted_by": [
+          "multi-user.target"
+        ],
+        "active_state": "active",
+        "unit_file_state": "enabled",
+        "enabled_wants": [
+          "multi-user.target.wants"
+        ],
+        "evidence": [
+          "WorkingDirectory=/apps/next-auth/docs",
+          "ExecStart=/apps/next-auth/docs/node_modules/.bin/next start -p 3044 -H 127.0.0.1"
+        ]
+      }
+    ],
+    "timers": [
+      {
+        "timer": "anacron.timer",
+        "activates": "anacron.service",
+        "next": "Sun 2026-07-19 15:30:00",
+        "custom": false
+      },
+      {
+        "timer": "bjkflix-dizipal-cf.timer",
+        "activates": "bjkflix-dizipal-cf.service",
+        "next": "Sun 2026-07-19 15:30:05",
+        "custom": true
+      },
+      {
+        "timer": "ua-timer.timer",
+        "activates": "ua-timer.service",
+        "next": "Sun 2026-07-19 16:43:08",
+        "custom": false
+      },
+      {
+        "timer": "fwupd-refresh.timer",
+        "activates": "fwupd-refresh.service",
+        "next": "Sun 2026-07-19 19:25:58",
+        "custom": false
+      },
+      {
+        "timer": "update-notifier-download.timer",
+        "activates": "update-notifier-download.service",
+        "next": "Sun 2026-07-19 21:09:31",
+        "custom": false
+      },
+      {
+        "timer": "systemd-tmpfiles-clean.timer",
+        "activates": "systemd-tmpfiles-clean.service",
+        "next": "Sun 2026-07-19 21:18:31",
+        "custom": false
+      },
+      {
+        "timer": "dpkg-db-backup.timer",
+        "activates": "dpkg-db-backup.service",
+        "next": "Mon 2026-07-20 00:00:00",
+        "custom": false
+      },
+      {
+        "timer": "logrotate.timer",
+        "activates": "logrotate.service",
+        "next": "Mon 2026-07-20 00:00:00",
+        "custom": false
+      },
+      {
+        "timer": "fstrim.timer",
+        "activates": "fstrim.service",
+        "next": "Mon 2026-07-20 00:33:12",
+        "custom": false
+      },
+      {
+        "timer": "man-db.timer",
+        "activates": "man-db.service",
+        "next": "Mon 2026-07-20 04:21:48",
+        "custom": false
+      },
+      {
+        "timer": "apt-daily.timer",
+        "activates": "apt-daily.service",
+        "next": "Mon 2026-07-20 05:00:42",
+        "custom": false
+      },
+      {
+        "timer": "apt-daily-upgrade.timer",
+        "activates": "apt-daily-upgrade.service",
+        "next": "Mon 2026-07-20 06:10:45",
+        "custom": false
+      },
+      {
+        "timer": "motd-news.timer",
+        "activates": "motd-news.service",
+        "next": "Mon 2026-07-20 10:20:21",
+        "custom": false
+      },
+      {
+        "timer": "certbot.timer",
+        "activates": "certbot.service",
+        "next": "Mon 2026-07-20 11:41:29",
+        "custom": false
+      },
+      {
+        "timer": "bjkflix-ios-refresh.timer",
+        "activates": "bjkflix-ios-refresh.service",
+        "next": "Sat 2026-07-25 09:00:00",
+        "custom": true
+      },
+      {
+        "timer": "e2scrub_all.timer",
+        "activates": "e2scrub_all.service",
+        "next": "Sun 2026-07-26 03:10:25",
+        "custom": false
+      },
+      {
+        "timer": "update-notifier-motd.timer",
+        "activates": "update-notifier-motd.service",
+        "next": "Mon 2026-07-27 15:50:16",
+        "custom": false
+      },
+      {
+        "timer": "apport-autoreport.timer",
+        "activates": "apport-autoreport.service",
+        "next": null,
+        "custom": false
+      },
+      {
+        "timer": "snapd.snap-repair.timer",
+        "activates": "snapd.snap-repair.service",
+        "next": null,
+        "custom": false
+      }
+    ],
+    "user_units": [
+      {
+        "name": "openclaw-gateway.service",
+        "path": "/home/bjkai/.config/systemd/user/openclaw-gateway.service",
+        "owner": "bjkai",
+        "description": "OpenClaw Gateway (v2026.6.10)",
+        "exec_start": [
+          "/usr/bin/node /home/bjkai/.local/lib/node_modules/openclaw/dist/index.js gateway --port 18789"
+        ],
+        "environment_files": [
+          "/home/bjkai/.openclaw/gateway.systemd.env"
+        ],
+        "environment_var_names": [
+          "GOOGLE_CLOUD_PROJECT",
+          "GCLOUD_PROJECT",
+          "GOOGLE_CLOUD_LOCATION",
+          "OPENCLAW_SERVICE_MANAGED_ENV_KEYS",
+          "HOME",
+          "TMPDIR",
+          "PATH",
+          "OPENCLAW_GATEWAY_PORT",
+          "OPENCLAW_SYSTEMD_UNIT",
+          "OPENCLAW_WINDOWS_TASK_NAME",
+          "OPENCLAW_SERVICE_MARKER",
+          "OPENCLAW_SERVICE_KIND",
+          "OPENCLAW_SERVICE_VERSION"
+        ],
+        "active_state": "inactive",
+        "unit_file_state": "disabled",
+        "evidence": [],
+        "note": ""
+      },
+      {
+        "name": "vertex-proxy.service",
+        "path": "/home/bjkai/.config/systemd/user/vertex-proxy.service",
+        "owner": "bjkai",
+        "description": "Vertex AI Proxy for OpenClaw",
+        "exec_start": [
+          "/usr/bin/python3 /home/bjkai/vertex-proxy.py"
+        ],
+        "environment_files": [],
+        "environment_var_names": [],
+        "active_state": "inactive",
+        "unit_file_state": "disabled",
+        "evidence": [],
+        "note": ""
+      },
+      {
+        "name": "openclaw-gateway.service",
+        "path": "/root/.config/systemd/user/openclaw-gateway.service",
+        "owner": "root",
+        "description": "OpenClaw Gateway (vOpenClaw 2026.5.7 (eeef486))",
+        "exec_start": [
+          "/usr/bin/node /usr/lib/node_modules/openclaw/dist/index.js gateway --port 18789"
+        ],
+        "environment_files": [],
+        "environment_var_names": [
+          "HOME",
+          "TMPDIR",
+          "NODE_EXTRA_CA_CERTS",
+          "PATH",
+          "OPENCLAW_GATEWAY_PORT",
+          "OPENCLAW_SYSTEMD_UNIT",
+          "OPENCLAW_WINDOWS_TASK_NAME",
+          "OPENCLAW_SERVICE_MARKER",
+          "OPENCLAW_SERVICE_KIND",
+          "OPENCLAW_SERVICE_VERSION"
+        ],
+        "active_state": "inactive",
+        "unit_file_state": "disabled",
+        "evidence": [],
+        "note": "root user-manager units are not loaded (no root user session)"
+      }
+    ],
+    "dropins": [
+      {
+        "path": "/etc/systemd/system/cockpit.socket.d/listen.conf",
+        "effect": "cockpit socket ListenStream moved to port 9091"
+      },
+      {
+        "path": "/etc/systemd/system/docker.service.d/override.conf",
+        "effect": "sets DOCKER_MIN_API_VERSION=1.24"
+      }
+    ],
+    "notes": "Secret values redacted: env var names recorded only. openclaw-gateway.service (system) and xtr-dashboard.service embed inline credential values in Environment= lines (names: NOTION_API_TOKEN, GH_TOKEN, UNDERSTAND_ACCESS_TOKEN)."
+  },
+  "cron": {
+    "generated": "2026-07-19",
+    "entries": [
+      {
+        "source": "/etc/crontab",
+        "user": "root",
+        "schedule": "17 * * * *",
+        "command": "cd / && run-parts --report /etc/cron.hourly",
+        "referenced_paths": [
+          "/etc/cron.hourly"
+        ]
+      },
+      {
+        "source": "/etc/crontab",
+        "user": "root",
+        "schedule": "25 6 * * *",
+        "command": "test -x /usr/sbin/anacron || ( cd / && run-parts --report /etc/cron.daily )",
+        "referenced_paths": [
+          "/etc/cron.daily",
+          "/usr/sbin/anacron"
+        ]
+      },
+      {
+        "source": "/etc/crontab",
+        "user": "root",
+        "schedule": "47 6 * * 7",
+        "command": "test -x /usr/sbin/anacron || ( cd / && run-parts --report /etc/cron.weekly )",
+        "referenced_paths": [
+          "/etc/cron.weekly",
+          "/usr/sbin/anacron"
+        ]
+      },
+      {
+        "source": "/etc/crontab",
+        "user": "root",
+        "schedule": "52 6 1 * *",
+        "command": "test -x /usr/sbin/anacron || ( cd / && run-parts --report /etc/cron.monthly )",
+        "referenced_paths": [
+          "/etc/cron.monthly",
+          "/usr/sbin/anacron"
+        ]
+      },
+      {
+        "source": "/etc/cron.d/anacron",
+        "user": "root",
+        "schedule": "30 7-23 * * *",
+        "command": "[ -x /etc/init.d/anacron ] && if [ ! -d /run/systemd/system ]; then /usr/sbin/invoke-rc.d anacron start >/dev/null; fi",
+        "referenced_paths": [
+          "/etc/init.d/anacron",
+          "/usr/sbin/invoke-rc.d"
+        ]
+      },
+      {
+        "source": "/etc/cron.d/certbot",
+        "user": "root",
+        "schedule": "0 */12 * * *",
+        "command": "test -x /usr/bin/certbot -a \\! -d /run/systemd/system && perl -e 'sleep int(rand(43200))' && certbot -q renew",
+        "referenced_paths": [
+          "/usr/bin/certbot"
+        ]
+      },
+      {
+        "source": "/etc/cron.d/e2scrub_all",
+        "user": "root",
+        "schedule": "30 3 * * 0",
+        "command": "test -e /run/systemd/system || SERVICE_MODE=1 /usr/lib/x86_64-linux-gnu/e2fsprogs/e2scrub_all_cron",
+        "referenced_paths": [
+          "/usr/lib/x86_64-linux-gnu/e2fsprogs/e2scrub_all_cron"
+        ]
+      },
+      {
+        "source": "/etc/cron.d/e2scrub_all",
+        "user": "root",
+        "schedule": "10 3 * * *",
+        "command": "test -e /run/systemd/system || SERVICE_MODE=1 /sbin/e2scrub_all -A -r",
+        "referenced_paths": [
+          "/sbin/e2scrub_all"
+        ]
+      },
+      {
+        "source": "crontab:bjkai",
+        "user": "bjkai",
+        "schedule": "@reboot",
+        "command": "/apps/flixapp/.venv/bin/python3 /apps/xtr/app.py >> /apps/xtr/xtr.log 2>&1",
+        "referenced_paths": [
+          "/apps/flixapp/.venv/bin/python3",
+          "/apps/xtr/app.py",
+          "/apps/xtr/xtr.log"
+        ]
+      },
+      {
+        "source": "crontab:bjkai",
+        "user": "bjkai",
+        "schedule": "30 4 * * *",
+        "command": "/apps/cap4/scripts/prune-raw-originals.sh --min-age-hours 24 >> /tmp/cap4-prune.log 2>&1",
+        "referenced_paths": [
+          "/apps/cap4/scripts/prune-raw-originals.sh",
+          "/tmp/cap4-prune.log"
+        ]
+      },
+      {
+        "source": "crontab:bjkai",
+        "user": "bjkai",
+        "schedule": "@reboot",
+        "command": "sleep 30 && /apps/cap4/scripts/doc-worker.sh >> /tmp/cap4-doc-worker.log 2>&1",
+        "referenced_paths": [
+          "/apps/cap4/scripts/doc-worker.sh",
+          "/tmp/cap4-doc-worker.log"
+        ]
+      },
+      {
+        "source": "crontab:bjkai",
+        "user": "bjkai",
+        "schedule": "15 */6 * * *",
+        "command": "/apps/cap4/scripts/health-watch.sh >> /tmp/cap4-health-watch-cron.log 2>&1",
+        "referenced_paths": [
+          "/apps/cap4/scripts/health-watch.sh",
+          "/tmp/cap4-health-watch-cron.log"
+        ]
+      }
+    ],
+    "periodic_dirs": {
+      "/etc/cron.hourly": [],
+      "/etc/cron.daily": [
+        "0anacron",
+        "apport",
+        "apt-compat",
+        "cracklib-runtime",
+        "dpkg",
+        "google-chrome",
+        "logrotate",
+        "man-db",
+        "samba",
+        "sysstat"
+      ],
+      "/etc/cron.weekly": [
+        "0anacron",
+        "man-db"
+      ],
+      "/etc/cron.monthly": [
+        "0anacron"
+      ]
+    },
+    "user_crontabs": {
+      "root": "exists but empty",
+      "bjkai": "4 entries (see entries)",
+      "bitwarden": "none",
+      "devmon": "none",
+      "postgres": "none",
+      "nova": "none"
+    },
+    "notes": "/etc/cron.d/sysstat exists but all job lines are commented out. certbot/e2scrub_all/anacron cron.d entries are no-ops under systemd (guarded by /run/systemd/system tests); systemd timers handle them."
+  },
+  "processes": {
+    "generated_at": "2026-07-19T15:21:22-04:00",
+    "hostname": "bjkai-2tb-ubuntu",
+    "counts": {
+      "listeners": 276,
+      "distinct_ports": 192,
+      "public_listeners": 0,
+      "long_running": 38,
+      "tmux_sessions": 1,
+      "screen_sessions": 0
+    },
+    "public_listeners_sample": [],
+    "long_running_sample": [
+      {
+        "pid": 1688,
+        "ppid": 1,
+        "user": "root",
+        "etimes": 4904233,
+        "etime_h": 1362.3,
+        "comm": "node",
+        "args_redacted": "/usr/bin/node node_modules/.bin/vite preview",
+        "exe": "/usr/bin/node (deleted)",
+        "cwd": "/apps/jsonp",
+        "cgroup": "0::/system.slice/jsonp.service",
+        "systemd_unit": "jsonp.service",
+        "under_tmux": false,
+        "nohup_orphan": false
+      },
+      {
+        "pid": 1714,
+        "ppid": 1,
+        "user": "www-data",
+        "etimes": 4904233,
+        "etime_h": 1362.3,
+        "comm": "node",
+        "args_redacted": "/usr/bin/node /apps/txtshr/index.js",
+        "exe": "/usr/bin/node (deleted)",
+        "cwd": "/apps/txtshr",
+        "cgroup": "0::/system.slice/txtshr.service",
+        "systemd_unit": "txtshr.service",
+        "under_tmux": false,
+        "nohup_orphan": false
+      },
+      {
+        "pid": 2071,
+        "ppid": 1704,
+        "user": "root",
+        "etimes": 4904233,
+        "etime_h": 1362.3,
+        "comm": "sh",
+        "args_redacted": "sh -c next start --port 3015",
+        "exe": "/usr/bin/dash",
+        "cwd": "/apps/sema",
+        "cgroup": "0::/system.slice/sema-shopping.service",
+        "systemd_unit": "sema-shopping.service",
+        "under_tmux": false,
+        "nohup_orphan": false
+      },
+      {
+        "pid": 17479,
+        "ppid": 11908,
+        "user": "bjkai",
+        "etimes": 4904213,
+        "etime_h": 1362.3,
+        "comm": "sh",
+        "args_redacted": "sh -c /usr/bin/ibus-daemon --panel disable $([ \"$XDG_SESSION_TYPE\" = \"x11\" ] && echo \"--xim\")",
+        "exe": "/usr/bin/dash",
+        "cwd": "/home/bjkai",
+        "cgroup": "0::/user.slice/user-1000.slice/user@1000.service/session.slice/org.freedesktop.IBus.session.GNOME.service",
+        "systemd_unit": "user@1000.service",
+        "under_tmux": false,
+        "nohup_orphan": false
+      },
+      {
+        "pid": 40334,
+        "ppid": 30744,
+        "user": "bjkai",
+        "etimes": 4904004,
+        "etime_h": 1362.2,
+        "comm": "bash",
+        "args_redacted": "bash",
+        "exe": "/usr/bin/bash",
+        "cwd": "/apps",
+        "cgroup": "0::/user.slice/user-1000.slice/user@1000.service/app.slice/app-org.gnome.Terminal.slice/vte-spawn-6db0356b-bfd5-4e4b-9ff9-88397c39ad9a.scope",
+        "systemd_unit": "user@1000.service",
+        "under_tmux": false,
+        "nohup_orphan": false
+      },
+      {
+        "pid": 44080,
+        "ppid": 30744,
+        "user": "bjkai",
+        "etimes": 4903958,
+        "etime_h": 1362.2,
+        "comm": "bash",
+        "args_redacted": "bash",
+        "exe": "/usr/bin/bash",
+        "cwd": "/apps/monitoring/052326",
+        "cgroup": "0::/user.slice/user-1000.slice/user@1000.service/app.slice/app-org.gnome.Terminal.slice/vte-spawn-3501c106-04bf-4791-99a9-32392cbec281.scope",
+        "systemd_unit": "user@1000.service",
+        "under_tmux": false,
+        "nohup_orphan": false
+      },
+      {
+        "pid": 128094,
+        "ppid": 128082,
+        "user": "root",
+        "etimes": 4903293,
+        "etime_h": 1362.0,
+        "comm": "sh",
+        "args_redacted": "sh -c next start --port 3019",
+        "exe": "/usr/bin/dash",
+        "cwd": "/apps/semashop",
+        "cgroup": "0::/system.slice/semashop.service",
+        "systemd_unit": "semashop.service",
+        "under_tmux": false,
+        "nohup_orphan": false
+      },
+      {
+        "pid": 2779483,
+        "ppid": 2779482,
+        "user": "bjkai",
+        "etimes": 3851237,
+        "etime_h": 1069.8,
+        "comm": "bash",
+        "args_redacted": "-bash",
+        "exe": "/usr/bin/bash",
+        "cwd": "/apps",
+        "cgroup": "0::/user.slice/user-1000.slice/session-719.scope",
+        "systemd_unit": null,
+        "under_tmux": true,
+        "nohup_orphan": false
+      },
+      {
+        "pid": 2093114,
+        "ppid": 1,
+        "user": "root",
+        "etimes": 3516350,
+        "etime_h": 976.8,
+        "comm": "python",
+        "args_redacted": "/apps/alltube_custom/.venv/bin/python /apps/alltube_custom/app.py",
+        "exe": "/usr/bin/python3.10 (deleted)",
+        "cwd": "/apps/alltube_custom",
+        "cgroup": "0::/system.slice/17tube.service",
+        "systemd_unit": "17tube.service",
+        "under_tmux": false,
+        "nohup_orphan": false
+      },
+      {
+        "pid": 2093190,
+        "ppid": 1,
+        "user": "root",
+        "etimes": 3516350,
+        "etime_h": 976.8,
+        "comm": "python3",
+        "args_redacted": "/usr/bin/python3 /apps/vncend/vncend_server.py",
+        "exe": "/usr/bin/python3.10 (deleted)",
+        "cwd": "/apps/vncend",
+        "cgroup": "0::/system.slice/vncend.service",
+        "systemd_unit": "vncend.service",
+        "under_tmux": false,
+        "nohup_orphan": false
+      },
+      {
+        "pid": 3536079,
+        "ppid": 1,
+        "user": "bjkai",
+        "etimes": 2833620,
+        "etime_h": 787.1,
+        "comm": "node",
+        "args_redacted": "/usr/local/bin/node /home/bjkai/.claude/plugins/cache/understand-anything/understand-anything/2.7.5/packages/dashboard/node_modules/vite/bin/vite.js --host 127.0.0.1 --port 5173",
+        "exe": "/usr/bin/node (deleted)",
+        "cwd": "/home/bjkai/.claude/plugins/cache/understand-anything/understand-anything/2.7.5/packages/dashboard",
+        "cgroup": "0::/system.slice/xtr-dashboard.service",
+        "systemd_unit": "xtr-dashboard.service",
+        "under_tmux": false,
+        "nohup_orphan": false
+      },
+      {
+        "pid": 3584797,
+        "ppid": 1,
+        "user": "bjkai",
+        "etimes": 2833401,
+        "etime_h": 787.1,
+        "comm": "node",
+        "args_redacted": "node server.js",
+        "exe": "/usr/bin/node (deleted)",
+        "cwd": "/apps/htmls",
+        "cgroup": "0::/user.slice/user-1000.slice/session-1493.scope",
+        "systemd_unit": null,
+        "under_tmux": false,
+        "nohup_orphan": true
+      },
+      {
+        "pid": 263585,
+        "ppid": 1,
+        "user": "bjkai",
+        "etimes": 2416907,
+        "etime_h": 671.4,
+        "comm": "node",
+        "args_redacted": "node /home/bjkai/.local/lib/node_modules/@musistudio/claude-code-router/dist/cli.js start",
+        "exe": "/usr/bin/node (deleted)",
+        "cwd": "/apps/many-notes",
+        "cgroup": "0::/user.slice/user-1000.slice/session-1783.scope",
+        "systemd_unit": null,
+        "under_tmux": false,
+        "nohup_orphan": true
+      },
+      {
+        "pid": 1161771,
+        "ppid": 1161723,
+        "user": "root",
+        "etimes": 2232662,
+        "etime_h": 620.2,
+        "comm": "sh",
+        "args_redacted": "sh -c cross-env NODE_ENV=production electron-forge start -- --webui --port 3180 --no-sandbox",
+        "exe": "/usr/bin/dash",
+        "cwd": "/apps/AionUi",
+        "cgroup": "0::/system.slice/aionui-webui.service",
+        "systemd_unit": "aionui-webui.service",
+        "under_tmux": false,
+        "nohup_orphan": false
+      },
+      {
+        "pid": 1161772,
+        "ppid": 1161771,
+        "user": "root",
+        "etimes": 2232662,
+        "etime_h": 620.2,
+        "comm": "node",
+        "args_redacted": "node /apps/AionUi/node_modules/.bin/cross-env NODE_ENV=production electron-forge start -- --webui --port 3180 --no-sandbox",
+        "exe": "/usr/bin/node (deleted)",
+        "cwd": "/apps/AionUi",
+        "cgroup": "0::/system.slice/aionui-webui.service",
+        "systemd_unit": "aionui-webui.service",
+        "under_tmux": false,
+        "nohup_orphan": false
+      },
+      {
+        "pid": 1161789,
+        "ppid": 1161772,
+        "user": "root",
+        "etimes": 2232662,
+        "etime_h": 620.2,
+        "comm": "node",
+        "args_redacted": "node /apps/AionUi/node_modules/.bin/electron-forge start -- --webui --port 3180 --no-sandbox",
+        "exe": "/usr/bin/node (deleted)",
+        "cwd": "/apps/AionUi",
+        "cgroup": "0::/system.slice/aionui-webui.service",
+        "systemd_unit": "aionui-webui.service",
+        "under_tmux": false,
+        "nohup_orphan": false
+      },
+      {
+        "pid": 1161821,
+        "ppid": 1161789,
+        "user": "root",
+        "etimes": 2232662,
+        "etime_h": 620.2,
+        "comm": "node",
+        "args_redacted": "/usr/bin/node /apps/AionUi/node_modules/@electron-forge/cli/dist/electron-forge-start.js -- --webui --port 3180 --no-sandbox",
+        "exe": "/usr/bin/node (deleted)",
+        "cwd": "/apps/AionUi",
+        "cgroup": "0::/system.slice/aionui-webui.service",
+        "systemd_unit": "aionui-webui.service",
+        "under_tmux": false,
+        "nohup_orphan": false
+      },
+      {
+        "pid": 1163366,
+        "ppid": 1161821,
+        "user": "root",
+        "etimes": 2232658,
+        "etime_h": 620.2,
+        "comm": "node",
+        "args_redacted": "/usr/bin/node /apps/AionUi/node_modules/fork-ts-checker-webpack-plugin/lib/typescript/worker/get-dependencies-worker.js",
+        "exe": "/usr/bin/node (deleted)",
+        "cwd": "/apps/AionUi",
+        "cgroup": "0::/system.slice/aionui-webui.service",
+        "systemd_unit": "aionui-webui.service",
+        "under_tmux": false,
+        "nohup_orphan": false
+      },
+      {
+        "pid": 1163367,
+        "ppid": 1161821,
+        "user": "root",
+        "etimes": 2232658,
+        "etime_h": 620.2,
+        "comm": "node",
+        "args_redacted": "/usr/bin/node --max-old-space-size=2048 /apps/AionUi/node_modules/fork-ts-checker-webpack-plugin/lib/typescript/worker/get-issues-worker.js",
+        "exe": "/usr/bin/node (deleted)",
+        "cwd": "/apps/AionUi",
+        "cgroup": "0::/system.slice/aionui-webui.service",
+        "systemd_unit": "aionui-webui.service",
+        "under_tmux": false,
+        "nohup_orphan": false
+      },
+      {
+        "pid": 1194625,
+        "ppid": 1161821,
+        "user": "root",
+        "etimes": 2232545,
+        "etime_h": 620.2,
+        "comm": "node",
+        "args_redacted": "/usr/bin/node /apps/AionUi/node_modules/fork-ts-checker-webpack-plugin/lib/typescript/worker/get-dependencies-worker.js",
+        "exe": "/usr/bin/node (deleted)",
+        "cwd": "/apps/AionUi",
+        "cgroup": "0::/system.slice/aionui-webui.service",
+        "systemd_unit": "aionui-webui.service",
+        "under_tmux": false,
+        "nohup_orphan": false
+      }
+    ],
+    "tmux_sessions": [
+      {
+        "session": "cai-0",
+        "created_epoch": 1780637641,
+        "created": "2026-06-05T01:34:01-04:00",
+        "windows": 1,
+        "attached": false,
+        "panes": [
+          {
+            "window": 0,
+            "window_name": "claude",
+            "pane": 0,
+            "pane_pid": 2779483,
+            "current_command": "claude",
+            "current_path": "/apps"
+          }
+        ]
+      }
+    ]
+  },
+  "filesystem": {
+    "generated": "2026-07-19T15:21:26-04:00",
+    "note": "/data and /data/apps do not exist on this host",
+    "counts": {
+      "compose_files": 277,
+      "project_dirs": 271,
+      "running_compose_projects": 111,
+      "abandoned_candidates": 28,
+      "dirty_git_repos": 106,
+      "large_dirs": 9
+    },
+    "storage": {
+      "df": [
+        {
+          "source": "/dev/nvme1n1p1",
+          "size": "1.8T",
+          "used": "812G",
+          "avail": "929G",
+          "use_pct": "47%",
+          "mount": "/"
+        },
+        {
+          "source": "/dev/nvme0n1p1",
+          "size": "96M",
+          "used": "32M",
+          "avail": "65M",
+          "use_pct": "33%",
+          "mount": "/boot/efi"
+        }
+      ],
+      "docker_dir_size_kb": 53829624,
+      "top_dirs": [
+        {
+          "path": "/apps/immich-app",
+          "size_kb": 71707984
+        },
+        {
+          "path": "/apps/models",
+          "size_kb": 51258952
+        },
+        {
+          "path": "/apps/fileshare2",
+          "size_kb": 15353456
+        },
+        {
+          "path": "/apps/LTX-2",
+          "size_kb": 8010992
+        },
+        {
+          "path": "/apps/netdata",
+          "size_kb": 7727452
+        },
+        {
+          "path": "/apps/ideogram",
+          "size_kb": 7369184
+        },
+        {
+          "path": "/apps/dl",
+          "size_kb": 7290848
+        },
+        {
+          "path": "/apps/flixapp",
+          "size_kb": 6740884
+        },
+        {
+          "path": "/apps/boxy",
+          "size_kb": 5426696
+        },
+        {
+          "path": "/apps/liam",
+          "size_kb": 5058940
+        },
+        {
+          "path": "/apps/next-auth",
+          "size_kb": 4466020
+        },
+        {
+          "path": "/apps/notesnook",
+          "size_kb": 3296072
+        },
+        {
+          "path": "/apps/arch",
+          "size_kb": 3278316
+        },
+        {
+          "path": "/apps/teak",
+          "size_kb": 2968988
+        },
+        {
+          "path": "/apps/fileshare",
+          "size_kb": 2900172
+        },
+        {
+          "path": "/apps/AionUi",
+          "size_kb": 2629924
+        },
+        {
+          "path": "/apps/bjk-ai-flix",
+          "size_kb": 2372428
+        },
+        {
+          "path": "/apps/zabbix",
+          "size_kb": 2177924
+        },
+        {
+          "path": "/apps/bitwarden",
+          "size_kb": 2014984
+        },
+        {
+          "path": "/apps/vshare",
+          "size_kb": 1921268
+        }
+      ],
+      "log_dirs": [
+        {
+          "path": "/var/log/journal",
+          "size_kb": 515152
+        },
+        {
+          "path": "/var/log/nginx",
+          "size_kb": 64196
+        },
+        {
+          "path": "/var/log/audit",
+          "size_kb": 35336
+        },
+        {
+          "path": "/var/log/flussonic",
+          "size_kb": 2892
+        },
+        {
+          "path": "/var/log/installer",
+          "size_kb": 1576
+        },
+        {
+          "path": "/var/log/redis",
+          "size_kb": 632
+        },
+        {
+          "path": "/var/log/unattended-upgrades",
+          "size_kb": 372
+        },
+        {
+          "path": "/var/log/apt",
+          "size_kb": 352
+        },
+        {
+          "path": "/var/log/letsencrypt",
+          "size_kb": 112
+        },
+        {
+          "path": "/var/log/samba",
+          "size_kb": 88
+        }
+      ]
+    },
+    "flags_abandoned_candidates": [
+      "/apps/Cap",
+      "/apps/KittyClaw",
+      "/apps/OpenPdf",
+      "/apps/ViniPlay",
+      "/apps/Zettelgarden",
+      "/apps/baserow",
+      "/apps/bjkai_shorturl_by_claude",
+      "/apps/boxy",
+      "/apps/cap3",
+      "/apps/cap5",
+      "/apps/cap_v2",
+      "/apps/dockhand",
+      "/apps/fizzy",
+      "/apps/flagsmith",
+      "/apps/gateway",
+      "/apps/kestra",
+      "/apps/many-notes",
+      "/apps/midarr-server",
+      "/apps/monitoring",
+      "/apps/netdata",
+      "/apps/nginx-ui",
+      "/apps/notecapai",
+      "/apps/notes-dashboard",
+      "/apps/poco-claw",
+      "/apps/showdoc",
+      "/apps/wanwu",
+      "/apps/zabbix",
+      "/apps/zed"
+    ],
+    "flags_duplicates": [
+      {
+        "name": "fireshare",
+        "detail": "Two compose projects registered: 'fireshare' (/apps/fireshare/docker-compose.prod.yml, running) and 'fireshare_migrated' (/data/apps/migrated/fireshare/docker-compose.generated.yml \u2014 path /data does NOT exist on this host; stale/broken project record)"
+      },
+      {
+        "name": "cap",
+        "detail": "multiple similarly-named deployments",
+        "paths": [
+          "/apps/Cap",
+          "/apps/cap3",
+          "/apps/cap4",
+          "/apps/cap42",
+          "/apps/cap4l",
+          "/apps/cap5",
+          "/apps/cap_v2"
+        ]
+      },
+      {
+        "name": "b64pdf",
+        "detail": "multiple similarly-named deployments",
+        "paths": [
+          "/apps/b64pdf",
+          "/apps/b64pdf2"
+        ]
+      },
+      {
+        "name": "fileshare",
+        "detail": "multiple similarly-named deployments",
+        "paths": [
+          "/apps/fileshare",
+          "/apps/fileshare2"
+        ]
+      },
+      {
+        "name": "scrcpy",
+        "detail": "multiple similarly-named deployments",
+        "paths": [
+          "/apps/scrcpy",
+          "/apps/scrcpy2"
+        ]
+      },
+      {
+        "name": "glmflix-ui",
+        "detail": "multiple similarly-named deployments",
+        "paths": [
+          "/apps/ui",
+          "/apps/glmflix/ui"
+        ]
+      },
+      {
+        "name": "zublo",
+        "detail": "multiple similarly-named deployments",
+        "paths": [
+          "/apps/zublo",
+          "/srv/apps/zublo"
+        ]
+      },
+      {
+        "name": "img",
+        "detail": "multiple similarly-named deployments",
+        "paths": [
+          "/apps/img2",
+          "/apps/img3",
+          "/apps/zimg",
+          "/apps/g3img"
+        ]
+      },
+      {
+        "name": "flussonic",
+        "detail": "multiple similarly-named deployments",
+        "paths": [
+          "/apps/Flussonic-2",
+          "/apps/flussonic2403",
+          "/opt/flussonic"
+        ]
+      }
+    ],
+    "flags_large_dirs": [
+      {
+        "path": "/apps/immich-app",
+        "size_kb": 71707984,
+        "size_gb": 68.4
+      },
+      {
+        "path": "/apps/models",
+        "size_kb": 51258952,
+        "size_gb": 48.9
+      },
+      {
+        "path": "/apps/fileshare2",
+        "size_kb": 15353456,
+        "size_gb": 14.6
+      },
+      {
+        "path": "/apps/LTX-2",
+        "size_kb": 8010992,
+        "size_gb": 7.6
+      },
+      {
+        "path": "/apps/netdata",
+        "size_kb": 7727452,
+        "size_gb": 7.4
+      },
+      {
+        "path": "/apps/ideogram",
+        "size_kb": 7369184,
+        "size_gb": 7.0
+      },
+      {
+        "path": "/apps/dl",
+        "size_kb": 7290848,
+        "size_gb": 7.0
+      },
+      {
+        "path": "/apps/flixapp",
+        "size_kb": 6740884,
+        "size_gb": 6.4
+      },
+      {
+        "path": "/apps/boxy",
+        "size_kb": 5426696,
+        "size_gb": 5.2
+      }
+    ]
+  }
+}

@@ -1,0 +1,33 @@
+{# Shared presentational macros. #}
+
+{% macro owner_cell(r) -%}
+  {% set apps = r.get('owners', []) %}
+  {% if apps %}
+    {% for a in apps %}<a href="/apps/{{ a.slug }}">{{ a.name }}</a>{% if not loop.last %}, {% endif %}{% endfor %}
+    {% if r.get('shared') %} <span class="badge badge-amber" title="Used by more than one app">shared</span>{% endif %}
+  {% else %}
+    <span class="badge badge-grey">unassigned</span>
+  {% endif %}
+{%- endmacro %}
+
+{% macro copy_id(value, length=12) -%}
+  {% if value %}
+    {% set s = value|string %}
+    {% set short = s.split(':')[-1] %}
+    <span class="mono copy" data-copy="{{ s }}" title="{{ s }} (click to copy)">{{ short[:length] }}<span class="copy-mark">⧉</span></span>
+  {% else %}—{% endif %}
+{%- endmacro %}
+
+{% macro trunc(value, width=40) -%}
+  {% if value %}<span class="mono trunc" title="{{ value }}">{{ value }}</span>{% else %}—{% endif %}
+{%- endmacro %}
+
+{% macro joinlist(items, sep=', ') -%}
+  {% if items %}{{ items | join(sep) }}{% else %}—{% endif %}
+{%- endmacro %}
+
+{% macro domain_links(domains, sep=', ') -%}
+  {% if domains %}
+    {% for d in domains %}<a href="https://{{ d }}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">{{ d }}</a>{% if not loop.last %}{{ sep }}{% endif %}{% endfor %}
+  {% else %}—{% endif %}
+{%- endmacro %}

@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+{% block title %}Manifest · {{ slug }}{% endblock %}
+{% block content %}
+<h1>Manifest · {{ slug }}</h1>
+{% if validation_errors %}
+<div class="box box-warning">
+  <h3>Validation errors</h3>
+  <ul>{% for e in validation_errors %}<li>{{ e }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+<form method="post" action="/manifests/{{ slug }}" class="stacked-form">
+  <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+  <label for="yaml_text">Manifest YAML</label>
+  <textarea name="yaml_text" id="yaml_text" rows="24" class="code-area">{{ yaml_text }}</textarea>
+  <button type="submit" class="btn btn-primary">Save manifest</button>
+  <a class="btn" href="/apps/{{ slug }}">Cancel</a>
+</form>
+{% endblock %}

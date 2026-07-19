@@ -1,0 +1,36 @@
+{% extends "base.html" %}
+{% block title %}Settings{% endblock %}
+{% block content %}
+<h1>Settings</h1>
+
+<section class="panel">
+  <h2>Configuration</h2>
+  <dl class="kv">
+    <dt>Port</dt><dd>{{ settings.get('port') }}</dd>
+    <dt>DB path</dt><dd>{{ settings.get('db_path') }}</dd>
+    <dt>Manifests dir</dt><dd>{{ settings.get('manifests_dir') }}</dd>
+    <dt>Backups dir</dt><dd>{{ settings.get('backups_dir') }}</dd>
+    <dt>Scan roots</dt><dd>{{ settings.get('scan_roots', []) | join(', ') }}</dd>
+    <dt>Protected apps</dt><dd>{{ settings.get('protected_apps', []) | join(', ') }}</dd>
+    <dt>Session hours</dt><dd>{{ settings.get('session_hours') }}</dd>
+  </dl>
+</section>
+
+<section class="panel">
+  <h2>Scanning</h2>
+  <form method="post" action="/scan">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit" class="btn btn-primary">Run scan now</button>
+  </form>
+  <table class="table">
+    <thead><tr><th>ID</th><th>Started</th><th>Finished</th><th>Status</th></tr></thead>
+    <tbody>
+      {% for s in recent_scans %}
+      <tr><td>{{ s.get('id') }}</td><td>{{ s.get('started') }}</td><td>{{ s.get('finished') or '—' }}</td><td><span class="badge">{{ s.get('status') }}</span></td></tr>
+      {% else %}
+      <tr><td colspan="4" class="muted">No scans yet.</td></tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

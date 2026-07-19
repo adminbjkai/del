@@ -1,0 +1,23 @@
+[Unit]
+Description=DEL web application (app inventory & safe uninstall)
+After=network.target docker.service del-helper.service
+Wants=del-helper.service
+
+[Service]
+Type=simple
+User=bjkai
+Group=bjkai
+SupplementaryGroups=docker adm
+WorkingDirectory=/apps/del/backend
+ExecStart=/apps/del/.venv/bin/uvicorn del_app.main:app --host 127.0.0.1 --port 8075 --workers 1
+Restart=on-failure
+RestartSec=3
+Environment=PYTHONUNBUFFERED=1
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectKernelModules=yes
+ProtectKernelTunables=yes
+ProtectControlGroups=yes
+
+[Install]
+WantedBy=multi-user.target

@@ -1,0 +1,46 @@
+{
+  "approved_deletion_roots": [
+    "/apps",
+    "/data",
+    "/srv",
+    "/var/www",
+    "/home/bjkai",
+    "/etc/nginx/sites-available",
+    "/etc/nginx/sites-enabled",
+    "/etc/systemd/system",
+    "/etc/cron.d"
+  ],
+  "protected_roots": [
+    "/",
+    "/bin",
+    "/boot",
+    "/dev",
+    "/etc",
+    "/home",
+    "/lib",
+    "/lib64",
+    "/opt",
+    "/proc",
+    "/root",
+    "/run",
+    "/sbin",
+    "/srv",
+    "/sys",
+    "/tmp",
+    "/usr",
+    "/var",
+    "/apps",
+    "/data",
+    "/apps/del"
+  ],
+  "never_delete": [
+    "/apps/del"
+  ],
+  "backup_dir": "/apps/del/backups",
+  "nginx_site_roots": [
+    "/etc/nginx/sites-available",
+    "/etc/nginx/sites-enabled"
+  ],
+  "systemd_unit_dir": "/etc/systemd/system",
+  "cron_d_dir": "/etc/cron.d"
+}

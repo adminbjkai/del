@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% import "_macros.html" as m %}
+{% block title %}Orphans{% endblock %}
+{% block content %}
+<h1>Orphan candidates <span class="count-pill">{{ total }}</span></h1>
+<div class="box box-info">
+  An <strong>orphan candidate</strong> is a resource seen in the latest scan that DEL
+  could not associate with any application. These are review-only: no destructive
+  actions are offered here. Investigate before acting — a resource may be shared
+  infrastructure or genuinely abandoned.
+</div>
+
+{% for g in grouped %}
+<section class="panel">
+  <h2><a href="/resources/{{ g.type }}">{{ g.label }}</a> <span class="count-pill">{{ g.rows | length }}</span></h2>
+  <p class="muted">{{ g.explainer }}</p>
+  <table class="table" data-enhanced data-empty="No orphaned {{ g.label|lower }}." data-page-size="25">
+    <thead><tr><th>Display</th><th>Key</th><th>Path</th><th data-filter="state">State</th><th>Why a candidate</th></tr></thead>
+    <tbody>
+      {% for r in g.rows %}
+      <tr>
+        <td>
+          {% if g.type in ('volume', 'image') %}<a href="/resources/{{ g.type }}">{{ r.display or r.key }}</a>{% else %}{{ r.display or r.key }}{% endif %}
+        </td>
+        <td>{{ m.trunc(r.key) }}</td>
+        <td>{{ m.trunc(r.path, 50) }}</td>
+        <td data-filter-value="{{ r.state }}"><span class="badge">{{ r.state or '—' }}</span></td>
+        <td class="muted">{{ r.reason }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% else %}
+<p class="muted">No orphan candidates found in the latest scan.</p>
+{% endfor %}
+{% endblock %}

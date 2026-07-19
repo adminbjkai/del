@@ -1,0 +1,6897 @@
+{
+  "version": "nginx version: nginx/1.18.0 (Ubuntu)",
+  "nginx_test": "nginx: the configuration file /etc/nginx/nginx.conf syntax is ok\nnginx: configuration file /etc/nginx/nginx.conf test is successful",
+  "counts": {
+    "sites_available": 219,
+    "sites_enabled": 162,
+    "confd": 2,
+    "dead_upstreams": 17,
+    "orphan_available_only": 70,
+    "orphan_enabled_issues": 50
+  },
+  "sites": [
+    {
+      "file": "/etc/nginx/sites-enabled/17tube.bjk.ai",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [
+        "17tube.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:9205",
+          "port": 9205,
+          "listening": true,
+          "listener_process": "\"python\",pid=2093114,fd=3"
+        },
+        {
+          "location": "/progress/",
+          "proxy_pass": "http://127.0.0.1:9205",
+          "port": 9205,
+          "listening": true,
+          "listener_process": "\"python\",pid=2093114,fd=3"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": null,
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/2FAuth.bjk.ai",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [
+        "2FAuth.bjk.ai",
+        "2fa.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8124",
+          "port": 8124,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3062272,fd=8 [container: 2fauth]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": null,
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/AionUi.bjk.ai",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [
+        "AionUi.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:3180",
+          "port": 3180,
+          "listening": true,
+          "listener_process": "\"electron\",pid=1216230,fd=61"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": null,
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/affine.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/affine.bjk.ai",
+      "server_names": [
+        "affine.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8341",
+          "port": 8341,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3067802,fd=8 [container: affine_server]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/aidocs.bjk.ai",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [
+        "aidocs.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [],
+      "websocket": false,
+      "client_max_body_size": null,
+      "notes": [],
+      "root": "/var/www/aidocs.bjk.ai/current/dist"
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/anchor.bjk.ai",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [
+        "anchor.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:3140",
+          "port": 3140,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3070949,fd=8 [container: anchor]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": null,
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/api.boxy.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/api.boxy.bjk.ai",
+      "server_names": [
+        "api.boxy.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl http2"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/api.boxy.bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8086",
+          "port": 8086,
+          "listening": true,
+          "listener_process": "\"boxy\",pid=3991630,fd=9"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": [
+        "non-standard cert: /etc/letsencrypt/live/api.boxy.bjk.ai/fullchain.pem"
+      ]
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/astv.bjk.ai.conf",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [
+        "astv.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8083",
+          "port": 8083,
+          "listening": true,
+          "listener_process": "\"python\",pid=4132286,fd=6"
+        },
+        {
+          "location": "/ws",
+          "proxy_pass": "http://127.0.0.1:8767",
+          "port": 8767,
+          "listening": true,
+          "listener_process": "\"python\",pid=4132286,fd=7"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": null,
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/atlantis.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/atlantis.bjk.ai",
+      "server_names": [
+        "atlantis.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8338",
+          "port": 8338,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3074629,fd=8 [container: atlantis]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/atomic.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/atomic.bjk.ai",
+      "server_names": [
+        "atomic.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8102",
+          "port": 8102,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3048363,fd=8 [container: atomic-proxy-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/atv.bjk.ai.conf",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [
+        "atv.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8081",
+          "port": 8081,
+          "listening": true,
+          "listener_process": "\"python3\",pid=608029,fd=6"
+        },
+        {
+          "location": "/ws",
+          "proxy_pass": "http://127.0.0.1:8765",
+          "port": 8765,
+          "listening": true,
+          "listener_process": "\"python3\",pid=608029,fd=7"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": null,
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/b64pdf.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/b64pdf.bjk.ai",
+      "server_names": [
+        "b64pdf.bjk.ai",
+        "64pdf.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8045",
+          "port": 8045,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3072684,fd=8 [container: b64pdf-app-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/b64pdf2.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/b64pdf2.bjk.ai",
+      "server_names": [
+        "b64pdf2.bjk.ai",
+        "pdf64.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8029",
+          "port": 8029,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3071646,fd=8 [container: b64pdf2-b64pdf2-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/banban.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/banban.bjk.ai",
+      "server_names": [
+        "banban.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8017",
+          "port": 8017,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3071702,fd=8 [container: banban]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/baserow.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/baserow.bjk.ai",
+      "server_names": [
+        "baserow.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8055",
+          "port": 8055,
+          "listening": true,
+          "listener_process": "\"python3\",pid=3616609,fd=3"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/bdl.bjk.ai",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [
+        "bdl.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/files/",
+          "proxy_pass": null,
+          "static": "/apps/bjkflixdl/public/"
+        },
+        {
+          "location": "/anisette/",
+          "proxy_pass": "http://127.0.0.1:6969/",
+          "port": 6969,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3062039,fd=8 | \"docker-proxy\",pid=3062074,fd=8 [container: anisette]"
+        },
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8793",
+          "port": 8793,
+          "listening": true,
+          "listener_process": "\"python3\",pid=916822,fd=3"
+        }
+      ],
+      "websocket": false,
+      "client_max_body_size": "200M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/beszel.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/beszel.bjk.ai",
+      "server_names": [
+        "beszel.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8068",
+          "port": 8068,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=1866113,fd=8 [container: beszel]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/bewcloud.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/bewcloud.bjk.ai",
+      "server_names": [
+        "bewcloud.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8201",
+          "port": 8201,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3062892,fd=8 [container: bewcloud-website-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/bitwarden.bjk.ai.conf",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/bitwarden.bjk.ai.conf",
+      "server_names": [
+        "bitwarden.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8091",
+          "port": 8091,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3081631,fd=8 [container: bitwarden-nginx]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "128M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/bjkai_shorturl_by_claude.conf",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/bjkai_shorturl_by_claude.conf",
+      "server_names": [
+        "bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "= /dashboard",
+          "proxy_pass": "http://127.0.0.1:8009/dashboard",
+          "port": 8009,
+          "listening": true,
+          "listener_process": "\"bjkai_shorturl_\",pid=3043993,fd=12"
+        },
+        {
+          "location": "= /admin/dashboard",
+          "proxy_pass": "http://127.0.0.1:8009/admin/dashboard",
+          "port": 8009,
+          "listening": true,
+          "listener_process": "\"bjkai_shorturl_\",pid=3043993,fd=12"
+        },
+        {
+          "location": "/admin/api/",
+          "proxy_pass": "http://127.0.0.1:8009",
+          "port": 8009,
+          "listening": true,
+          "listener_process": "\"bjkai_shorturl_\",pid=3043993,fd=12"
+        },
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8009",
+          "port": 8009,
+          "listening": true,
+          "listener_process": "\"bjkai_shorturl_\",pid=3043993,fd=12"
+        }
+      ],
+      "websocket": false,
+      "client_max_body_size": "500M",
+      "notes": [],
+      "auth_basic": "\"BJK Dashboard\""
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/blinko.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/blinko.bjk.ai",
+      "server_names": [
+        "blinko.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8040",
+          "port": 8040,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=1698937,fd=8 [container: blinko-website]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/boxbox.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/boxbox.bjk.ai",
+      "server_names": [
+        "boxbox.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8345",
+          "port": 8345,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3070098,fd=8 [container: filemanager]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/boxy.bjk.ai",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [
+        "boxy.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8086",
+          "port": 8086,
+          "listening": true,
+          "listener_process": "\"boxy\",pid=3991630,fd=9"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/bytestash.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/bytestash.bjk.ai",
+      "server_names": [
+        "bytestash.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8002",
+          "port": 8002,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3071061,fd=8 [container: bytestash-server-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/cap4.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/cap4.bjk.ai",
+      "server_names": [
+        "cap4.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8007",
+          "port": 8007,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3080101,fd=8 [container: cap4-web-internal-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "10g",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/catsup.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/catsup.bjk.ai",
+      "server_names": [
+        "catsup.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8042",
+          "port": 8042,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3067455,fd=8 [container: catsup-catsup-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/cells.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/cells.bjk.ai",
+      "server_names": [
+        "cells.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8500",
+          "port": 8500,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3074237,fd=8 [container: cells-cells-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/chartdb.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/chartdb.bjk.ai",
+      "server_names": [
+        "chartdb.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8033",
+          "port": 8033,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3071998,fd=8 [container: chartdb-chartdb-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/checkcle.bjk.ai.conf",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/checkcle.bjk.ai.conf",
+      "server_names": [
+        "checkcle.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8337",
+          "port": 8337,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3057346,fd=8 [container: checkcle]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/chevereto.bjk.ai",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [
+        "chevereto.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:9182",
+          "port": 9182,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3075156,fd=8 [container: chevereto_app]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "2G",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/chiyogami.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/chiyogami.bjk.ai",
+      "server_names": [
+        "chiyogami.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8348",
+          "port": 8348,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3059494,fd=8 [container: chiyogami]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/cinepro.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/cinepro.bjk.ai",
+      "server_names": [
+        "cinepro.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8066",
+          "port": 8066,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3071809,fd=8 [container: cinepro-ui]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/claudeclaw.bjk.ai",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [
+        "claudeclaw.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/api/chat",
+          "proxy_pass": "http://127.0.0.1:4632",
+          "port": 4632,
+          "listening": true,
+          "listener_process": "\"bun\",pid=3879284,fd=11"
+        },
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:4632",
+          "port": 4632,
+          "listening": true,
+          "listener_process": "\"bun\",pid=3879284,fd=11"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "25M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/cockpit.bjk.ai",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [
+        "cockpit.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "https://127.0.0.1:9091",
+          "port": 9091,
+          "listening": true,
+          "listener_process": "\"cockpit-tls\",pid=2462196,fd=3),(\"systemd\",pid=1,fd=610"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": null,
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/colanode-api.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/colanode-api.bjk.ai",
+      "server_names": [
+        "colanode-api.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8333",
+          "port": 8333,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3067395,fd=8 [container: colanode_server]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/colanode.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/colanode.bjk.ai",
+      "server_names": [
+        "colanode.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8332",
+          "port": 8332,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3077336,fd=8 [container: colanode_web]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/community-skeleton.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/community-skeleton.bjk.ai",
+      "server_names": [
+        "community-skeleton.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8334",
+          "port": 8334,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3068645,fd=8 [container: community-skeleton]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/core.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/core.bjk.ai",
+      "server_names": [
+        "core.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8067",
+          "port": 8067,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3067011,fd=8 [container: cinepro-core]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/dashy.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/dashy.bjk.ai",
+      "server_names": [
+        "dashy.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8344",
+          "port": 8344,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3073524,fd=8 [container: dashy]"
+        }
+      ],
+      "websocket": false,
+      "client_max_body_size": null,
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/dev.bjk.ai.conf",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/dev.bjk.ai.conf",
+      "server_names": [
+        "dev.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8069",
+          "port": 8069,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=657931,fd=8 [container: dev-code-server]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/dockhand.bjk.ai",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [
+        "dockhand.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:9230",
+          "port": 9230,
+          "listening": false,
+          "listener_process": null
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": null,
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/docmost.bjk.ai.conf",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [
+        "docmost.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:3003",
+          "port": 3003,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3257617,fd=8 [container: docmost]"
+        },
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:3003",
+          "port": 3003,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3257617,fd=8 [container: docmost]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/docs.boxy.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/docs.boxy.bjk.ai",
+      "server_names": [
+        "docs.boxy.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl http2"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/docs.boxy.bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/_local/",
+          "proxy_pass": "http://127.0.0.1:3911",
+          "port": 3911,
+          "listening": true,
+          "listener_process": "\"node\",pid=4012899,fd=23"
+        },
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:3901",
+          "port": 3901,
+          "listening": true,
+          "listener_process": "\"next-server (v1\",pid=4013114,fd=21"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": null,
+      "notes": [
+        "non-standard cert: /etc/letsencrypt/live/docs.boxy.bjk.ai/fullchain.pem"
+      ]
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/drawio.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/drawio.bjk.ai",
+      "server_names": [
+        "drawio.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8336",
+          "port": 8336,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3057821,fd=8 [container: drawio-app]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/excalidraw",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/excalidraw",
+      "server_names": [
+        "excalidraw.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8064",
+          "port": 8064,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3067606,fd=8 [container: excalidraw]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/filebrowser.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/filebrowser.bjk.ai",
+      "server_names": [
+        "filebrowser.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8331",
+          "port": 8331,
+          "listening": true,
+          "listener_process": "\"filebrowser\",pid=3056398,fd=7"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/filegator.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/filegator.bjk.ai",
+      "server_names": [
+        "filegator.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8026",
+          "port": 8026,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3068942,fd=8 [container: filegator-filegator-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/filemat.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/filemat.bjk.ai",
+      "server_names": [
+        "filemat.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8056",
+          "port": 8056,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3070356,fd=8 [container: filemat]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/filerise.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/filerise.bjk.ai",
+      "server_names": [
+        "filerise.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8113",
+          "port": 8113,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3075203,fd=8 [container: filerise]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/fileshare.bjk.ai.conf",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [
+        "fileshare.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:7012",
+          "port": 7012,
+          "listening": true,
+          "listener_process": "\"fileshare\",pid=1652,fd=9"
+        }
+      ],
+      "websocket": false,
+      "client_max_body_size": "5G",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/fileshare2.bjk.ai.conf",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [
+        "fileshare2.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:7127",
+          "port": 7127,
+          "listening": true,
+          "listener_process": "\"fileshare2\",pid=1800379,fd=9"
+        }
+      ],
+      "websocket": false,
+      "client_max_body_size": "5G",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/fireshare.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/fireshare.bjk.ai",
+      "server_names": [
+        "fireshare.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8071",
+          "port": 8071,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3310085,fd=8 [container: fireshare]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/fizzy.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/fizzy.bjk.ai",
+      "server_names": [
+        "fizzy.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8077",
+          "port": 8077,
+          "listening": false,
+          "listener_process": null
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/flix.bjk.ai",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [
+        "flix.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/api/proxy",
+          "proxy_pass": "http://127.0.0.1:8061",
+          "port": 8061,
+          "listening": true,
+          "listener_process": "\"uvicorn\",pid=2870949,fd=12"
+        },
+        {
+          "location": "/files/",
+          "proxy_pass": "http://127.0.0.1:8061",
+          "port": 8061,
+          "listening": true,
+          "listener_process": "\"uvicorn\",pid=2870949,fd=12"
+        },
+        {
+          "location": "/api/stream",
+          "proxy_pass": "http://127.0.0.1:8061",
+          "port": 8061,
+          "listening": true,
+          "listener_process": "\"uvicorn\",pid=2870949,fd=12"
+        },
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8061",
+          "port": 8061,
+          "listening": true,
+          "listener_process": "\"uvicorn\",pid=2870949,fd=12"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/flixapp.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/flixapp.bjk.ai",
+      "server_names": [
+        "flixapp.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/files/",
+          "proxy_pass": "http://127.0.0.1:8041",
+          "port": 8041,
+          "listening": true,
+          "listener_process": "\"uvicorn\",pid=2007208,fd=14"
+        },
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8041",
+          "port": 8041,
+          "listening": true,
+          "listener_process": "\"uvicorn\",pid=2007208,fd=14"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/flussonic.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/flussonic.bjk.ai",
+      "server_names": [
+        "flussonic.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "= /streamer/api/v3/system/updater",
+          "proxy_pass": "http://127.0.0.1:8050",
+          "port": 8050,
+          "listening": true,
+          "listener_process": "\"streamer\",pid=1584663,fd=51 | \"streamer\",pid=1584663,fd=52"
+        },
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8050",
+          "port": 8050,
+          "listening": true,
+          "listener_process": "\"streamer\",pid=1584663,fd=51 | \"streamer\",pid=1584663,fd=52"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": [],
+      "allow_deny": {
+        "allow": [],
+        "deny": [
+          "all"
+        ]
+      }
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/focalboard.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/focalboard.bjk.ai",
+      "server_names": [
+        "focalboard.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8343",
+          "port": 8343,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3060852,fd=8 [container: focalboard]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/fochus.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/fochus.bjk.ai",
+      "server_names": [
+        "fochus.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8024",
+          "port": 8024,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=800701,fd=8 [container: fochus]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/folderhost.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/folderhost.bjk.ai",
+      "server_names": [
+        "folderhost.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8021",
+          "port": 8021,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3066874,fd=8 [container: folderhost-prod]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/fs2.bjk.ai.conf",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [
+        "fs2.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:7127",
+          "port": 7127,
+          "listening": true,
+          "listener_process": "\"fileshare2\",pid=1800379,fd=9"
+        }
+      ],
+      "websocket": false,
+      "client_max_body_size": "5G",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/getcockpit.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/getcockpit.bjk.ai",
+      "server_names": [
+        "getcockpit.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8006",
+          "port": 8006,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=211692,fd=8 [container: getcockpit]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/gittodoc.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/gittodoc.bjk.ai",
+      "server_names": [
+        "gittodoc.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8039",
+          "port": 8039,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3064081,fd=8 [container: gittodoc]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/glean.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/glean.bjk.ai",
+      "server_names": [
+        "glean.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8034",
+          "port": 8034,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3070307,fd=8 [container: glean-web]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/glmflix.bjk.ai",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [
+        "glmflix.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/v1/proxy",
+          "proxy_pass": "http://127.0.0.1:8078",
+          "port": 8078,
+          "listening": true,
+          "listener_process": "\"uvicorn\",pid=2581881,fd=14"
+        },
+        {
+          "location": "/api/proxy",
+          "proxy_pass": "http://127.0.0.1:8078",
+          "port": 8078,
+          "listening": true,
+          "listener_process": "\"uvicorn\",pid=2581881,fd=14"
+        },
+        {
+          "location": "/v1/",
+          "proxy_pass": "http://127.0.0.1:8078",
+          "port": 8078,
+          "listening": true,
+          "listener_process": "\"uvicorn\",pid=2581881,fd=14"
+        },
+        {
+          "location": "/files/",
+          "proxy_pass": "http://127.0.0.1:8078",
+          "port": 8078,
+          "listening": true,
+          "listener_process": "\"uvicorn\",pid=2581881,fd=14"
+        },
+        {
+          "location": "/api/download",
+          "proxy_pass": "http://127.0.0.1:8078",
+          "port": 8078,
+          "listening": true,
+          "listener_process": "\"uvicorn\",pid=2581881,fd=14"
+        },
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8078",
+          "port": 8078,
+          "listening": true,
+          "listener_process": "\"uvicorn\",pid=2581881,fd=14"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/gongyu.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/gongyu.bjk.ai",
+      "server_names": [
+        "gongyu.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8053",
+          "port": 8053,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3078234,fd=8 [container: gongyu-web-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/grist.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/grist.bjk.ai",
+      "server_names": [
+        "grist.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8013",
+          "port": 8013,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3077950,fd=8 [container: grist-core]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/hls.bjk.ai",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [
+        "hls.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "~ ^/(playlist\\.m3u8|segment\\.ts|proxy)$",
+          "proxy_pass": "http://127.0.0.1:8099",
+          "port": 8099,
+          "listening": true,
+          "listener_process": "\"gunicorn\",pid=279581,fd=5),(\"gunicorn\",pid=279569,fd=5"
+        },
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8099",
+          "port": 8099,
+          "listening": true,
+          "listener_process": "\"gunicorn\",pid=279581,fd=5),(\"gunicorn\",pid=279569,fd=5"
+        }
+      ],
+      "websocket": false,
+      "client_max_body_size": "32k",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/homarr.bjk.ai.conf",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/homarr.bjk.ai.conf",
+      "server_names": [
+        "homarr.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:7000",
+          "port": 7000,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3062773,fd=8 [container: homarr]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": null,
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/horizon.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/horizon.bjk.ai",
+      "server_names": [
+        "horizon.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8058",
+          "port": 8058,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3073116,fd=8 [container: horizon-web]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/htmls.bjk.ai",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [
+        "htmls.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8195",
+          "port": 8195,
+          "listening": true,
+          "listener_process": "\"node\",pid=3584797,fd=21"
+        }
+      ],
+      "websocket": false,
+      "client_max_body_size": "100M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/img.bjk.ai.conf",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [
+        "img.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8087",
+          "port": 8087,
+          "listening": true,
+          "listener_process": "\"gunicorn\",pid=1178013,fd=5),(\"gunicorn\",pid=1177997,fd=5),(\"gunicorn\",pid=1177964,fd=5"
+        }
+      ],
+      "websocket": false,
+      "client_max_body_size": "50M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/img2.bjk.ai.conf",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [
+        "img2.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8128",
+          "port": 8128,
+          "listening": true,
+          "listener_process": "\"img2\",pid=1687,fd=7"
+        }
+      ],
+      "websocket": false,
+      "client_max_body_size": "50M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/immich.bjk.ai",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [
+        "immich.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:2283",
+          "port": 2283,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3070755,fd=8 [container: immich_server]"
+        },
+        {
+          "location": "/api/socket.io/",
+          "proxy_pass": "http://127.0.0.1:2283/api/socket.io/",
+          "port": 2283,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3070755,fd=8 [container: immich_server]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "20G",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/ironcalc.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/ironcalc.bjk.ai",
+      "server_names": [
+        "ironcalc.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8180",
+          "port": 8180,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3075793,fd=8 [container: ironcalc-caddy-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/it-tools.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/it-tools.bjk.ai",
+      "server_names": [
+        "it-tools.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8001",
+          "port": 8001,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3072499,fd=8 [container: it-tools-it-tools-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/jellyfin.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/jellyfin.bjk.ai",
+      "server_names": [
+        "jellyfin.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "= /emby/Users/AuthenticateByName",
+          "proxy_pass": "http://127.0.0.1:8347",
+          "port": 8347,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3067730,fd=8 [container: jellyfin-prod]"
+        },
+        {
+          "location": "^~ /emby/",
+          "proxy_pass": "http://127.0.0.1:8347",
+          "port": 8347,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3067730,fd=8 [container: jellyfin-prod]"
+        },
+        {
+          "location": "^~ /embywebsocket",
+          "proxy_pass": "http://127.0.0.1:8347",
+          "port": 8347,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3067730,fd=8 [container: jellyfin-prod]"
+        },
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8347",
+          "port": 8347,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3067730,fd=8 [container: jellyfin-prod]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/jsoncrack.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/jsoncrack.bjk.ai",
+      "server_names": [
+        "jsoncrack.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8330",
+          "port": 8330,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3058738,fd=8 [container: jsoncrack-jsoncrack-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/jsonp.bjk.ai.conf",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [
+        "jsonp.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:3100",
+          "port": 3100,
+          "listening": true,
+          "listener_process": "\"node\",pid=1688,fd=28"
+        }
+      ],
+      "websocket": false,
+      "client_max_body_size": null,
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/kan.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/kan.bjk.ai",
+      "server_names": [
+        "kan.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8032",
+          "port": 8032,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3073365,fd=8 [container: kan-web]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/kanbu.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/kanbu.bjk.ai",
+      "server_names": [
+        "kanbu.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8340",
+          "port": 8340,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3067090,fd=8 [container: docker-web-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/karakeep.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/karakeep.bjk.ai",
+      "server_names": [
+        "karakeep.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8346",
+          "port": 8346,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3073207,fd=8 [container: karakeep-web-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/komodo.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/komodo.bjk.ai",
+      "server_names": [
+        "komodo.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8600",
+          "port": 8600,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3420642,fd=8 [container: compose-core-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/lastboard.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/lastboard.bjk.ai",
+      "server_names": [
+        "lastboard.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8080",
+          "port": 8080,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=1583144,fd=8 [container: lastboard]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/leantime.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/leantime.bjk.ai",
+      "server_names": [
+        "leantime.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8090",
+          "port": 8090,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3077808,fd=8 [container: leantime-prod-app]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/linkstash.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/linkstash.bjk.ai",
+      "server_names": [
+        "linkstash.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/api/",
+          "proxy_pass": "http://127.0.0.1:8101/",
+          "port": 8101,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3075539,fd=8 [container: linkstash-linkstash-backend-1]"
+        },
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8100",
+          "port": 8100,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3066601,fd=8 [container: linkstash-linkstash-frontend-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/linkwarden.bjk.ai",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [
+        "linkwarden.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:9199",
+          "port": 9199,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3084486,fd=8 [container: linkwarden-linkwarden-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": null,
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/logseq.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/logseq.bjk.ai",
+      "server_names": [
+        "logseq.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8019",
+          "port": 8019,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3074803,fd=8 [container: logseq]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/manynotes.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/manynotes.bjk.ai",
+      "server_names": [
+        "manynotes.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8084",
+          "port": 8084,
+          "listening": false,
+          "listener_process": null
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/memos.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/memos.bjk.ai",
+      "server_names": [
+        "memos.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8014",
+          "port": 8014,
+          "listening": true,
+          "listener_process": "\"memos\",pid=3054797,fd=9"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/metabase.bjk.ai",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [
+        "metabase.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:3001",
+          "port": 3001,
+          "listening": false,
+          "listener_process": null
+        }
+      ],
+      "websocket": false,
+      "client_max_body_size": "1g",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/mitv.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/mitv.bjk.ai",
+      "server_names": [
+        "mitv.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8051",
+          "port": 8051,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3072587,fd=8 [container: mitv-mitv-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/moo-tasks.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/moo-tasks.bjk.ai",
+      "server_names": [
+        "moo-tasks.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8023",
+          "port": 8023,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3074106,fd=8 [container: moo-tasks-app]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/mtxt.bjk.ai.conf",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [
+        "mtxt.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8787",
+          "port": 8787,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3067292,fd=8 [container: mtxt-webnotepad]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "50M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/n50.bjk.ai",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [
+        "n50.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8055",
+          "port": 8055,
+          "listening": true,
+          "listener_process": "\"python3\",pid=3616609,fd=3"
+        }
+      ],
+      "websocket": false,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/n8n.bjk.ai",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [
+        "n8n.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:5678",
+          "port": 5678,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3078312,fd=8 [container: n8n]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "1g",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/ncloud.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/ncloud.bjk.ai",
+      "server_names": [
+        "ncloud.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8027",
+          "port": 8027,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3080706,fd=8 [container: nextcloud-aio-apache]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/netdata.bjk.ai",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [
+        "netdata.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:19999",
+          "port": 19999,
+          "listening": false,
+          "listener_process": null
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": null,
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/netv.bjk.ai.conf",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/netv.bjk.ai.conf",
+      "server_names": [
+        "netv.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8062",
+          "port": 8062,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3075649,fd=8 [container: netv]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/next-auth.bjk.ai",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [
+        "next-auth.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:3044",
+          "port": 3044,
+          "listening": true,
+          "listener_process": "\"next-server (v1\",pid=1690,fd=21"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": null,
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/notecapai.bjk.ai",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [
+        "notecapai.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:9101",
+          "port": 9101,
+          "listening": false,
+          "listener_process": null
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "10g",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/notesnook",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/notesnook",
+      "server_names": [
+        "notesnook.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8018",
+          "port": 8018,
+          "listening": true,
+          "listener_process": "\"nginx\",pid=3056564,fd=6),(\"nginx\",pid=3056563,fd=6),(\"nginx\",pid=3056562,fd=6),(\"nginx\",pid=3056561,fd=6),(\"nginx\",pid=3056559,fd=6),(\"nginx\",pid=3056558,fd=6),(\"nginx\",pid=3056557,fd=6),(\"nginx\",pid=3056555,fd=6),(\"nginx\",pid=3056554,fd=6),(\"nginx\",pid=3056553,fd=6),(\"nginx\",pid=3056552,fd=6),(\"nginx\",pid=3056551,fd=6),(\"nginx\",pid=3056549,fd=6),(\"nginx\",pid=3056548,fd=6),(\"nginx\",pid=3056547,fd=6),(\"nginx\",pid=3056546,fd=6),(\"nginx\",pid=3056545,fd=6),(\"nginx\",pid=3056542,fd=6),(\"nginx\",pid=3056541,fd=6),(\"nginx\",pid=3056540,fd=6),(\"nginx\",pid=3056538,fd=6),(\"nginx\",pid=3056537,fd=6),(\"nginx\",pid=3056536,fd=6),(\"nginx\",pid=3056532,fd=6),(\"nginx\",pid=3056530,fd=6),(\"nginx\",pid=3056529,fd=6),(\"nginx\",pid=3056528,fd=6),(\"nginx\",pid=3056526,fd=6),(\"nginx\",pid=3056525,fd=6),(\"nginx\",pid=3056524,fd=6),(\"nginx\",pid=3056523,fd=6),(\"nginx\",pid=3056522,fd=6),(\"nginx\",pid=3055231,fd=6"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/notex.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/notex.bjk.ai",
+      "server_names": [
+        "notex.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8888",
+          "port": 8888,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3074317,fd=8 [container: notex]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/ocrai.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/ocrai.bjk.ai",
+      "server_names": [
+        "ocrai.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8016",
+          "port": 8016,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3070604,fd=8 [container: ocrai-ocrai-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/openbook.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/openbook.bjk.ai",
+      "server_names": [
+        "openbook.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8037",
+          "port": 8037,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3076023,fd=8 [container: openbook-app-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/openclaw",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/openclaw",
+      "server_names": [
+        "192.168.1.164"
+      ],
+      "listens": [
+        "443 ssl",
+        "80"
+      ],
+      "ssl_cert": "/etc/nginx/ssl/openclaw.crt",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:18789",
+          "port": 18789,
+          "listening": true,
+          "listener_process": "\"openclaw-gatewa\",pid=2135708,fd=33 | \"openclaw-gatewa\",pid=2135708,fd=34"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": null,
+      "notes": [
+        "non-standard cert: /etc/nginx/ssl/openclaw.crt"
+      ],
+      "allow_deny": {
+        "allow": [
+          "127.0.0.1",
+          "::1",
+          "72.80.59.32",
+          "192.168.1.0/24"
+        ],
+        "deny": [
+          "all"
+        ]
+      }
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/openclaw.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/openclaw.bjk.ai",
+      "server_names": [
+        "openclaw.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:18789",
+          "port": 18789,
+          "listening": true,
+          "listener_process": "\"openclaw-gatewa\",pid=2135708,fd=33 | \"openclaw-gatewa\",pid=2135708,fd=34"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": null,
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/opengist.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/opengist.bjk.ai",
+      "server_names": [
+        "opengist.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8010",
+          "port": 8010,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3073855,fd=8 [container: opengist]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/openinary.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/openinary.bjk.ai",
+      "server_names": [
+        "openinary.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8046",
+          "port": 8046,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3063881,fd=8 [container: openinary-openinary-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/openphotos.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/openphotos.bjk.ai",
+      "server_names": [
+        "openphotos.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8777",
+          "port": 8777,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3068141,fd=8 [container: openphotos]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/openslate.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/openslate.bjk.ai",
+      "server_names": [
+        "openslate.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8008",
+          "port": 8008,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3067896,fd=8 [container: openslate-openslate-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/opensparrow.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/opensparrow.bjk.ai",
+      "server_names": [
+        "opensparrow.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8210",
+          "port": 8210,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=1764121,fd=8 [container: opensparrow_nginx]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/paca.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/paca.bjk.ai",
+      "server_names": [
+        "paca.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8070",
+          "port": 8070,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3084427,fd=8 [container: paca-gateway-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/papra.bjk.ai",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [
+        "papra.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:12211",
+          "port": 12211,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3056652,fd=8 [container: papra]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "200m",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/passbolt.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/passbolt.bjk.ai",
+      "server_names": [
+        "passbolt.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8003",
+          "port": 8003,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3067351,fd=8 [container: passbolt_api-app-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/photofield.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/photofield.bjk.ai",
+      "server_names": [
+        "photofield.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8004",
+          "port": 8004,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3056418,fd=8 [container: photofield-photofield-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/pilotdeck.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/pilotdeck.bjk.ai",
+      "server_names": [
+        "pilotdeck.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8052",
+          "port": 8052,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3078104,fd=8 [container: pilotdeck-pilotdeck-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/plainpad",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/plainpad",
+      "server_names": [
+        "plainpad.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8015",
+          "port": 8015,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3071538,fd=8 [container: plainpad-nginx-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/portainer.bjk.ai.conf",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [
+        "portainer.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "https://127.0.0.1:9443",
+          "port": 9443,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3070834,fd=8 [container: portainer]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": null,
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/portracker.conf",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/portracker.conf",
+      "server_names": [
+        "portracker.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8011",
+          "port": 8011,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3059932,fd=8 [container: portracker]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/ppv.bjk.ai",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [
+        "ppv.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/api/proxy",
+          "proxy_pass": "http://127.0.0.1:8055",
+          "port": 8055,
+          "listening": true,
+          "listener_process": "\"python3\",pid=3616609,fd=3"
+        },
+        {
+          "location": "/api/stream/",
+          "proxy_pass": "http://127.0.0.1:8055",
+          "port": 8055,
+          "listening": true,
+          "listener_process": "\"python3\",pid=3616609,fd=3"
+        },
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8055",
+          "port": 8055,
+          "listening": true,
+          "listener_process": "\"python3\",pid=3616609,fd=3"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "50M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/prismical.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/prismical.bjk.ai",
+      "server_names": [
+        "prismical.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8043",
+          "port": 8043,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3057657,fd=8 [container: prismical-www]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/querypad.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/querypad.bjk.ai",
+      "server_names": [
+        "querypad.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8059",
+          "port": 8059,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3058387,fd=8 [container: querypad]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/refetch.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/refetch.bjk.ai",
+      "server_names": [
+        "refetch.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8025",
+          "port": 8025,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=4010040,fd=8 [container: refetch]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/rowboat.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/rowboat.bjk.ai",
+      "server_names": [
+        "rowboat.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/decks/",
+          "proxy_pass": "http://127.0.0.1:8060/decks/",
+          "port": 8060,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3074550,fd=8 [container: deck-renderer]"
+        },
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8038",
+          "port": 8038,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3080373,fd=8 [container: rowboat-rowboat-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/rshare",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/rshare",
+      "server_names": [
+        "rshare.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8339",
+          "port": 8339,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3075019,fd=8 [container: rshare]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/runtipi.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/runtipi.bjk.ai",
+      "server_names": [
+        "runtipi.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8301",
+          "port": 8301,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3055860,fd=8 [container: runtipi]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/rustpad.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/rustpad.bjk.ai",
+      "server_names": [
+        "rustpad.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8031",
+          "port": 8031,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3073653,fd=8 [container: rustpad-rustpad-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/sema.bjk.ai",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [
+        "sema.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:3015",
+          "port": 3015,
+          "listening": true,
+          "listener_process": "\"next-server (v1\",pid=2072,fd=21"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": null,
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/semalist.bjk.ai",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [
+        "semalist.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:3020",
+          "port": 3020,
+          "listening": true,
+          "listener_process": "\"next-server (v1\",pid=2199,fd=21"
+        },
+        {
+          "location": "/_next/static",
+          "proxy_pass": "http://127.0.0.1:3020",
+          "port": 3020,
+          "listening": true,
+          "listener_process": "\"next-server (v1\",pid=2199,fd=21"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": null,
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/semashop.bjk.ai",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [
+        "semashop.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:3019",
+          "port": 3019,
+          "listening": true,
+          "listener_process": "\"next-server (v1\",pid=128095,fd=21"
+        },
+        {
+          "location": "/_next/static",
+          "proxy_pass": "http://127.0.0.1:3019",
+          "port": 3019,
+          "listening": true,
+          "listener_process": "\"next-server (v1\",pid=128095,fd=21"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": null,
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/sheets.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/sheets.bjk.ai",
+      "server_names": [
+        "sheets.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8047",
+          "port": 8047,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3073707,fd=8 [container: casual-sheets]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/shows.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/shows.bjk.ai",
+      "server_names": [
+        "shows.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8335",
+          "port": 8335,
+          "listening": false,
+          "listener_process": null
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/simple-doc.bjk.ai",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [
+        "simple-doc.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8044",
+          "port": 8044,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3074921,fd=8 [container: simple-doc-simpledoc-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/stash.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/stash.bjk.ai",
+      "server_names": [
+        "stash.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8054",
+          "port": 8054,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3084340,fd=8 [container: stash-bookmark-app-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/streamvault-iptv.bjk.ai.conf",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/streamvault-iptv.bjk.ai.conf",
+      "server_names": [
+        "streamvault-iptv.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8000",
+          "port": 8000,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3073570,fd=8 [container: streamvault-iptv-web]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/stv.bjk.ai.conf",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [
+        "stv.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8082",
+          "port": 8082,
+          "listening": false,
+          "listener_process": null
+        },
+        {
+          "location": "/ws",
+          "proxy_pass": "http://127.0.0.1:8766",
+          "port": 8766,
+          "listening": false,
+          "listener_process": null
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": null,
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/tbl.bjk.ai.conf",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [
+        "tbl.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:7014",
+          "port": 7014,
+          "listening": true,
+          "listener_process": "\"tbl\",pid=1711,fd=9"
+        }
+      ],
+      "websocket": false,
+      "client_max_body_size": "10M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/teak.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/teak.bjk.ai",
+      "server_names": [
+        "teak.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8395",
+          "port": 8395,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3347717,fd=8 [container: teak-web]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/teakvex.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/teakvex.bjk.ai",
+      "server_names": [
+        "teakvex.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8396",
+          "port": 8396,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3186596,fd=8 [container: teak-convex-backend]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/teakvexsite.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/teakvexsite.bjk.ai",
+      "server_names": [
+        "teakvexsite.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8397",
+          "port": 8397,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3186611,fd=8 [container: teak-convex-backend]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/termix.bjk.ai.conf",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/termix.bjk.ai.conf",
+      "server_names": [
+        "termix.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8030",
+          "port": 8030,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3063576,fd=8 [container: termix]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": null,
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/tesserae.bjk.ai.conf",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/tesserae.bjk.ai.conf",
+      "server_names": [
+        "tesserae.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8400",
+          "port": 8400,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3072038,fd=8 [container: tesserae]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/thirtybees.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/thirtybees.bjk.ai",
+      "server_names": [
+        "thirtybees.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8063",
+          "port": 8063,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3066820,fd=8 [container: thirtybees-app-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/tld.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/tld.bjk.ai",
+      "server_names": [
+        "tld.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8057",
+          "port": 8057,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3071903,fd=8 [container: tld]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/trflix.bjk.ai",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [
+        "trflix.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/api/proxy",
+          "proxy_pass": "http://127.0.0.1:8048",
+          "port": 8048,
+          "listening": false,
+          "listener_process": null
+        },
+        {
+          "location": "/files/",
+          "proxy_pass": "http://127.0.0.1:8048",
+          "port": 8048,
+          "listening": false,
+          "listener_process": null
+        },
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8048",
+          "port": 8048,
+          "listening": false,
+          "listener_process": null
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/twenty.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/twenty.bjk.ai",
+      "server_names": [
+        "twenty.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8036",
+          "port": 8036,
+          "listening": false,
+          "listener_process": null
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/txt.bjk.ai.conf",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [
+        "txt.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:7013",
+          "port": 7013,
+          "listening": true,
+          "listener_process": "\"node\",pid=1714,fd=21"
+        }
+      ],
+      "websocket": false,
+      "client_max_body_size": "10M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/txtg.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/txtg.bjk.ai",
+      "server_names": [
+        "txtg.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8005",
+          "port": 8005,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3057220,fd=8 [container: txtg]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/url.bjk.ai.conf",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/url.bjk.ai.conf",
+      "server_names": [
+        "url.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:7007",
+          "port": 7007,
+          "listening": true,
+          "listener_process": "\"url-shortener\",pid=1716,fd=10"
+        }
+      ],
+      "websocket": false,
+      "client_max_body_size": null,
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/vaultwarden.bjk.ai.conf",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/vaultwarden.bjk.ai.conf",
+      "server_names": [
+        "vaultwarden.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8020",
+          "port": 8020,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3060976,fd=8 [container: vaultwarden]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/viniplay.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/viniplay.bjk.ai",
+      "server_names": [
+        "viniplay.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8998",
+          "port": 8998,
+          "listening": false,
+          "listener_process": null
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/vnce.bjk.ai",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [
+        "vnce.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:9123",
+          "port": 9123,
+          "listening": true,
+          "listener_process": "\"python3\",pid=2093190,fd=3"
+        }
+      ],
+      "websocket": false,
+      "client_max_body_size": null,
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/vortex.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/vortex.bjk.ai",
+      "server_names": [
+        "vortex.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8350",
+          "port": 8350,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=160411,fd=8 [container: vortexpanel]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/vshare.bjk.ai.conf",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [
+        "vshare.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8200",
+          "port": 8200,
+          "listening": true,
+          "listener_process": "\"vshare\",pid=1718,fd=9"
+        }
+      ],
+      "websocket": false,
+      "client_max_body_size": "10G",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/wallos.bjk.ai",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [
+        "wallos.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8282",
+          "port": 8282,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3068357,fd=8 [container: wallos]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": null,
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/willbedone.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/willbedone.bjk.ai",
+      "server_names": [
+        "willbedone.bjk.ai",
+        "wbd.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8022",
+          "port": 8022,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3074148,fd=8 [container: will-be-done]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/xtr.bjk.ai",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [
+        "xtr.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8092",
+          "port": 8092,
+          "listening": true,
+          "listener_process": "\"uvicorn\",pid=3534504,fd=13"
+        }
+      ],
+      "websocket": false,
+      "client_max_body_size": null,
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/xtrdash.bjk.ai",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [
+        "xtrdash.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "= /",
+          "proxy_pass": "http://127.0.0.1:5173",
+          "port": 5173,
+          "listening": true,
+          "listener_process": "\"node\",pid=3536079,fd=28"
+        },
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:5173",
+          "port": 5173,
+          "listening": true,
+          "listener_process": "\"node\",pid=3536079,fd=28"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": null,
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/zabbix.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/zabbix.bjk.ai",
+      "server_names": [
+        "zabbix.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8300",
+          "port": 8300,
+          "listening": false,
+          "listener_process": null
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/zennotes.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/zennotes.bjk.ai",
+      "server_names": [
+        "zennotes.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8049",
+          "port": 8049,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3070447,fd=8 [container: zennotes-selfhosted]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/zettelgarden.bjk.ai",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [
+        "zettelgarden.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:9321",
+          "port": 9321,
+          "listening": false,
+          "listener_process": null
+        },
+        {
+          "location": "/api",
+          "proxy_pass": "http://127.0.0.1:8322",
+          "port": 8322,
+          "listening": false,
+          "listener_process": null
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "50m",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/zublo.bjk.ai",
+      "enabled": true,
+      "symlink_target": "/etc/nginx/sites-available/zublo.bjk.ai",
+      "server_names": [
+        "zublo.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8012",
+          "port": 8012,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3071364,fd=8 [container: zublo]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/Cap.bjk.ai",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "cap.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "[::]:80",
+        "443 ssl http2",
+        "[::]:443 ssl http2"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "^~ /cap/",
+          "proxy_pass": "http://127.0.0.1:3911/cap/",
+          "port": 3911,
+          "listening": true,
+          "listener_process": "\"node\",pid=4012899,fd=23"
+        },
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:3910",
+          "port": 3910,
+          "listening": false,
+          "listener_process": null
+        },
+        {
+          "location": "/api/",
+          "proxy_pass": "http://127.0.0.1:3910/api/",
+          "port": 3910,
+          "listening": false,
+          "listener_process": null
+        },
+        {
+          "location": "/api/auth/",
+          "proxy_pass": "http://127.0.0.1:3910/api/auth/",
+          "port": 3910,
+          "listening": false,
+          "listener_process": null
+        },
+        {
+          "location": "^~ /s3/",
+          "proxy_pass": "http://127.0.0.1:3911/",
+          "port": 3911,
+          "listening": true,
+          "listener_process": "\"node\",pid=4012899,fd=23"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "10G",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/Cap.bjk.ai.bak-20260224-0239",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "cap.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "[::]:80",
+        "443 ssl http2",
+        "[::]:443 ssl http2"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "^~ /cap/",
+          "proxy_pass": "http://127.0.0.1:3911/cap/",
+          "port": 3911,
+          "listening": true,
+          "listener_process": "\"node\",pid=4012899,fd=23"
+        },
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:3910",
+          "port": 3910,
+          "listening": false,
+          "listener_process": null
+        },
+        {
+          "location": "/api/",
+          "proxy_pass": "http://127.0.0.1:3910/api/",
+          "port": 3910,
+          "listening": false,
+          "listener_process": null
+        },
+        {
+          "location": "/api/auth/",
+          "proxy_pass": "http://127.0.0.1:3910/api/auth/",
+          "port": 3910,
+          "listening": false,
+          "listener_process": null
+        },
+        {
+          "location": "^~ /s3/",
+          "proxy_pass": "http://127.0.0.1:3911/",
+          "port": 3911,
+          "listening": true,
+          "listener_process": "\"node\",pid=4012899,fd=23"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "10G",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/Cap.bjk.ai.retired-20260623T231540Z",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "cap.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "[::]:80",
+        "443 ssl http2",
+        "[::]:443 ssl http2"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "^~ /cap/",
+          "proxy_pass": "http://127.0.0.1:3911/cap/",
+          "port": 3911,
+          "listening": true,
+          "listener_process": "\"node\",pid=4012899,fd=23"
+        },
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:3910",
+          "port": 3910,
+          "listening": false,
+          "listener_process": null
+        },
+        {
+          "location": "/api/",
+          "proxy_pass": "http://127.0.0.1:3910/api/",
+          "port": 3910,
+          "listening": false,
+          "listener_process": null
+        },
+        {
+          "location": "/api/auth/",
+          "proxy_pass": "http://127.0.0.1:3910/api/auth/",
+          "port": 3910,
+          "listening": false,
+          "listener_process": null
+        },
+        {
+          "location": "^~ /s3/",
+          "proxy_pass": "http://127.0.0.1:3911/",
+          "port": 3911,
+          "listening": true,
+          "listener_process": "\"node\",pid=4012899,fd=23"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "10G",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/affine.bjk.ai.bak.8042",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "affine.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8042",
+          "port": 8042,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3067455,fd=8 [container: catsup-catsup-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/appwrite.bjk.ai",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "appwrite.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8080",
+          "port": 8080,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=1583144,fd=8 [container: lastboard]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/appwrite.bjk.ai.retired-20260626T101300Z",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "appwrite.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8080",
+          "port": 8080,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=1583144,fd=8 [container: lastboard]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/atlantis.bjk.ai.bak.20260626-060723",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "atlantis.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8006",
+          "port": 8006,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=211692,fd=8 [container: getcockpit]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/automaker.bjk.ai",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "automaker.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl http2"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/api/",
+          "proxy_pass": "http://127.0.0.1:5311",
+          "port": 5311,
+          "listening": false,
+          "listener_process": null
+        },
+        {
+          "location": "/api",
+          "proxy_pass": "http://127.0.0.1:5311",
+          "port": 5311,
+          "listening": false,
+          "listener_process": null
+        },
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:5310",
+          "port": 5310,
+          "listening": false,
+          "listener_process": null
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": null,
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/b64pdf2.bjk.ai.bak.2026-05-20-090424",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "b64pdf2.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8029",
+          "port": 8029,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3071646,fd=8 [container: b64pdf2-b64pdf2-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/boxbox.bjk.ai.bak.8026",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "boxbox.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8026",
+          "port": 8026,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3068942,fd=8 [container: filegator-filegator-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/boxy2.bjk.ai.conf.stale-20260702",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "boxy2.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl http2"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/ws",
+          "proxy_pass": "http://127.0.0.1:3211",
+          "port": 3211,
+          "listening": false,
+          "listener_process": null
+        },
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:3211",
+          "port": 3211,
+          "listening": false,
+          "listener_process": null
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "5G",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/boxy3.bjk.ai.stale-20260702",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "boxy3.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl http2"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:3030",
+          "port": 3030,
+          "listening": false,
+          "listener_process": null
+        }
+      ],
+      "websocket": false,
+      "client_max_body_size": "10G",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/cap2.bjk.ai",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "cap2.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "[::]:80",
+        "443 ssl http2",
+        "[::]:443 ssl http2"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "^~ /cap-v2/",
+          "proxy_pass": "http://127.0.0.1:8922/cap-v2/",
+          "port": 8922,
+          "listening": false,
+          "listener_process": null
+        },
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8022",
+          "port": 8022,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3074148,fd=8 [container: will-be-done]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "10G",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/cap2.bjk.ai.retired-20260626T095742Z",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "cap2.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "[::]:80",
+        "443 ssl http2",
+        "[::]:443 ssl http2"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "^~ /cap-v2/",
+          "proxy_pass": "http://127.0.0.1:8922/cap-v2/",
+          "port": 8922,
+          "listening": false,
+          "listener_process": null
+        },
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8022",
+          "port": 8022,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3074148,fd=8 [container: will-be-done]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "10G",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/cap3.bjk.ai",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "cap3.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8060",
+          "port": 8060,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3074550,fd=8 [container: deck-renderer]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/cap4.bjk.ai.bak-20260619-uploadlimit",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "cap4.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8007",
+          "port": 8007,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3080101,fd=8 [container: cap4-web-internal-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/cap4.bjk.ai.bak-20260703-031658-hsts",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "cap4.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8007",
+          "port": 8007,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3080101,fd=8 [container: cap4-web-internal-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "10g",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/cap5.bjk.ai",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "cap5.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8055",
+          "port": 8055,
+          "listening": true,
+          "listener_process": "\"python3\",pid=3616609,fd=3"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/cap_v2.bjk.ai.conf",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "cap_v2.bjk.ai",
+        "cap2.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8022",
+          "port": 8022,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3074148,fd=8 [container: will-be-done]"
+        },
+        {
+          "location": "~ ^/cap-v2/",
+          "proxy_pass": "http://127.0.0.1:8922",
+          "port": 8922,
+          "listening": false,
+          "listener_process": null
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/casaos.bjk.ai",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "casaos.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl http2"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8700",
+          "port": 8700,
+          "listening": false,
+          "listener_process": null
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": null,
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/cockpit.bjk.ai.conf",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "cockpit.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl http2"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "https://127.0.0.1:9091",
+          "port": 9091,
+          "listening": true,
+          "listener_process": "\"cockpit-tls\",pid=2462196,fd=3),(\"systemd\",pid=1,fd=610"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": null,
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/community-skeleton.bjk.ai.bak.20260626-061021",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "community-skeleton.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8015",
+          "port": 8015,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3071538,fd=8 [container: plainpad-nginx-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/dashy.bjk.ai.bak.1782467955",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "dashy.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8040",
+          "port": 8040,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=1698937,fd=8 [container: blinko-website]"
+        }
+      ],
+      "websocket": false,
+      "client_max_body_size": null,
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/default",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "_"
+      ],
+      "listens": [
+        "80 default_server",
+        "[::]:80 default_server"
+      ],
+      "ssl_cert": null,
+      "upstreams": [],
+      "websocket": false,
+      "client_max_body_size": null,
+      "notes": [],
+      "root": "/var/www/html"
+    },
+    {
+      "file": "/etc/nginx/sites-available/docmost.conf",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "bjk.ai"
+      ],
+      "listens": [
+        "3004 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:3003",
+          "port": 3003,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3257617,fd=8 [container: docmost]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": null,
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/drawio.bjk.ai.bak",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "drawio.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8004",
+          "port": 8004,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3056418,fd=8 [container: photofield-photofield-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/ever-teams.bjk.ai",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "ever-teams.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl http2"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:3050",
+          "port": 3050,
+          "listening": false,
+          "listener_process": null
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": null,
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/evershop.bjk.ai",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "evershop.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl http2"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:3002",
+          "port": 3002,
+          "listening": false,
+          "listener_process": null
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": null,
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/excalidraw.bak",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "excalidraw.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8003",
+          "port": 8003,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3067351,fd=8 [container: passbolt_api-app-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/filebrowser.bjk.ai.bak.20260626055925",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "filebrowser.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8010",
+          "port": 8010,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3073855,fd=8 [container: opengist]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/filerise.bjk.ai.bak.20260623191004",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "filerise.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8013",
+          "port": 8013,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3077950,fd=8 [container: grist-core]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/focalboard.bjk.ai.bak",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "focalboard.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8002",
+          "port": 8002,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3071061,fd=8 [container: bytestash-server-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/forgeai.bjk.ai",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "forgeai.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8800",
+          "port": 8800,
+          "listening": false,
+          "listener_process": null
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/forgeai.bjk.ai.retired-20260623T230337Z",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "forgeai.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8800",
+          "port": 8800,
+          "listening": false,
+          "listener_process": null
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/gaia.bjk.ai",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "gaia.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/api/",
+          "proxy_pass": "http://127.0.0.1:8048",
+          "port": 8048,
+          "listening": false,
+          "listener_process": null
+        },
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8050",
+          "port": 8050,
+          "listening": true,
+          "listener_process": "\"streamer\",pid=1584663,fd=51 | \"streamer\",pid=1584663,fd=52"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/gaia.bjk.ai.retired-20260626T095742Z",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "gaia.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/api/",
+          "proxy_pass": "http://127.0.0.1:8048",
+          "port": 8048,
+          "listening": false,
+          "listener_process": null
+        },
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8050",
+          "port": 8050,
+          "listening": true,
+          "listener_process": "\"streamer\",pid=1584663,fd=51 | \"streamer\",pid=1584663,fd=52"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/homepage.bjk.ai",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "homepage.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl http2"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:3210",
+          "port": 3210,
+          "listening": false,
+          "listener_process": null
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": null,
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/huly.bjk.ai",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "huly.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8056",
+          "port": 8056,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3070356,fd=8 [container: filemat]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/huly.bjk.ai.retired-20260626T095742Z",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "huly.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8056",
+          "port": 8056,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3070356,fd=8 [container: filemat]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/jellyfin.bjk.ai.bak.20260626060105",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "jellyfin.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "= /emby/Users/AuthenticateByName",
+          "proxy_pass": "http://127.0.0.1:8008",
+          "port": 8008,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3067896,fd=8 [container: openslate-openslate-1]"
+        },
+        {
+          "location": "^~ /emby/",
+          "proxy_pass": "http://127.0.0.1:8008",
+          "port": 8008,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3067896,fd=8 [container: openslate-openslate-1]"
+        },
+        {
+          "location": "^~ /embywebsocket",
+          "proxy_pass": "http://127.0.0.1:8008",
+          "port": 8008,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3067896,fd=8 [container: openslate-openslate-1]"
+        },
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8008",
+          "port": 8008,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3067896,fd=8 [container: openslate-openslate-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/jsoncrack.bjk.ai.bak.20260626060059",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "jsoncrack.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8010",
+          "port": 8010,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3073855,fd=8 [container: opengist]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/kanbu.bjk.ai.bak.20260626-061022",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "kanbu.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8041",
+          "port": 8041,
+          "listening": true,
+          "listener_process": "\"uvicorn\",pid=2007208,fd=14"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/karakeep.bjk.ai.bak.20260626060939",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "karakeep.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8018",
+          "port": 8018,
+          "listening": true,
+          "listener_process": "\"nginx\",pid=3056564,fd=6),(\"nginx\",pid=3056563,fd=6),(\"nginx\",pid=3056562,fd=6),(\"nginx\",pid=3056561,fd=6),(\"nginx\",pid=3056559,fd=6),(\"nginx\",pid=3056558,fd=6),(\"nginx\",pid=3056557,fd=6),(\"nginx\",pid=3056555,fd=6),(\"nginx\",pid=3056554,fd=6),(\"nginx\",pid=3056553,fd=6),(\"nginx\",pid=3056552,fd=6),(\"nginx\",pid=3056551,fd=6),(\"nginx\",pid=3056549,fd=6),(\"nginx\",pid=3056548,fd=6),(\"nginx\",pid=3056547,fd=6),(\"nginx\",pid=3056546,fd=6),(\"nginx\",pid=3056545,fd=6),(\"nginx\",pid=3056542,fd=6),(\"nginx\",pid=3056541,fd=6),(\"nginx\",pid=3056540,fd=6),(\"nginx\",pid=3056538,fd=6),(\"nginx\",pid=3056537,fd=6),(\"nginx\",pid=3056536,fd=6),(\"nginx\",pid=3056532,fd=6),(\"nginx\",pid=3056530,fd=6),(\"nginx\",pid=3056529,fd=6),(\"nginx\",pid=3056528,fd=6),(\"nginx\",pid=3056526,fd=6),(\"nginx\",pid=3056525,fd=6),(\"nginx\",pid=3056524,fd=6),(\"nginx\",pid=3056523,fd=6),(\"nginx\",pid=3056522,fd=6),(\"nginx\",pid=3055231,fd=6"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/kittyclaw.bjk.ai",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "kittyclaw.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8401",
+          "port": 8401,
+          "listening": false,
+          "listener_process": null
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/liam.bjk.ai",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "liam.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl http2"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:3901",
+          "port": 3901,
+          "listening": true,
+          "listener_process": "\"next-server (v1\",pid=4013114,fd=21"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": null,
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/liam.bjk.ai.retired-20260623T231540Z",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "liam.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl http2"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:3901",
+          "port": 3901,
+          "listening": true,
+          "listener_process": "\"next-server (v1\",pid=4013114,fd=21"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": null,
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/neoclaw.bjk.ai",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "neoclaw.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:28789",
+          "port": 28789,
+          "listening": false,
+          "listener_process": null
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": null,
+      "notes": [],
+      "allow_deny": {
+        "allow": [
+          "127.0.0.1",
+          "::1",
+          "72.80.59.32",
+          "192.168.1.0/24"
+        ],
+        "deny": [
+          "all"
+        ]
+      }
+    },
+    {
+      "file": "/etc/nginx/sites-available/neoclaw.bjk.ai.bak-pre-trusted-proxy",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "neoclaw.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:28789",
+          "port": 28789,
+          "listening": false,
+          "listener_process": null
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": null,
+      "notes": [],
+      "allow_deny": {
+        "allow": [
+          "127.0.0.1",
+          "::1",
+          "72.80.59.32",
+          "192.168.1.0/24"
+        ],
+        "deny": [
+          "all"
+        ]
+      }
+    },
+    {
+      "file": "/etc/nginx/sites-available/neoclaw.bjk.ai.bak.20260318-065154",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "neoclaw.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:28789",
+          "port": 28789,
+          "listening": false,
+          "listener_process": null
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": null,
+      "notes": [],
+      "allow_deny": {
+        "allow": [
+          "127.0.0.1",
+          "::1",
+          "72.80.59.32",
+          "192.168.1.0/24"
+        ],
+        "deny": [
+          "all"
+        ]
+      }
+    },
+    {
+      "file": "/etc/nginx/sites-available/neoclaw.bjk.ai.retired-20260623T231540Z",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "neoclaw.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:28789",
+          "port": 28789,
+          "listening": false,
+          "listener_process": null
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": null,
+      "notes": [],
+      "allow_deny": {
+        "allow": [
+          "127.0.0.1",
+          "::1",
+          "72.80.59.32",
+          "192.168.1.0/24"
+        ],
+        "deny": [
+          "all"
+        ]
+      }
+    },
+    {
+      "file": "/etc/nginx/sites-available/nginx-ui.bjk.ai",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "nginx-ui.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "[::]:80",
+        "443 ssl http2",
+        "[::]:443 ssl http2"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:19000",
+          "port": 19000,
+          "listening": false,
+          "listener_process": null
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": null,
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/onlook.bjk.ai",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "onlook.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8026",
+          "port": 8026,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3068942,fd=8 [container: filegator-filegator-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/onlook.bjk.ai.retired-20260626T095742Z",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "onlook.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8026",
+          "port": 8026,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3068942,fd=8 [container: filegator-filegator-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/openclaw.bak-pre-acl",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "192.168.1.164"
+      ],
+      "listens": [
+        "443 ssl",
+        "80"
+      ],
+      "ssl_cert": "/etc/nginx/ssl/openclaw.crt",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:18789",
+          "port": 18789,
+          "listening": true,
+          "listener_process": "\"openclaw-gatewa\",pid=2135708,fd=33 | \"openclaw-gatewa\",pid=2135708,fd=34"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": null,
+      "notes": [
+        "non-standard cert: /etc/nginx/ssl/openclaw.crt"
+      ]
+    },
+    {
+      "file": "/etc/nginx/sites-available/openclaw.bjk.ai.bak-20260623T162449Z",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "openclaw.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:18789",
+          "port": 18789,
+          "listening": true,
+          "listener_process": "\"openclaw-gatewa\",pid=2135708,fd=33 | \"openclaw-gatewa\",pid=2135708,fd=34"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": null,
+      "notes": [],
+      "allow_deny": {
+        "allow": [
+          "127.0.0.1",
+          "::1",
+          "72.80.59.32",
+          "174.197.134.251",
+          "192.168.1.0/24"
+        ],
+        "deny": [
+          "all"
+        ]
+      }
+    },
+    {
+      "file": "/etc/nginx/sites-available/poco.bjk.ai",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "poco.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8202",
+          "port": 8202,
+          "listening": false,
+          "listener_process": null
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": [],
+      "allow_deny": {
+        "allow": [
+          "127.0.0.1",
+          "::1",
+          "72.80.59.32",
+          "192.168.1.0/24"
+        ],
+        "deny": [
+          "all"
+        ]
+      }
+    },
+    {
+      "file": "/etc/nginx/sites-available/poco.bjk.ai.bak-pre-acl",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "poco.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8202",
+          "port": 8202,
+          "listening": false,
+          "listener_process": null
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/projectsend.bjk.ai",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "projectsend.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8026",
+          "port": 8026,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3068942,fd=8 [container: filegator-filegator-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/projectsend.bjk.ai.retired-20260626T095742Z",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "projectsend.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8026",
+          "port": 8026,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3068942,fd=8 [container: filegator-filegator-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/rowboat.bjk.ai.bak-1780710630",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "rowboat.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8038",
+          "port": 8038,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3080373,fd=8 [container: rowboat-rowboat-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/rshare.bak",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "rshare.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8001",
+          "port": 8001,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3072499,fd=8 [container: it-tools-it-tools-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/shows.bjk.ai.bak.20260626",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "shows.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8052",
+          "port": 8052,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3078104,fd=8 [container: pilotdeck-pilotdeck-1]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/supabase-onlook.bjk.ai",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "supabase-onlook.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:54321",
+          "port": 54321,
+          "listening": false,
+          "listener_process": null
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/supabase-onlook.bjk.ai.retired-20260623T230337Z",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "supabase-onlook.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:54321",
+          "port": 54321,
+          "listening": false,
+          "listener_process": null
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/uld.bjk.ai.conf",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "uld.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl http2"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "~ ^/(api|uploads|zips)(/|$)",
+          "proxy_pass": "http://127.0.0.1:8042",
+          "port": 8042,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3067455,fd=8 [container: catsup-catsup-1]"
+        },
+        {
+          "location": "/files/",
+          "proxy_pass": "http://127.0.0.1:8042",
+          "port": 8042,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3067455,fd=8 [container: catsup-catsup-1]"
+        },
+        {
+          "location": "~ ^/(?!_next|api|uploads|zips|files|favicon\\.ico|robots\\.txt|sitemap\\.xml|static)(.+)$",
+          "proxy_pass": "http://127.0.0.1:8042",
+          "port": 8042,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3067455,fd=8 [container: catsup-catsup-1]"
+        },
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8041",
+          "port": 8041,
+          "listening": true,
+          "listener_process": "\"uvicorn\",pid=2007208,fd=14"
+        }
+      ],
+      "websocket": false,
+      "client_max_body_size": "1g",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/urlshortener",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:5007",
+          "port": 5007,
+          "listening": false,
+          "listener_process": null
+        }
+      ],
+      "websocket": false,
+      "client_max_body_size": null,
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/urlshortener-dashboard.conf",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "bjk.ai"
+      ],
+      "listens": [
+        "3001"
+      ],
+      "ssl_cert": null,
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:5008",
+          "port": 5008,
+          "listening": false,
+          "listener_process": null
+        }
+      ],
+      "websocket": false,
+      "client_max_body_size": null,
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/vshare.bjk.ai.conf.bak",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "vshare.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl http2"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8200",
+          "port": 8200,
+          "listening": true,
+          "listener_process": "\"vshare\",pid=1718,fd=9"
+        }
+      ],
+      "websocket": false,
+      "client_max_body_size": "10G",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/zettelgarden.bjk.ai.bak.20260623-191016",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "zettelgarden.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl http2"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:9321",
+          "port": 9321,
+          "listening": false,
+          "listener_process": null
+        },
+        {
+          "location": "/api",
+          "proxy_pass": "http://127.0.0.1:8080",
+          "port": 8080,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=1583144,fd=8 [container: lastboard]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "50m",
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/sites-available/zublo.bjk.ai.conf",
+      "enabled": false,
+      "symlink_target": null,
+      "server_names": [
+        "zublo.bjk.ai"
+      ],
+      "listens": [
+        "80",
+        "443 ssl"
+      ],
+      "ssl_cert": "/etc/letsencrypt/live/bjk.ai/fullchain.pem",
+      "upstreams": [
+        {
+          "location": "/",
+          "proxy_pass": "http://127.0.0.1:8012",
+          "port": 8012,
+          "listening": true,
+          "listener_process": "\"docker-proxy\",pid=3071364,fd=8 [container: zublo]"
+        }
+      ],
+      "websocket": true,
+      "client_max_body_size": "500M",
+      "notes": []
+    }
+  ],
+  "confd": [
+    {
+      "file": "/etc/nginx/conf.d/bjk_dashboard_auth.conf",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [],
+      "listens": [],
+      "ssl_cert": null,
+      "upstreams": [],
+      "websocket": false,
+      "client_max_body_size": null,
+      "notes": []
+    },
+    {
+      "file": "/etc/nginx/conf.d/connection_upgrade.conf",
+      "enabled": true,
+      "symlink_target": null,
+      "server_names": [],
+      "listens": [],
+      "ssl_cert": null,
+      "upstreams": [],
+      "websocket": false,
+      "client_max_body_size": null,
+      "notes": []
+    }
+  ],
+  "orphans": {
+    "available_only": [
+      "Cap.bjk.ai",
+      "Cap.bjk.ai.bak-20260224-0239",
+      "Cap.bjk.ai.retired-20260623T231540Z",
+      "affine.bjk.ai.bak.8042",
+      "appwrite.bjk.ai",
+      "appwrite.bjk.ai.retired-20260626T101300Z",
+      "atlantis.bjk.ai.bak.20260626-060723",
+      "automaker.bjk.ai",
+      "b64pdf2.bjk.ai.bak.2026-05-20-090424",
+      "boxbox.bjk.ai.bak.8026",
+      "boxy2.bjk.ai.conf.stale-20260702",
+      "boxy3.bjk.ai.stale-20260702",
+      "cap2.bjk.ai",
+      "cap2.bjk.ai.retired-20260626T095742Z",
+      "cap3.bjk.ai",
+      "cap4.bjk.ai.bak-20260619-uploadlimit",
+      "cap4.bjk.ai.bak-20260703-031658-hsts",
+      "cap5.bjk.ai",
+      "cap_v2.bjk.ai.conf",
+      "casaos.bjk.ai",
+      "cockpit.bjk.ai.conf",
+      "community-skeleton.bjk.ai.bak.20260626-061021",
+      "dashy.bjk.ai.bak.1782467955",
+      "default",
+      "docmost.conf",
+      "drawio.bjk.ai.bak",
+      "ever-teams.bjk.ai",
+      "evershop.bjk.ai",
+      "excalidraw.bak",
+      "filebrowser.bjk.ai.bak.20260626055925",
+      "filerise.bjk.ai.bak.20260623191004",
+      "focalboard.bjk.ai.bak",
+      "forgeai.bjk.ai",
+      "forgeai.bjk.ai.retired-20260623T230337Z",
+      "gaia.bjk.ai",
+      "gaia.bjk.ai.retired-20260626T095742Z",
+      "homepage.bjk.ai",
+      "huly.bjk.ai",
+      "huly.bjk.ai.retired-20260626T095742Z",
+      "jellyfin.bjk.ai.bak.20260626060105",
+      "jsoncrack.bjk.ai.bak.20260626060059",
+      "kanbu.bjk.ai.bak.20260626-061022",
+      "karakeep.bjk.ai.bak.20260626060939",
+      "kittyclaw.bjk.ai",
+      "liam.bjk.ai",
+      "liam.bjk.ai.retired-20260623T231540Z",
+      "neoclaw.bjk.ai",
+      "neoclaw.bjk.ai.bak-pre-trusted-proxy",
+      "neoclaw.bjk.ai.bak.20260318-065154",
+      "neoclaw.bjk.ai.retired-20260623T231540Z",
+      "nginx-ui.bjk.ai",
+      "onlook.bjk.ai",
+      "onlook.bjk.ai.retired-20260626T095742Z",
+      "openclaw.bak-pre-acl",
+      "openclaw.bjk.ai.bak-20260623T162449Z",
+      "poco.bjk.ai",
+      "poco.bjk.ai.bak-pre-acl",
+      "projectsend.bjk.ai",
+      "projectsend.bjk.ai.retired-20260626T095742Z",
+      "rowboat.bjk.ai.bak-1780710630",
+      "rshare.bak",
+      "shows.bjk.ai.bak.20260626",
+      "supabase-onlook.bjk.ai",
+      "supabase-onlook.bjk.ai.retired-20260623T230337Z",
+      "uld.bjk.ai.conf",
+      "urlshortener",
+      "urlshortener-dashboard.conf",
+      "vshare.bjk.ai.conf.bak",
+      "zettelgarden.bjk.ai.bak.20260623-191016",
+      "zublo.bjk.ai.conf"
+    ],
+    "enabled_issues": [
+      {
+        "enabled": "17tube.bjk.ai",
+        "target": null,
+        "reason": "regular file (not symlink); sites-available counterpart exists and is DIFFERENT"
+      },
+      {
+        "enabled": "2FAuth.bjk.ai",
+        "target": null,
+        "reason": "regular file (not symlink); sites-available counterpart exists and is DIFFERENT"
+      },
+      {
+        "enabled": "AionUi.bjk.ai",
+        "target": null,
+        "reason": "regular file (not symlink); sites-available counterpart exists and is DIFFERENT"
+      },
+      {
+        "enabled": "aidocs.bjk.ai",
+        "target": null,
+        "reason": "regular file (not symlink); sites-available counterpart exists and is DIFFERENT"
+      },
+      {
+        "enabled": "anchor.bjk.ai",
+        "target": null,
+        "reason": "regular file (not symlink); sites-available counterpart exists and is DIFFERENT"
+      },
+      {
+        "enabled": "astv.bjk.ai.conf",
+        "target": null,
+        "reason": "regular file (not symlink); sites-available counterpart exists and is DIFFERENT"
+      },
+      {
+        "enabled": "atv.bjk.ai.conf",
+        "target": null,
+        "reason": "regular file (not symlink); no sites-available counterpart"
+      },
+      {
+        "enabled": "bdl.bjk.ai",
+        "target": null,
+        "reason": "regular file (not symlink); no sites-available counterpart"
+      },
+      {
+        "enabled": "boxy.bjk.ai",
+        "target": null,
+        "reason": "regular file (not symlink); sites-available counterpart exists and is DIFFERENT"
+      },
+      {
+        "enabled": "chevereto.bjk.ai",
+        "target": null,
+        "reason": "regular file (not symlink); sites-available counterpart exists and is DIFFERENT"
+      },
+      {
+        "enabled": "claudeclaw.bjk.ai",
+        "target": null,
+        "reason": "regular file (not symlink); sites-available counterpart exists and is DIFFERENT"
+      },
+      {
+        "enabled": "cockpit.bjk.ai",
+        "target": null,
+        "reason": "regular file (not symlink); sites-available counterpart exists and is DIFFERENT"
+      },
+      {
+        "enabled": "dockhand.bjk.ai",
+        "target": null,
+        "reason": "regular file (not symlink); sites-available counterpart exists and is DIFFERENT"
+      },
+      {
+        "enabled": "docmost.bjk.ai.conf",
+        "target": null,
+        "reason": "regular file (not symlink); sites-available counterpart exists and is DIFFERENT"
+      },
+      {
+        "enabled": "fileshare.bjk.ai.conf",
+        "target": null,
+        "reason": "regular file (not symlink); sites-available counterpart exists and is DIFFERENT"
+      },
+      {
+        "enabled": "fileshare2.bjk.ai.conf",
+        "target": null,
+        "reason": "regular file (not symlink); no sites-available counterpart"
+      },
+      {
+        "enabled": "flix.bjk.ai",
+        "target": null,
+        "reason": "regular file (not symlink); sites-available counterpart exists and is DIFFERENT"
+      },
+      {
+        "enabled": "fs2.bjk.ai.conf",
+        "target": null,
+        "reason": "regular file (not symlink); no sites-available counterpart"
+      },
+      {
+        "enabled": "glmflix.bjk.ai",
+        "target": null,
+        "reason": "regular file (not symlink); sites-available counterpart exists and is DIFFERENT"
+      },
+      {
+        "enabled": "hls.bjk.ai",
+        "target": null,
+        "reason": "regular file (not symlink); no sites-available counterpart"
+      },
+      {
+        "enabled": "htmls.bjk.ai",
+        "target": null,
+        "reason": "regular file (not symlink); sites-available counterpart exists and is DIFFERENT"
+      },
+      {
+        "enabled": "img.bjk.ai.conf",
+        "target": null,
+        "reason": "regular file (not symlink); no sites-available counterpart"
+      },
+      {
+        "enabled": "img2.bjk.ai.conf",
+        "target": null,
+        "reason": "regular file (not symlink); no sites-available counterpart"
+      },
+      {
+        "enabled": "immich.bjk.ai",
+        "target": null,
+        "reason": "regular file (not symlink); sites-available counterpart exists and is DIFFERENT"
+      },
+      {
+        "enabled": "jsonp.bjk.ai.conf",
+        "target": null,
+        "reason": "regular file (not symlink); sites-available counterpart exists and is DIFFERENT"
+      },
+      {
+        "enabled": "linkwarden.bjk.ai",
+        "target": null,
+        "reason": "regular file (not symlink); sites-available counterpart exists and is DIFFERENT"
+      },
+      {
+        "enabled": "metabase.bjk.ai",
+        "target": null,
+        "reason": "regular file (not symlink); sites-available counterpart exists and is DIFFERENT"
+      },
+      {
+        "enabled": "mtxt.bjk.ai.conf",
+        "target": null,
+        "reason": "regular file (not symlink); sites-available counterpart exists and is DIFFERENT"
+      },
+      {
+        "enabled": "n50.bjk.ai",
+        "target": null,
+        "reason": "regular file (not symlink); no sites-available counterpart"
+      },
+      {
+        "enabled": "n8n.bjk.ai",
+        "target": null,
+        "reason": "regular file (not symlink); sites-available counterpart exists and is DIFFERENT"
+      },
+      {
+        "enabled": "netdata.bjk.ai",
+        "target": null,
+        "reason": "regular file (not symlink); sites-available counterpart exists and is DIFFERENT"
+      },
+      {
+        "enabled": "next-auth.bjk.ai",
+        "target": null,
+        "reason": "regular file (not symlink); sites-available counterpart exists and is DIFFERENT"
+      },
+      {
+        "enabled": "notecapai.bjk.ai",
+        "target": null,
+        "reason": "regular file (not symlink); no sites-available counterpart"
+      },
+      {
+        "enabled": "papra.bjk.ai",
+        "target": null,
+        "reason": "regular file (not symlink); sites-available counterpart exists and is DIFFERENT"
+      },
+      {
+        "enabled": "portainer.bjk.ai.conf",
+        "target": null,
+        "reason": "regular file (not symlink); sites-available counterpart exists and is DIFFERENT"
+      },
+      {
+        "enabled": "ppv.bjk.ai",
+        "target": null,
+        "reason": "regular file (not symlink); sites-available counterpart exists and is DIFFERENT"
+      },
+      {
+        "enabled": "sema.bjk.ai",
+        "target": null,
+        "reason": "regular file (not symlink); no sites-available counterpart"
+      },
+      {
+        "enabled": "semalist.bjk.ai",
+        "target": null,
+        "reason": "regular file (not symlink); sites-available counterpart exists and is DIFFERENT"
+      },
+      {
+        "enabled": "semashop.bjk.ai",
+        "target": null,
+        "reason": "regular file (not symlink); sites-available counterpart exists and is DIFFERENT"
+      },
+      {
+        "enabled": "simple-doc.bjk.ai",
+        "target": null,
+        "reason": "regular file (not symlink); sites-available counterpart exists and is identical"
+      },
+      {
+        "enabled": "stv.bjk.ai.conf",
+        "target": null,
+        "reason": "regular file (not symlink); no sites-available counterpart"
+      },
+      {
+        "enabled": "tbl.bjk.ai.conf",
+        "target": null,
+        "reason": "regular file (not symlink); no sites-available counterpart"
+      },
+      {
+        "enabled": "trflix.bjk.ai",
+        "target": null,
+        "reason": "regular file (not symlink); sites-available counterpart exists and is DIFFERENT"
+      },
+      {
+        "enabled": "txt.bjk.ai.conf",
+        "target": null,
+        "reason": "regular file (not symlink); no sites-available counterpart"
+      },
+      {
+        "enabled": "vnce.bjk.ai",
+        "target": null,
+        "reason": "regular file (not symlink); sites-available counterpart exists and is DIFFERENT"
+      },
+      {
+        "enabled": "vshare.bjk.ai.conf",
+        "target": null,
+        "reason": "regular file (not symlink); sites-available counterpart exists and is DIFFERENT"
+      },
+      {
+        "enabled": "wallos.bjk.ai",
+        "target": null,
+        "reason": "regular file (not symlink); sites-available counterpart exists and is DIFFERENT"
+      },
+      {
+        "enabled": "xtr.bjk.ai",
+        "target": null,
+        "reason": "regular file (not symlink); sites-available counterpart exists and is DIFFERENT"
+      },
+      {
+        "enabled": "xtrdash.bjk.ai",
+        "target": null,
+        "reason": "regular file (not symlink); sites-available counterpart exists and is DIFFERENT"
+      },
+      {
+        "enabled": "zettelgarden.bjk.ai",
+        "target": null,
+        "reason": "regular file (not symlink); sites-available counterpart exists and is DIFFERENT"
+      }
+    ]
+  },
+  "dead_upstreams": [
+    {
+      "file": "/etc/nginx/sites-enabled/dockhand.bjk.ai",
+      "server_names": [
+        "dockhand.bjk.ai"
+      ],
+      "location": "/",
+      "proxy_pass": "http://127.0.0.1:9230",
+      "port": 9230
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/fizzy.bjk.ai",
+      "server_names": [
+        "fizzy.bjk.ai"
+      ],
+      "location": "/",
+      "proxy_pass": "http://127.0.0.1:8077",
+      "port": 8077
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/manynotes.bjk.ai",
+      "server_names": [
+        "manynotes.bjk.ai"
+      ],
+      "location": "/",
+      "proxy_pass": "http://127.0.0.1:8084",
+      "port": 8084
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/metabase.bjk.ai",
+      "server_names": [
+        "metabase.bjk.ai"
+      ],
+      "location": "/",
+      "proxy_pass": "http://127.0.0.1:3001",
+      "port": 3001
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/netdata.bjk.ai",
+      "server_names": [
+        "netdata.bjk.ai"
+      ],
+      "location": "/",
+      "proxy_pass": "http://127.0.0.1:19999",
+      "port": 19999
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/notecapai.bjk.ai",
+      "server_names": [
+        "notecapai.bjk.ai"
+      ],
+      "location": "/",
+      "proxy_pass": "http://127.0.0.1:9101",
+      "port": 9101
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/shows.bjk.ai",
+      "server_names": [
+        "shows.bjk.ai"
+      ],
+      "location": "/",
+      "proxy_pass": "http://127.0.0.1:8335",
+      "port": 8335
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/stv.bjk.ai.conf",
+      "server_names": [
+        "stv.bjk.ai"
+      ],
+      "location": "/",
+      "proxy_pass": "http://127.0.0.1:8082",
+      "port": 8082
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/stv.bjk.ai.conf",
+      "server_names": [
+        "stv.bjk.ai"
+      ],
+      "location": "/ws",
+      "proxy_pass": "http://127.0.0.1:8766",
+      "port": 8766
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/trflix.bjk.ai",
+      "server_names": [
+        "trflix.bjk.ai"
+      ],
+      "location": "/api/proxy",
+      "proxy_pass": "http://127.0.0.1:8048",
+      "port": 8048
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/trflix.bjk.ai",
+      "server_names": [
+        "trflix.bjk.ai"
+      ],
+      "location": "/files/",
+      "proxy_pass": "http://127.0.0.1:8048",
+      "port": 8048
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/trflix.bjk.ai",
+      "server_names": [
+        "trflix.bjk.ai"
+      ],
+      "location": "/",
+      "proxy_pass": "http://127.0.0.1:8048",
+      "port": 8048
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/twenty.bjk.ai",
+      "server_names": [
+        "twenty.bjk.ai"
+      ],
+      "location": "/",
+      "proxy_pass": "http://127.0.0.1:8036",
+      "port": 8036
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/viniplay.bjk.ai",
+      "server_names": [
+        "viniplay.bjk.ai"
+      ],
+      "location": "/",
+      "proxy_pass": "http://127.0.0.1:8998",
+      "port": 8998
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/zabbix.bjk.ai",
+      "server_names": [
+        "zabbix.bjk.ai"
+      ],
+      "location": "/",
+      "proxy_pass": "http://127.0.0.1:8300",
+      "port": 8300
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/zettelgarden.bjk.ai",
+      "server_names": [
+        "zettelgarden.bjk.ai"
+      ],
+      "location": "/",
+      "proxy_pass": "http://127.0.0.1:9321",
+      "port": 9321
+    },
+    {
+      "file": "/etc/nginx/sites-enabled/zettelgarden.bjk.ai",
+      "server_names": [
+        "zettelgarden.bjk.ai"
+      ],
+      "location": "/api",
+      "proxy_pass": "http://127.0.0.1:8322",
+      "port": 8322
+    }
+  ],
+  "duplicate_server_names": {},
+  "shared_upstream_ports": {
+    "8124": [
+      "2FAuth.bjk.ai",
+      "2fa.bjk.ai"
+    ],
+    "8086": [
+      "api.boxy.bjk.ai",
+      "boxy.bjk.ai"
+    ],
+    "8045": [
+      "64pdf.bjk.ai",
+      "b64pdf.bjk.ai"
+    ],
+    "8029": [
+      "b64pdf2.bjk.ai",
+      "pdf64.bjk.ai"
+    ],
+    "8055": [
+      "baserow.bjk.ai",
+      "n50.bjk.ai",
+      "ppv.bjk.ai"
+    ],
+    "7127": [
+      "fileshare2.bjk.ai",
+      "fs2.bjk.ai"
+    ],
+    "18789": [
+      "192.168.1.164",
+      "openclaw.bjk.ai"
+    ],
+    "8022": [
+      "wbd.bjk.ai",
+      "willbedone.bjk.ai"
+    ]
+  }
+}

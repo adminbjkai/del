@@ -1,0 +1,8 @@
+port = 8075
+db_path = "/apps/del/database/del.db"
+manifests_dir = "/apps/del/manifests"
+backups_dir = "/apps/del/backups"
+logs_dir = "/apps/del/logs"
+scan_roots = ["/apps", "/data/apps", "/opt", "/srv", "/var/www"]
+helper_socket = "/run/del/helper.sock"
+protected_apps = ["del"]

@@ -1,0 +1,37 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{% block title %}DEL{% endblock %} · DEL</title>
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <div class="layout">
+    <nav class="sidebar">
+      <div class="brand">DEL</div>
+      <button type="button" id="nav-toggle" class="btn btn-sm nav-toggle" aria-label="Toggle navigation">☰</button>
+      {% set path = request.url.path %}
+      <ul class="nav-links">
+        <li><a href="/"{% if path == '/' %} class="active"{% endif %}>Dashboard</a></li>
+        <li><a href="/apps"{% if path.startswith('/apps') %} class="active"{% endif %}>Applications</a></li>
+        <li><a href="/resources/container"{% if path.startswith('/resources') %} class="active"{% endif %}>Resources</a></li>
+        <li><a href="/orphans"{% if path.startswith('/orphans') %} class="active"{% endif %}>Orphans</a></li>
+        <li><a href="/jobs"{% if path.startswith('/jobs') %} class="active"{% endif %}>Jobs</a></li>
+        <li><a href="/docs" target="_blank" rel="noopener">Docs</a></li>
+        <li><a href="/settings"{% if path.startswith('/settings') %} class="active"{% endif %}>Settings</a></li>
+      </ul>
+      <form method="post" action="/logout" class="logout-form">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="link-button">Log out</button>
+      </form>
+    </nav>
+    <main class="content">
+      {% if flash %}<div class="flash flash-ok" data-autodismiss>{{ flash }}</div>{% endif %}
+      {% if error %}<div class="flash flash-error" data-autodismiss>{{ error }}</div>{% endif %}
+      {% block content %}{% endblock %}
+    </main>
+  </div>
+  <script src="/static/app.js"></script>
+</body>
+</html>

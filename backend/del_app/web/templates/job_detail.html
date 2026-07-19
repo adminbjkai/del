@@ -1,0 +1,47 @@
+{% extends "base.html" %}
+{% block title %}Job #{{ job.get('id') }}{% endblock %}
+{% block content %}
+<h1>Job #{{ job.get('id') }}</h1>
+<p class="muted">
+  {% if job.get('app_slug') %}app: <a href="/apps/{{ job.get('app_slug') }}">{{ job.get('app_name') or job.get('app_slug') }}</a> · {% endif %}
+  plan: <a href="/plans/{{ job.get('plan_id') }}">#{{ job.get('plan_id') }}</a> ·
+  mode: <span class="badge {{ 'badge-danger' if job.get('mode') == 'live' else 'badge-grey' }}">{{ 'LIVE' if job.get('mode') == 'live' else 'dry-run' }}</span> ·
+  status: <span class="badge status-{{ job.get('status') }}" id="job-status">{{ job.get('status') }}</span>
+</p>
+
+<label style="display:inline-flex;gap:.4rem;align-items:center;margin-bottom:.75rem;">
+  <input type="checkbox" id="autoscroll-toggle" checked> Auto-scroll output
+</label>
+
+<div id="job-output" data-job-id="{{ job.get('id') }}">
+{% for stage in stages %}
+<section class="panel">
+  <h2>{{ stage.stage }} <span class="count-pill">{{ stage.steps | length }}</span></h2>
+  <table class="table job-steps">
+    <thead><tr><th>#</th><th>Operation</th><th>State</th><th>Exit</th><th>Duration</th><th>Output</th></tr></thead>
+    <tbody>
+      {% for s in stage.steps %}
+      <tr data-step-seq="{{ s.get('seq') }}">
+        <td>{{ s.get('seq') }}</td>
+        <td class="mono">{{ s.get('operation') }}</td>
+        <td class="step-state"><span class="badge status-{{ s.get('state') }}">{{ s.get('state') }}</span></td>
+        <td>{{ s.get('exit_code') if s.get('exit_code') is not none else '—' }}</td>
+        <td>{{ s.get('duration') }}</td>
+        <td>
+          {% if s.get('output_sanitized') %}
+          <details><summary>output</summary><pre class="output">{{ s.get('output_sanitized') }}</pre></details>
+          {% else %}—{% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% else %}
+<table class="table" id="job-steps" data-job-id="{{ job.get('id') }}">
+  <thead><tr><th>#</th><th>Stage</th><th>Operation</th><th>State</th></tr></thead>
+  <tbody><tr><td colspan="4" class="muted">No steps recorded yet.</td></tr></tbody>
+</table>
+{% endfor %}
+</div>
+{% endblock %}

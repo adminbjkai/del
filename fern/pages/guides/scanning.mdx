@@ -1,0 +1,65 @@
+---
+title: Scanning Your Server
+subtitle: Building and refreshing your application inventory
+slug: guides/scanning
+---
+
+A **scan** is how DEL learns what is on the host. It re-runs every discovery source
+(Docker, Compose, Nginx, systemd, processes, cron, and the filesystem),
+re-correlates the results into applications, and writes a fresh inventory. Run one
+right after logging in for the first time, and any time the host has changed.
+
+<Callout intent="info">
+  Scanning is **completely read-only**. It never starts, stops, or modifies anything
+  on the host — it only inspects. The only thing DEL ever mutates is the target of an
+  approved, executed removal job.
+</Callout>
+
+## Running a scan
+
+<Tabs>
+  <Tab title="From the UI">
+    Click **Run scan now** on the **Dashboard** (or on the **Settings** page). A new
+    row appears in *Recent scans*; when its status flips to `done`, the inventory is
+    up to date. Both buttons issue an authenticated, CSRF-protected `POST /scan`.
+  </Tab>
+  <Tab title="From the CLI">
+    ```bash
+    /apps/del/scripts/del-admin rescan
+    ```
+    Useful for cron or scripted refreshes. It calls the same `run_scan()` the UI
+    button does.
+  </Tab>
+</Tabs>
+
+## What a scan collects
+
+| Source | Collects |
+|---|---|
+| Docker | containers, images, volumes, networks |
+| Compose | compose projects (from files under the scan roots) |
+| Nginx | sites in `sites-enabled` / `sites-available`, their server names and upstream ports |
+| systemd | units and timers, their exec/target and working directory |
+| Processes | listening ports, processes, tmux sessions |
+| Cron | `/etc/cron.d` files and user crontabs |
+| Filesystem | project directories, git repos, `.env` files (variable **names** only) |
+
+The default scan roots are `/apps`, `/data/apps`, `/opt`, `/srv`, and `/var/www`
+(see the **Settings** page). Environment variable *values* are stripped at the
+collection layer and never stored — only variable names are recorded.
+
+## After a scan
+
+Each scan produces a dated row you can see under *Recent scans* on both the
+Dashboard and Settings pages. Once it finishes, head to
+[Browsing the Inventory](/guides/browsing) to explore what DEL found, or straight to
+[Removing an Application](/guides/removing-an-application) if you already know what
+you want gone.
+
+<Callout intent="warning">
+  DEL always works from the **latest** scan. If the host changed since you last
+  scanned (you started or stopped a container, edited an nginx site, and so on), run
+  a fresh scan before building a removal plan so the plan reflects reality. The
+  removal job re-checks live state at execution time regardless, but an up-to-date
+  scan makes the preview accurate.
+</Callout>

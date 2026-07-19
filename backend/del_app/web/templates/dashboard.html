@@ -1,0 +1,52 @@
+{% extends "base.html" %}
+{% block title %}Dashboard{% endblock %}
+{% block content %}
+<h1>Dashboard</h1>
+<div class="stat-grid">
+  <a class="stat-card" href="/apps"><div class="stat-value">{{ stats.get('apps', 0) }}</div><div class="stat-label">Applications</div></a>
+  <a class="stat-card" href="/jobs"><div class="stat-value">{{ stats.get('running', 0) }}</div><div class="stat-label">Running jobs</div></a>
+  <a class="stat-card" href="/orphans"><div class="stat-value">{{ stats.get('orphan_candidates', 0) }}</div><div class="stat-label">Orphan candidates</div></a>
+  <a class="stat-card" href="/resources/volume?filter=shared"><div class="stat-value">{{ stats.get('shared_resources', 0) }}</div><div class="stat-label">Shared resources</div></a>
+  <a class="stat-card" href="/apps"><div class="stat-value">{{ stats.get('uncertain_mappings', 0) }}</div><div class="stat-label">Uncertain mappings</div></a>
+  <a class="stat-card" href="/resources/directory"><div class="stat-value">{{ human_size(stats.get('disk_usage_bytes', 0)) }}</div><div class="stat-label">Disk usage</div></a>
+  <a class="stat-card" href="/resources/image?filter=dangling"><div class="stat-value">{{ human_size(stats.get('reclaimable_bytes', 0)) }}</div><div class="stat-label">Reclaimable</div></a>
+</div>
+
+<section class="panel">
+  <h2>Recent scans</h2>
+  <table class="table" data-enhanced data-empty="No scans yet." data-page-size="25">
+    <thead><tr><th>ID</th><th>Started</th><th>Finished</th><th data-filter="status">Status</th></tr></thead>
+    <tbody>
+      {% for s in recent_scans %}
+      <tr>
+        <td>{{ s.get('id') }}</td>
+        <td>{{ s.get('started') }}</td>
+        <td>{{ s.get('finished') or '—' }}</td>
+        <td data-filter-value="{{ s.get('status') }}"><span class="badge status-{{ s.get('status') }}">{{ s.get('status') }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  <form method="post" action="/scan" style="margin-top:.75rem;">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit" class="btn btn-primary">Run scan now</button>
+  </form>
+</section>
+
+<section class="panel">
+  <h2>Recent jobs</h2>
+  <table class="table" data-enhanced data-empty="No jobs yet." data-page-size="25">
+    <thead><tr><th>ID</th><th data-filter="mode">Mode</th><th data-filter="status">Status</th><th>Started</th></tr></thead>
+    <tbody>
+      {% for j in recent_jobs %}
+      <tr>
+        <td><a href="/jobs/{{ j.get('id') }}">{{ j.get('id') }}</a></td>
+        <td data-filter-value="{{ j.get('mode') }}"><span class="badge {{ 'badge-danger' if j.get('mode') == 'live' else 'badge-grey' }}">{{ 'LIVE' if j.get('mode') == 'live' else 'dry-run' }}</span></td>
+        <td data-filter-value="{{ j.get('status') }}"><span class="badge status-{{ j.get('status') }}">{{ j.get('status') }}</span></td>
+        <td>{{ j.get('started') or '—' }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endblock %}

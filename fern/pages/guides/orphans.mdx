@@ -1,0 +1,73 @@
+---
+title: Orphan Review
+subtitle: Finding and reasoning about unattributed resources
+slug: guides/orphans
+---
+
+An **orphan candidate** is a resource that showed up in the latest scan but which DEL
+**could not associate with any application**. The **Orphans** page collects them,
+grouped by resource type.
+
+<Frame caption="The Orphans page: unattributed resources grouped by type, review-only.">
+  <img src="../../assets/12-orphans.png" alt="Orphans page" />
+</Frame>
+
+<Callout intent="info">
+  The Orphans page is **review-only**. DEL offers no destructive actions here — it is
+  a place to investigate, not to delete.
+</Callout>
+
+## How to reason about an orphan
+
+An orphan is not automatically junk. Before acting on one, work out which it is:
+
+- **Genuinely abandoned** — a leftover volume from an app you already removed, a
+  dangling image, a stopped container with no owner. These are usually safe to clean
+  up.
+- **Shared infrastructure** — a network, volume, or directory used by several things
+  that DEL couldn't confidently attribute to one app. Removing it could break
+  something.
+- **Simply un-correlated** — a resource DEL failed to link because of a naming or
+  path mismatch. The fix is to add a [manifest](/reference/architecture) entry so the
+  next scan attributes it correctly, rather than treating it as an orphan.
+
+The dashboard's **Orphan candidates** stat card links straight here, and each group
+heading links to that type's tab in [Resources](/guides/browsing) for the full
+per-type detail (mountpoints, sizes, containers using a volume, and so on).
+
+### Noise reduction
+
+Ports and processes that DEL can trace back to an owning docker container or
+systemd unit (via a cgroup match) are attributed to that container's/unit's
+application automatically and never appear here as orphans — they're owned
+infrastructure, not debris. Only ports/processes DEL genuinely couldn't attribute
+to anything show up on this page.
+
+An unused image is also checked against every discovered compose file: if a
+`docker-compose.yml` still declares an image that no running container currently
+uses, its reason reads *"unused, but referenced by compose project &lt;name&gt;
+(not currently running)"* rather than the generic *"not used by any container"* —
+a hint that starting that compose project would bring it back into use, rather
+than it being pure debris. Nginx sites-available copies that aren't linked into
+sites-enabled (stale/backup files) read *"config file not enabled (stale
+copy/backup)"*; enabled sites DEL still couldn't attribute to any app read
+*"enabled site not attributed to any app"*.
+
+## Acting on an orphan
+
+Because there are no delete buttons on this page, you act on orphans one of two ways:
+
+1. **Attribute it, then remove via its app** — add or correct a
+   [manifest](/reference/architecture) so the resource is associated with the right
+   application, rescan, and remove it as part of that app through the normal
+   [removal flow](/guides/removing-an-application).
+2. **Clean it up outside DEL** — for a truly standalone leftover (e.g. a dangling
+   image or an unused volume with no app), remove it directly with the appropriate
+   host command. DEL's discipline of "never delete what you can't attribute" is why
+   this is left to you deliberately.
+
+<Callout intent="warning">
+  Investigate before you act. A volume with no *containers using* it may still be a
+  periodic-job's data store, and a network with no attachments may be created on
+  demand. When in doubt, back it up first — see [Backups & Restore](/guides/backups).
+</Callout>

@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+database/
+backups/
+logs/
+data/audit/raw-*.txt
+config/secret.key
+config/admin-initial-password.txt
+config/docs-basic-auth-password.txt
+fern/node_modules/
+.pytest_cache/

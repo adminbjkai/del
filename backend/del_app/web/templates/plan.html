@@ -1,0 +1,99 @@
+{% extends "base.html" %}
+{% block title %}Removal plan{% endblock %}
+{% block content %}
+{% if plan %}
+  <h1>Plan #{{ plan.get('id') }} · {{ app.get('name', app.get('slug')) }}</h1>
+  <p class="muted">status: <span class="badge">{{ plan.get('status') }}</span> · created {{ plan.get('created') }}</p>
+
+  {% if plan.get('warnings') %}
+  <div class="box box-warning">
+    <h3>Warnings</h3>
+    <ul>{% for w in plan.get('warnings') %}<li>{{ w }}</li>{% endfor %}</ul>
+  </div>
+  {% endif %}
+
+  <section class="panel">
+    <h2>Steps</h2>
+    {% for stage, steps in plan.get('stages', {}).items() %}
+    <h3>{{ stage }}</h3>
+    <table class="table">
+      <thead><tr><th>#</th><th>Operation</th><th>Description</th><th>Danger</th><th>Reversible</th></tr></thead>
+      <tbody>
+        {% for s in steps %}
+        <tr class="{% if s.get('danger') == 'data_loss' %}row-danger{% elif s.get('danger') == 'warning' %}row-warning{% endif %}">
+          <td>{{ s.get('seq') }}</td>
+          <td>{{ s.get('operation') }}</td>
+          <td>{{ s.get('description') }}</td>
+          <td><span class="badge badge-danger-{{ s.get('danger') }}">{{ s.get('danger') }}</span></td>
+          <td>{{ 'yes' if s.get('reversible') else 'no' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% endfor %}
+  </section>
+
+  {% if plan.get('preserved') %}
+  <div class="box box-info">
+    <h3>Preserved (not removed)</h3>
+    <ul>{% for p in plan.get('preserved') %}<li>{{ p }}</li>{% endfor %}</ul>
+  </div>
+  {% endif %}
+
+  {% if plan.get('manual_followup') %}
+  <div class="box box-info">
+    <h3>Manual follow-up required</h3>
+    <ul>{% for m in plan.get('manual_followup') %}<li>{{ m }}</li>{% endfor %}</ul>
+  </div>
+  {% endif %}
+
+  <p>Estimated reclaim: <strong>{{ plan.get('est_reclaim_bytes', 0) }} bytes</strong></p>
+
+  <section class="panel box-danger">
+    <h2>Execute</h2>
+    <form method="post" action="/plans/{{ plan.get('id') }}/execute" id="execute-form" class="stacked-form">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <label><input type="radio" name="mode" value="dry_run" checked> Dry run</label>
+      <label><input type="radio" name="mode" value="live" id="mode-live"> Live (irreversible steps will run)</label>
+      <div id="live-confirm-box" class="box box-danger" hidden>
+        <p>Type <code>DELETE VOLUMES</code> to confirm permanent volume deletion.</p>
+        <input type="text" name="confirm_phrase" id="confirm-phrase" placeholder="DELETE VOLUMES">
+      </div>
+      <button type="submit" class="btn btn-danger" id="execute-btn">Execute plan</button>
+    </form>
+  </section>
+{% else %}
+  <h1>Build removal plan · {{ app.get('name', app.get('slug')) }}</h1>
+  <form method="post" action="/apps/{{ app.get('slug') }}/plan" class="stacked-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+
+    <label><input type="checkbox" name="remove_named_volumes" id="remove-named-volumes"> Remove named volumes</label>
+    <div class="indent" id="volume-approvals">
+      {% for v in volumes %}
+      <label><input type="checkbox" name="approved_volume" value="{{ v.get('key') }}"> {{ v.get('display') or v.get('key') }}</label>
+      {% else %}
+      <p class="muted">No named volumes discovered for this app.</p>
+      {% endfor %}
+    </div>
+
+    <label for="remove_images">Remove images</label>
+    <select name="remove_images" id="remove_images">
+      <option value="none">None</option>
+      <option value="exclusive">Exclusive to this app</option>
+    </select>
+
+    <label><input type="checkbox" name="remove_bind_data"> Remove bind-mounted data directories</label>
+    <label><input type="checkbox" name="remove_repo"> Remove project repository / directory</label>
+    <label><input type="checkbox" name="remove_networks" checked> Remove app-specific networks</label>
+
+    <label for="backup">Backup mode</label>
+    <select name="backup" id="backup">
+      <option value="none">None</option>
+      <option value="config">Config only</option>
+      <option value="full">Full (config + volumes)</option>
+    </select>
+
+    <button type="submit" class="btn btn-primary">Build plan</button>
+  </form>
+{% endif %}
+{% endblock %}

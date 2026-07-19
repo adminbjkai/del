@@ -1,0 +1,134 @@
+---
+title: Operations
+subtitle: Day-to-day commands for running DEL
+slug: guides/operations
+---
+
+## Start / stop / restart / status
+
+```bash
+# status
+systemctl status del-web.service
+systemctl status del-helper.service
+systemctl status del-docs.service
+
+# restart (e.g. after an update)
+sudo systemctl restart del-helper.service
+sudo systemctl restart del-web.service       # restart helper first; del-web Wants= it
+sudo systemctl restart del-docs.service      # independent of del-web/del-helper
+
+# stop
+sudo systemctl stop del-web.service
+sudo systemctl stop del-helper.service
+sudo systemctl stop del-docs.service
+
+# start
+sudo systemctl start del-helper.service
+sudo systemctl start del-web.service
+sudo systemctl start del-docs.service
+```
+
+All three units are `enable`d, so they come back on boot. `del-web` has
+`Restart=on-failure` (3s backoff); `del-helper` has `Restart=on-failure` (2s
+backoff); `del-docs` has `Restart=on-failure` (10s backoff).
+
+## Logs
+
+```bash
+# systemd journal (primary source for all three units)
+journalctl -u del-web.service -f
+journalctl -u del-helper.service -f
+journalctl -u del-docs.service -f
+journalctl -u del-web.service -u del-helper.service --since "1 hour ago"
+
+# on-disk logs
+ls /apps/del/logs/
+tail -f /apps/del/logs/helper-audit.log     # append-only, every helper request
+```
+
+`del-web` logs its own app-level audit trail to the `audit_log` table (see
+`del_app/auditlog.py`) and to `/apps/del/logs/`. `del-helper` additionally writes an
+independent, append-only `helper-audit.log` line for every request it receives,
+regardless of what `del-web` believes happened — the two logs are meant to be
+cross-checked. Secrets and environment variable values are never written to either
+log (see [Security Model](/reference/security)).
+
+## Update procedure (no git in this deployment)
+
+There is no git checkout to pull; changes are applied by editing files in place
+under `/apps/del/backend/del_app` (or `helper/del_helper.py`, or `config/`).
+
+1. Make the code/config change.
+2. **Run tests before restarting anything:**
+   ```bash
+   cd /apps/del/backend && ../.venv/bin/python -m pytest ../tests/ -q
+   ```
+3. If a migration was added, apply it: `./scripts/del-admin migrate`.
+4. Restart the affected unit(s):
+   ```bash
+   sudo systemctl restart del-helper.service   # if helper/ or helper-policy.json changed
+   sudo systemctl restart del-web.service      # if backend/del_app changed
+   ```
+5. Confirm health: `curl -fsS http://127.0.0.1:8075/healthz`.
+6. If `config/nginx-del.bjk.ai.conf` changed, back it up, copy it over the installed
+   site file, `sudo nginx -t`, then `sudo systemctl reload nginx` (never reload
+   before `nginx -t` passes).
+
+## Updating the documentation site content
+
+Docs content is the `.mdx` pages under `/apps/del/fern/pages/` (and navigation
+in `/apps/del/fern/docs.yml`), rendered by `del-docs.service`
+(`fern-api docs dev --port 8072 --backend-port 8073`).
+
+1. Edit the relevant page(s) under `/apps/del/fern/pages/*.mdx` (or
+   `fern/pages/guides/*.mdx`, `fern/pages/reference/*.mdx`).
+2. **Restart is required to see the change served**: `del-docs`'s dev-server
+   file watcher logs a `[change]` / `Reload completed` line to the journal on
+   every edit, but that reload does not reliably re-render already-served
+   page bodies — verified by editing a page live and finding the new content
+   absent from the served HTML until the unit was restarted. So:
+   ```bash
+   sudo systemctl restart del-docs.service
+   ```
+3. Verify: `curl -sSL http://127.0.0.1:8072/docs/guides/operations | grep -c
+   '<some text you just added>'`, or check `/docs/...` through Nginx with
+   basic auth.
+
+## Rescan (refresh the application inventory)
+
+Either:
+- **UI**: Settings page → Scan (issues `POST /scan`, requires auth + CSRF).
+- **CLI**:
+  ```bash
+  /apps/del/scripts/del-admin rescan
+  ```
+Both call `del_app.scanner.run_scan()`, which re-runs all discovery sources
+(docker, compose, nginx, systemd, proc, cron, fs), re-correlates, and persists a new
+scan row plus refreshed `applications`/`resources`/`associations`. Scanning is
+entirely read-only against the host — it does not stop, start, or modify anything.
+
+## Backup
+
+```bash
+/apps/del/scripts/del-admin backup-db
+```
+Writes a consistent SQLite snapshot (via `sqlite3.Connection.backup`) to
+`/apps/del/backups/del-<UTC-timestamp>.db`. Run this before any manual DB surgery
+and on whatever cadence the host's general backup routine uses — `del.db` is a
+single file, so it fits into existing host backup jobs with no special handling.
+
+Per-removal-job backups (config files, volumes, tarred directories) are taken
+automatically by the job engine during the "backup" stage of every removal and also
+land under `/apps/del/backups/`, tracked in the `backups` table with `sha256`/`size`.
+
+## Restore
+
+See [Recovery](/guides/recovery) for the full DB-restore and nginx-rollback procedures.
+
+## Changing the admin password
+
+```bash
+/apps/del/scripts/del-admin change-password --username admin
+```
+Prompts for and confirms a new password, re-hashed with Argon2id. Use
+`--password-stdin` for non-interactive/scripted password rotation.
