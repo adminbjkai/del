@@ -68,7 +68,13 @@ under `/apps/del/backend/del_app` (or `helper/del_helper.py`, or `config/`).
 5. Confirm health: `curl -fsS http://127.0.0.1:8075/healthz`.
 6. If `config/nginx-del.bjk.ai.conf` changed, back it up, copy it over the installed
    site file, `sudo nginx -t`, then `sudo systemctl reload nginx` (never reload
-   before `nginx -t` passes).
+   before `nginx -t` passes). Edit the `sites-available` copy only and leave the
+   `sites-enabled` entry as a symlink to it — `nginx.conf`'s
+   `include sites-enabled/*;` has no filename filter, so any stray regular file
+   or backup left in `sites-enabled` (not just `.conf` files) is parsed as a
+   vhost on the next reload and can break every site on the box. Put any saved
+   copy outside `sites-enabled` (e.g. `/apps/del/backups/`), never inside it.
+   See `docs/DEPLOYMENT-CONVENTION.md` §6 for the full server-wide convention.
 
 ## Updating the documentation site content
 
@@ -102,6 +108,21 @@ Both call `del_app.scanner.run_scan()`, which re-runs all discovery sources
 (docker, compose, nginx, systemd, proc, cron, fs), re-correlates, and persists a new
 scan row plus refreshed `applications`/`resources`/`associations`. Scanning is
 entirely read-only against the host — it does not stop, start, or modify anything.
+
+## Regenerating the port registry
+
+```bash
+/apps/del/scripts/gen-registry.py     # or scripts/gen-registry.sh
+```
+
+Reads the latest scan out of `del.db` (read-only) and writes
+`docs/PORT-REGISTRY.md` — every enabled subdomain, its host port, correlated
+backend app, and deploy type, plus a **Port CONFLICTS** section (one host port
+claimed by more than one *distinct* app — misconfigured) separate from normal
+**Shared ports (aliases)** (one app, several domains, same port). The output
+file is gitignored and gets stale as soon as anything changes on the server —
+regenerate it after adding/removing/re-porting an app, rather than trusting an
+old copy.
 
 ## Backup
 

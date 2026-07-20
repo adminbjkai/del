@@ -95,6 +95,17 @@ At the top of the page, **Plan removal** starts a
 [removal plan](/guides/removing-an-application) (disabled and greyed out for
 protected apps), and **Edit manifest** lets you correct DEL's correlation by hand.
 
+Below the grouped sections, a **Removal readiness** table lists every
+association for the app in one flat, sortable/filterable list — the same
+Confidence/Risk/Removal columns, but every row also carries a small
+**resource-type** badge (`container`, `directory`, `compose_project`,
+`git_repo`, …) in front of its name. This matters because two entirely
+different resources can share the same display name — e.g. a `compose_project`
+named `cap4` and a plain `directory` also named `cap4` are distinct resources
+DEL might both associate with the app — so the type badge, plus the file path
+shown under any path-like resource, is what tells them apart at a glance
+instead of the row looking like a duplicate.
+
 ### Approving and excluding resources
 
 The **Actions** on each resource row let you override DEL's automatic correlation:

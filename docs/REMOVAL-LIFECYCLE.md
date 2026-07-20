@@ -28,7 +28,11 @@ safety-validation failure halts the job before any downstream deletion runs.**
    containers still attached).
 6. **Remove (host integrations)** — `systemd_disable`/`systemd_rm_unit`,
    `cron_rm`, `nginx_rm_site` (backs up first, runs `nginx -t`, reloads only on
-   pass, restores automatically on failure).
+   pass, restores automatically on failure). Because correlation attaches an
+   app's stale/disabled `sites-available` config copies by exact `server_name`
+   match (docs/DISCOVERY.md), this step removes those alongside the live
+   `sites-enabled` file, so a completed removal leaves no nginx config debris
+   behind.
 7. **Remove (files)** — `path_delete` for project directories/bind data;
    canonicalized (`realpath`) and re-checked against protected roots and the
    specific approved plan on every call.

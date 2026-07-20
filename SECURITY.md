@@ -91,6 +91,26 @@ logged to `helper-audit.log`, the app logs, the `audit_log` table, or job step
 output (`output_sanitized`). Callers of `auditlog.audit()` are responsible for
 pre-sanitizing details before they're recorded.
 
+## Related host hardening (outside DEL itself)
+
+DEL's docs surface a few server-wide security facts that shape how it correlates
+and reports on other apps, even though DEL doesn't own or manage these directly
+— see `docs/DEPLOYMENT-CONVENTION.md` for the full house standard:
+
+- **Cockpit** (the systemd/services web UI for non-Docker apps) is bound to
+  `127.0.0.1:9091` only — not reachable directly from the internet. The sole
+  path in is `https://cockpit.bjk.ai`, an nginx vhost behind HTTP basic auth,
+  the same pattern DEL's own docs site uses for `/docs`.
+- **`nginx sites-enabled` must contain only symlinks** to `sites-available`
+  files — nginx's `include sites-enabled/*;` has no filename filter, so any
+  stray regular file or backup left in `sites-enabled` is parsed as a vhost on
+  the next reload and can take down every site on the box. Config backups
+  belong outside `sites-enabled` (DEL's own `nginx_rm_site`/`file_backup`
+  helper ops already do this correctly, writing to `/apps/del/backups`).
+- **The `isbd` DNS-update script's IONOS API credential** lives in
+  `/etc/isbd.env` (mode `640`, owner `root:bjkai`), sourced by the script at
+  `/usr/local/bin/isbd` — not embedded in the script itself.
+
 ## Threat model
 
 Full attacker/vector/mitigation table: see

@@ -207,10 +207,22 @@ unless approved per-app. Nginx configs with no live upstream to match (the app's
 containers are already stopped) are still attached to the correct app whenever
 the config's `server_name` slugifies to *exactly* the app's slug — this exact-match
 rule (deliberately not fuzzy) catches leftover config debris (`.conf`/`.bak`/
-disabled copies) that port-matching alone would miss. Name similarity alone =
+disabled copies) that port-matching alone would miss, and it **upgrades** a
+weaker port-match claim the app may already hold on that same file rather than
+skipping it, so an app's own stale `sites-available` copy is always
+removal-eligible along with the rest of the app. Name similarity alone =
 possible, never auto-removable. Only confirmed/high/manual associations are
 eligible for removal; probable requires explicit user approval per-resource;
 possible is always blocked until manually confirmed.
+
+Applications aren't only Docker/Compose — a purely systemd-managed service (no
+container at all) is seeded as its own first-class application (`kind
+"systemd"`) whenever one of its custom (non-vendor) unit's
+`WorkingDirectory`/`ExecStart` resolves to a directory directly under a scan
+root, e.g. `/apps/xtr`. Discovery also captures custom unit *files* that are
+currently disabled/inactive (not just ones `systemctl list-units` reports as
+loaded), so a stopped non-Docker service (e.g. `htmls`, `ppv`) is still
+discovered instead of being invisible.
 
 ## Removal job engine
 

@@ -68,6 +68,16 @@ def build_apps(resources: list[Resource], manifests: dict[str, Manifest]) -> lis
   - directories attach via the compose `working_dir` or bind mounts referenced by
     the app's containers.
   - cron entries attach via command path matching the app's directory.
+- **Non-Docker (pure-systemd) apps are seeded as first-class applications too**,
+  not just Docker/Compose ones — a custom (`is_custom`) systemd unit whose
+  `WorkingDirectory`/`ExecStart` resolves to a directory directly under a scan
+  root (e.g. `/apps/xtr`) seeds its own application (`kind="systemd"`) when no
+  Docker app already claims that slug. Its dir path then feeds the ordinary
+  directory/git-repo/env-file/nginx-by-port/cron attachment rules above, so the
+  rest of the app (config, nginx site, cron entries) is picked up automatically
+  from that one seed. This is what makes systemd-only services like `xtr`,
+  `htmls`, or `ppv` show up as ordinary applications alongside Docker apps
+  instead of being invisible or appearing only as orphaned resources.
 - **Broad-root bind mounts are excluded from ownership evidence** — a bind mount of
   a shared root (e.g. `/apps` or `/data` itself, rather than a specific app
   subdirectory) does not count as evidence that an app owns that path; this
@@ -91,7 +101,13 @@ def build_apps(resources: list[Resource], manifests: dict[str, Manifest]) -> lis
   `sites-available` copies — whose first `server_name` label slugifies to
   *exactly* the app's slug is still attached to that app, so removal deletes the
   leftover config file too and doesn't leave stale debris. This is an exact-slug
-  match only; fuzzy/partial matches are never used here.
+  match only; fuzzy/partial matches are never used here. An exact `server_name`
+  match **upgrades** a prior weak port-match claim on the same file (e.g. a
+  `sites-available` copy the app already held at `probable`/60 via port
+  guessing) rather than being skipped because an association already exists —
+  this closes the gap where an app's own stale `sites-available` copy used to
+  survive removal as leftover debris; it is now always removal-eligible along
+  with the rest of the app.
 - **Manifest override**: entries in `/apps/del/manifests/*.yaml` override or augment
   automatic correlation, and are recorded at `level=manual` or `confirmed`.
 - **Shared-resource detection**: if a resource is associated with more than one
@@ -166,6 +182,28 @@ correlation itself never promotes `possible` on its own.
    per-source test pattern (mock the subprocess/file calls, assert on the
    returned `Resource` list).
 
+## Port registry and port-conflict detection
+
+`scripts/gen-registry.py` reads the latest scan straight out of `del.db` (SQLite,
+read-only) and writes `docs/PORT-REGISTRY.md` — the transparent map of every
+enabled subdomain to its host port, correlated backend app, deploy type
+(`compose` vs `systemd`), and container port mapping. It is **gitignored** and
+regenerated on demand, never hand-edited:
+
+```bash
+/apps/del/scripts/gen-registry.py     # or scripts/gen-registry.sh
+```
+
+The generated file has three sections:
+- The main table — every live subdomain with its backend and deploy type.
+- **Needs attention** — subdomains with no backend attributed, or a dead
+  upstream (nothing actually listening on the proxied port).
+- **Port CONFLICTS** vs **Shared ports (aliases)** — a host port proxied by
+  more than one *distinct* app is a real conflict (only one of them can
+  actually be served; the others are misconfigured leftovers competing for the
+  same port). A host port proxied by multiple subdomains that all resolve to
+  the *same* app is a normal alias, not a conflict, and is reported separately.
+
 ## Disabled/inactive unit capture (2026-07-20)
 systemd discovery now captures custom unit *files* under `/etc/systemd/system`
 even when the unit is disabled/inactive (not in `systemctl list-units`), by
@@ -173,9 +211,3 @@ scanning the unit-file directories and showing each individually (batched
 `systemctl show` intermittently drops inactive records). This makes non-Docker
 apps whose service is stopped (e.g. `htmls`, `ppv`) first-class instead of
 invisible.
-
-## Port-conflict detection (registry)
-`scripts/gen-registry.py` flags **port conflicts** — one host port proxied by
-subdomains of two or more *different* apps (only one backend can actually
-serve; the others are misconfigured). Multiple domains resolving to a single
-app on one port are reported separately as normal **aliases**, not conflicts.

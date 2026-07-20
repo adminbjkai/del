@@ -47,6 +47,8 @@ navigation:
         path: ./pages/reference/security.mdx
       - page: Helper Operations
         path: ./pages/reference/helper-operations.mdx
+      - page: Deployment Convention
+        path: ./pages/reference/deployment-convention.mdx
 
 colors:
   accent-primary:
