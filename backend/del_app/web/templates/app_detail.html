@@ -109,7 +109,10 @@
     <tbody>
       {% for a in associations %}
       <tr class="{% if a.get('data_loss_risk') == 'data' %}row-danger{% endif %}">
-        <td>{{ a.get('resource_display') or a.get('resource_key') }}</td>
+        <td><span class="badge" style="font-size:0.72em;vertical-align:middle">{{ a.get('resource_type') }}</span> {{ a.get('resource_display') or a.get('resource_key') }}
+          {% set rk = a.get('resource_key') %}
+          {% if rk and rk.startswith('/') and rk != a.get('resource_display') %}<div class="muted mono" style="font-size:0.8em">{{ rk }}</div>{% endif %}
+        </td>
         <td data-filter-value="{{ a.get('level') }}" data-sort-value="{{ a.get('confidence') }}">{{ confidence_badge(a) }}</td>
         <td data-filter-value="{{ a.get('data_loss_risk') }}">{{ a.get('data_loss_risk') or '—' }}</td>
         <td data-filter-value="{{ a.get('removal_eligible') }}">{{ a.get('removal_eligible') or '—' }}</td>
