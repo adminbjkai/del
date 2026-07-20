@@ -161,6 +161,7 @@ def build_apps(
 
     apps: dict[str, _AppBuilder] = {}
     container_slug: dict[str, str] = {}  # container name -> slug
+    unit_slug: dict[str, str] = {}  # systemd unit name -> slug
 
     # --- Step 1: seed apps from compose project labels ---------------------
     project_containers: dict[str, list[Resource]] = {}
@@ -357,6 +358,73 @@ def build_apps(
                 evidence=[Evidence(source="docker", statement="network labeled/attached to this app's container(s)", weight=confidence)],
             )
 
+    # --- Step 6b: seed apps from custom (non-Docker) systemd units ---------
+    # A service deployed purely via systemd (no Docker) never gets an app
+    # from the Docker steps above; without this, its nginx site/dir/port stay
+    # orphaned and the whole service is invisible as an app. Seed one app per
+    # custom unit (systemd_src already flags non-vendor units via is_custom)
+    # whose WorkingDirectory/ExecStart resolves to a project dir directly
+    # under a scan root (e.g. /apps/xtr). This naturally excludes system
+    # units (sshd, docker, nginx, cockpit, cron, ...) since their ExecStart
+    # never lives under a scan root. If a Docker app already claimed that
+    # slug (a compose app can also run a helper systemd unit), attach to it
+    # instead of creating a duplicate. dir_paths is populated so the
+    # directory/git repo/env-file steps and the nginx-by-port and Step 9b
+    # port steps below attach the rest of the app automatically.
+    try:
+        scan_roots = [r.rstrip("/") for r in get_settings().scan_roots]
+    except Exception:
+        scan_roots = ["/apps", "/data/apps", "/opt", "/srv", "/var/www"]
+
+    def _app_dir_under_scan_root(path: str | None) -> str | None:
+        if not path:
+            return None
+        for root in scan_roots:
+            prefix = root + "/"
+            if path.startswith(prefix):
+                name = path[len(prefix):].split("/", 1)[0]
+                if name:
+                    return f"{root}/{name}"
+        return None
+
+    def _first_scan_root_path_in(text: str) -> str | None:
+        for root in scan_roots:
+            m = re.search(re.escape(root) + r"/([A-Za-z0-9_.-]+)", text)
+            if m:
+                return f"{root}/{m.group(1)}"
+        return None
+
+    for unit in systemd_units:
+        if not unit.data.get("is_custom"):
+            continue
+        wd = unit.data.get("working_directory")
+        exec_start = unit.data.get("exec_start") or ""
+        app_dir = _app_dir_under_scan_root(wd) or _first_scan_root_path_in(exec_start)
+        if not app_dir:
+            continue
+        slug = _slugify(app_dir.rsplit("/", 1)[-1])
+        app = apps.get(slug)
+        if app is None:
+            app = apps.setdefault(slug, _AppBuilder(slug, slug, "systemd"))
+            if unit.state == "active":
+                app.status = "running"
+        app.dir_paths.add(app_dir)
+        app.add(
+            unit,
+            confidence=95,
+            ownership="exclusive",
+            data_loss_risk="config",
+            evidence=[Evidence(
+                source="systemd_src",
+                statement=f"systemd unit {unit.key} WorkingDirectory/ExecStart under app dir {app_dir}",
+                weight=95,
+            )],
+        )
+        unit_slug[unit.key] = slug
+        port_m = re.search(r"--port[= ](\d+)", exec_start)
+        if port_m:
+            app.ports.add(int(port_m.group(1)))
+
     # --- Step 7: directories -------------------------------------------------
     matched_directory_keys: set[str] = set()
     for d in directories:
@@ -485,8 +553,14 @@ def build_apps(
                 app.domains.add(sn)
 
     # --- Step 9: systemd units: WorkingDirectory/ExecStart under app dir ----
-    unit_slug: dict[str, str] = {}
     for unit in systemd_units:
+        if unit.key in unit_slug:
+            # Already definitively attached in Step 6b via its own
+            # WorkingDirectory (the strongest signal). Re-running the looser
+            # exec_start-substring check here could reassign it to an
+            # unrelated app whose dir happens to appear as a substring of
+            # this unit's ExecStart (e.g. a shared venv path).
+            continue
         wd = unit.data.get("working_directory")
         exec_start = unit.data.get("exec_start") or ""
         for slug, app in apps.items():

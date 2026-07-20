@@ -381,6 +381,67 @@ def test_unowned_port_process_get_no_association():
     assert not any(a.resource_type == "port" for a in assocs)
 
 
+def test_pure_systemd_app_seeded_with_unit_nginx_dir_and_port():
+    """A service deployed without Docker (unit WorkingDirectory under a scan
+    root + nginx proxying its port + the project dir) must become a
+    first-class kind=systemd app with everything attached."""
+    unit = Resource(
+        type="systemd_unit", key="foo.service", display="foo.service",
+        path="/etc/systemd/system/foo.service", state="active",
+        data={
+            "is_custom": True,
+            "working_directory": "/apps/foo",
+            "exec_start": "/apps/foo/.venv/bin/uvicorn app:app --port 8099",
+        },
+    )
+    nginx_site = Resource(
+        type="nginx_site",
+        key="/etc/nginx/sites-enabled/foo.bjk.ai",
+        display="foo.bjk.ai",
+        path="/etc/nginx/sites-enabled/foo.bjk.ai",
+        state="enabled",
+        data={
+            "server_names": ["foo.bjk.ai"],
+            "upstreams": [{"location": "/", "proxy_pass": "http://127.0.0.1:8099", "port": 8099}],
+            "enabled": True,
+            "stale_copy": False,
+        },
+    )
+    directory = Resource(
+        type="directory", key="/apps/foo", display="foo",
+        path="/apps/foo", state="present", data={},
+    )
+    apps = build_apps([unit, nginx_site, directory], {})
+    assert len(apps) == 1
+    record, assocs = apps[0]
+    assert record.slug == "foo"
+    assert record.kind == "systemd"
+    assert record.status == "running"
+    assert 8099 in record.ports
+    assert "foo.bjk.ai" in record.domains
+    by_type = {a.resource_type for a in assocs}
+    assert by_type == {"systemd_unit", "nginx_site", "directory"}
+    unit_assoc = next(a for a in assocs if a.resource_type == "systemd_unit")
+    assert unit_assoc.confidence == 95
+    assert unit_assoc.level == "confirmed"
+
+
+def test_system_unit_not_under_scan_root_does_not_seed_an_app():
+    """A vendor/system unit (sshd) never resolves to a scan-root project dir,
+    so it must not seed a phantom app."""
+    unit = Resource(
+        type="systemd_unit", key="ssh.service", display="ssh.service",
+        path="/usr/lib/systemd/system/ssh.service", state="active",
+        data={
+            "is_custom": False,
+            "working_directory": None,
+            "exec_start": "/usr/sbin/sshd -D",
+        },
+    )
+    apps = build_apps([unit], {})
+    assert apps == []
+
+
 @pytest.mark.skipif(shutil.which("docker") is None, reason="docker not available on this host")
 def test_docker_src_collect_returns_many_resources_on_this_host():
     resources = docker_src.collect()
