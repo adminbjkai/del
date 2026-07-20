@@ -264,3 +264,6 @@ Host runs **ufw active, policy DROP**. A process binding 0.0.0.0 is **NOT public
 
 ### Cross-app venv oddities (functioning, inconsistent)
 xtr.service runs from flixapp's venv; astv-remote.service runs from appletv-remote's venv. Both work; noted for consistency only.
+
+## Removed 2026-07-20 (user request)
+liam, twenty, zabbix, OpenPdf fully removed via DEL (containers/volumes/nginx/dirs/systemd units — no backups). Note: twenty's compose file was nested (/apps/twenty/packages/twenty-docker), so DEL only weakly claimed the top-level /apps/twenty dir (correct conservative behavior — preserved as 'blocked'); the dir was deleted explicitly. This nested-compose-root pattern means an app's top-level dir may need explicit confirmation on removal.
