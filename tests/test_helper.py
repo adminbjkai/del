@@ -344,3 +344,18 @@ def test_server_end_to_end(tmp_policy, tmp_path):
         lines = [json.loads(l) for l in fh if l.strip()]
     ops_logged = {rec["op"] for rec in lines}
     assert "ping" in ops_logged and "path_delete" in ops_logged
+
+
+def test_compose_down_dryrun_lowercases_and_falls_back_to_label_teardown():
+    """Uppercase project name + missing compose file: dry-run must preview a
+    lowercase label-based teardown (regression for the 'invalid project name
+    Linkstash' / missing-compose-file removal failures)."""
+    import del_helper
+    ops = del_helper.Operations({"approved_roots": ["/apps"], "backup_dir": "/tmp"})
+    r = ops.compose_down(
+        {"project": "Linkstash", "config_files": ["/does/not/exist.yml"]},
+        dry_run=True,
+    )
+    out = r["output"]
+    assert "linkstash" in out and "Linkstash" not in out   # lowercased
+    assert "label=com.docker.compose.project=linkstash" in out   # label teardown

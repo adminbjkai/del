@@ -77,3 +77,14 @@ safety-validation failure halts the job before any downstream deletion runs.**
 
 See also `docs/server-audit.md §16` for the original design writeup of this
 lifecycle and `§17` for the backup/recovery strategy it depends on.
+
+## Robust compose teardown (2026-07-20)
+Stage 5 `compose_down` is resilient to broken project state, so removals no
+longer get stuck on: (a) an uppercase project name (Docker Compose forces
+lowercase — the helper lowercases before calling compose); (b) a missing or
+unparseable compose file (falls back to a label-based teardown that removes
+containers by their `com.docker.compose.project` label, needing no compose
+file); (c) a compose file that no longer matches what is running (after any
+compose-down attempt, the helper always sweeps remaining containers carrying
+the project label, so stragglers can't keep a volume "in use" and block the
+rest of the removal).

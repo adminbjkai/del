@@ -130,22 +130,67 @@ class Operations:
         if not isinstance(project, str) or not project:
             raise OpError("compose_down requires 'project'")
         V.validate_container_id(project)  # project names share the docker-safe charset
-        files = V.validate_compose_files(args.get("config_files"), self.policy)
-        cmd = ["docker", "compose", "-p", project]
-        for f in files:
-            cmd += ["-f", f]
-        cmd += ["down"]
-        if args.get("remove_volumes"):
-            cmd += ["--volumes"]
+        # Docker Compose forces project names to lowercase; the derived name may
+        # carry the directory's original case (e.g. "Linkstash"), which compose
+        # rejects. Use the lowercase form that matches the real project label.
+        proj = project.lower()
+        remove_volumes = bool(args.get("remove_volumes"))
         mode = args.get("remove_images_mode")
-        if mode in ("all", "local"):
-            cmd += ["--rmi", mode]
+
+        # Compose files may be missing (path moved/deleted) or unparseable
+        # (broken YAML). Only use them if they all validate; otherwise fall
+        # back to a robust label-based teardown that needs no compose file.
+        try:
+            files = V.validate_compose_files(args.get("config_files"), self.policy)
+        except Exception:
+            files = []
+
+        label_ids_cmd = ["docker", "ps", "-aq", "--filter",
+                         f"label=com.docker.compose.project={proj}"]
+
         if dry_run:
-            return {"output": _fmt_cmds([cmd]), "changed": []}
-        rc, out, err = _run(cmd)
-        if rc != 0:
-            raise OpError(f"compose down failed (rc={rc}): {err.strip() or out.strip()}")
-        return {"output": out + err, "changed": [f"compose:{project}"]}
+            if files:
+                cmd = ["docker", "compose", "-p", proj]
+                for f in files:
+                    cmd += ["-f", f]
+                cmd += ["down", "--remove-orphans"]
+                if remove_volumes:
+                    cmd += ["--volumes"]
+                if mode in ("all", "local"):
+                    cmd += ["--rmi", mode]
+                return {"output": _fmt_cmds([cmd]) + "  (falls back to label teardown if it fails)",
+                        "changed": []}
+            return {"output": _fmt_cmds([label_ids_cmd, ["docker", "rm", "-f", "<matched ids>"]])
+                              + "  (no valid compose file — label-based teardown)",
+                    "changed": []}
+
+        # Live: try compose-file down first when files are valid.
+        if files:
+            cmd = ["docker", "compose", "-p", proj]
+            for f in files:
+                cmd += ["-f", f]
+            cmd += ["down", "--remove-orphans"]
+            if remove_volumes:
+                cmd += ["--volumes"]
+            if mode in ("all", "local"):
+                cmd += ["--rmi", mode]
+            rc, out, err = _run(cmd)
+            note = out + err if rc == 0 else f"compose down rc={rc} ({err.strip()[:80]}); "
+        else:
+            note = "no valid compose file; "
+
+        # ALWAYS sweep any container still carrying this project's compose label.
+        # compose down can report success yet leave containers behind when the
+        # plan's compose file no longer matches what is actually running — those
+        # stragglers keep volumes "in use" and block the rest of the removal.
+        rc, out, err = _run(label_ids_cmd)
+        ids = [x for x in out.split() if x]
+        if ids:
+            rc2, o2, e2 = _run(["docker", "rm", "-f", *ids])
+            if rc2 != 0:
+                raise OpError(f"{note}force-remove of {len(ids)} labeled container(s) failed: {e2.strip()}")
+            note += f"swept {len(ids)} labeled container(s). "
+        return {"output": note + f"project {proj} torn down", "changed": [f"compose:{proj}"]}
 
     # -- docker: containers --------------------------------------------------
     def container_stop(self, args, dry_run):
