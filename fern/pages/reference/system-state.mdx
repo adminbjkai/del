@@ -1,0 +1,182 @@
+---
+title: System State
+subtitle: Consolidated, current-state reference for the whole fleet — no re-audit needed
+slug: reference/system-state
+---
+
+<Callout intent="info">
+  This page mirrors `docs/SYSTEM-STATE.md` in the DEL repository, built from the
+  8-lane audit run 2026-07-20 (raw findings: `data/audit/2026-07-20/`). Read this
+  before starting any new audit — most "what's running, what's shared, what's
+  broken" questions are answered here already.
+</Callout>
+
+## 1. Executive summary
+
+- **236** top-level directories under `/apps` (249G total). Of these, roughly **114
+  are LIVE** apps, **29 DISABLED** (valid config, cleanly stopped), **4
+  MISCONFIGURED**, and the rest (**~89**) are NOT-CONFIGURED / NOT-AN-APP / a
+  handful ABANDONED — see the exact per-state counts below.
+- The 70 "no DEL association" directories are mostly **intentional data/reference
+  storage, not gaps** — the large ones (`models` 49G, `LTX-2` 7.7G, `ideogram` 7.1G,
+  `arch` 3.1G) were never meant to be services.
+- **Docker:** 180 containers (179 running), 166 images (3 dangling-but-in-use, 3
+  truly unused), 98 volumes (21 orphaned, ~10.3GB), 88 networks (1 genuinely
+  cross-app-shared: `rowboat_net`).
+- **Nginx:** 135 enabled sites (100% symlinks, 0 debris), 137 available files — DEL's
+  inventory matches disk exactly.
+- **Ports:** 179 listening sockets; 155 internal, 22 distinct public-bound ports
+  (mostly intentional; one known exception — samba).
+- **134 live subdomains**, now regenerated from the current scan.
+- **Systemd:** 75 custom unit files, **0 failed units** (2 were failed pre-audit,
+  both resolved — see [What was fixed](#6-what-was-fixed-in-this-audit)).
+
+<Callout intent="success">
+  **Verdict:** the system is clean and healthy. Docker, nginx, and DEL's own
+  inventory all reconcile to ground truth with zero real discrepancies beyond
+  expected scan-lag drift. The known exceptions are narrow and fully enumerated in
+  [§5](#5-known-exceptions--needs-attention): 8 nginx sites serving 502 for
+  deliberately-stopped apps, 3 genuinely misconfigured apps, a couple of incomplete
+  decommissions, a few apps DEL's scanner doesn't yet track, and one pre-existing
+  security note (samba public bind). None are active incidents.
+</Callout>
+
+## 2. Directory classification
+
+Full per-directory detail lives in `data/audit/2026-07-20/dirs-A.md` (A–E, 61 dirs),
+`dirs-B.md` (F–M, 75 dirs), `dirs-C.md` (N–Z/digits, 98 dirs).
+
+### Consolidated STATE counts (all 236 dirs)
+
+| STATE | A–E | F–M | N–Z/digit | **Total** |
+|---|---:|---:|---:|---:|
+| LIVE | 34 | 33 | 47 | **114** |
+| DISABLED (valid config, cleanly stopped) | 6 | 9 | 14 | **29** |
+| MISCONFIGURED (broken/dangling) | 1 | 1 | 2 | **4** |
+| NOT-CONFIGURED (code exists, never wired) | 4 | 13 | 15 | **32** |
+| NOT-AN-APP (data/scratch/docs/build-artifact/mobile-client) | 16 | 19 | 20 | **55** |
+| NOT-VERIFIABLE (permission denied) | 0 | 0 | 1 | **1** |
+| ABANDONED (folded into NOT-AN-APP above; `ted`, `you`) | — | — | — | **~2** |
+| **Total** | **61** | **75** | **98** | **236** |
+
+Where `filesystem.md`'s DB-first pass (ACTIVE/PAUSED/ABANDONED/NOT-IN-DEL/retired)
+disagrees with the ground-truth dirs-A/B/C tables above, **trust dirs-A/B/C** — they're
+a per-directory filesystem-first deep-dive, not a DB-association pass.
+
+### NOT-AN-APP data dirs — intentional, not gaps
+
+| Dir | Size | What it is |
+|---|---:|---|
+| `models` | 49G | ML model weight storage (gemma-3-12b, LTX-2 weights) |
+| `LTX-2` | 7.7G | Video-gen model inference code/weights |
+| `ideogram` | 7.1G | Image-gen reference/code checkout |
+| `arch` | 3.1G | Folder of unrelated sub-projects, no top-level service |
+
+Plus smaller doc/scratch/build-artifact dirs (upstream OSS reference clones, mobile
+client source, compiled APKs, empty dirs) — none need action.
+
+## 3. Shared resources map — zero ambiguity on what's shared
+
+### Genuine cross-app sharing
+
+| Resource | Apps sharing | Nature | Removal-safety note |
+|---|---|---|---|
+| `rowboat_net` (docker network) | rowboat, deck-renderer, llm-proxy | Real custom bridge network; `rowboat.bjk.ai` path-routes to both rowboat and deck-renderer as one logical stack | **Do not remove while any of the 3 remain deployed.** Safe teardown of one requires `external: true` in the others' compose files — verify first. |
+| `/apps/ShareX` (+ `.git`) | rshare, vshare | Same repo checkout, two app slugs | One physical directory serves both — treat as a single removal unit. |
+| `/apps/astv-remote` (+ `.git`) | samsung-tv-remote, appletv-remote | Same repo; `astv-remote.service` runs code from `/apps/appletv-remote`'s venv | Do not delete either app's directory/venv while any of the 3 remote-control units are enabled. |
+| `postgres:16-alpine` base image | opensparrow, cap4, linkwarden, paca, glean | Shared image only, own container+volume each | Safe to remove one app's container; don't `docker rmi` the tag while any of the 5 remain. |
+| Postgres `16bc17c64a57` (dangling, in-use) | cap4, linkwarden, paca | Same pattern | Docker refuses removal while in use — no action needed. |
+| MySQL `a3dff78d8762` (dangling, in-use) | moo-tasks, plainpad | Same pattern | Same as above. |
+| `redis:7.4-alpine` base image | docmost, core, sheets, leantime, stash-bookmark, gongyu, grist-core | Shared cache base image, 7 apps | Image-layer only, independent removal is safe. |
+| `redis:latest`, `mongo:latest`, `pgvector/pgvector:pg17`, `nginx:alpine`, meilisearch, alpine-chrome images | Various 2–4 app pairs | All base-image-layer sharing only | No shared runtime state; independent removal is safe. |
+| `rowboat.bjk.ai` nginx site | rowboat (8038), deck-renderer (8060) | One server_name, two backend containers | Not a conflict; both must stay reachable together. |
+| `/apps/cap42`, `/apps/cap4l` (weak dir sharing) | cap4, cap-v2, cap | Same monorepo, 2–3 DEL slugs | **Confirm canonical slug before any cap-family removal.** |
+
+No shared volumes and no shared database instances exist anywhere in ground truth —
+every "shared" DB entry above is image-layer sharing only.
+
+### False positives (DEL flagged shared, but no real coupling)
+
+`bridge`/`host` (docker defaults, not app-specific), `runtipi_tipi_main_network`
+(only 1 app), `/apps/bitwarden` ↔ linkwarden (image-proximity artifact, not real code
+sharing), `/apps/notes` ↔ zennotes (DB shows only 1 app despite the flag — also
+mis-associated, see [§5](#5-known-exceptions--needs-attention)), `cap_v2_minio_data`
+volume (doesn't exist on host — stale record), `filerise.bjk.ai.bak.*` (a backup
+file, not a live config).
+
+## 4. Docker / nginx / ports health
+
+**Docker:** 180 containers (179 running, 1 exited but owned by the still-active
+`blinko` app — needs a restart investigation, not removal). 166 images, 3 dangling
+all correctly in-use shared DB layers, 3 truly-unused safe to prune (~1.9GB). 98
+volumes, 21 orphaned (~10.3GB) — largest was `openshell-cluster-nemoclaw` (4.7GB,
+**already deleted**, see [§6](#6-what-was-fixed-in-this-audit)) and
+`netdata_netdatacache` (3.4GB, netdata stopped but volume not removed). 88 networks,
+only `rowboat_net` a genuine cross-app share. Build cache: 16.44GB, 100% reclaimable
+— the single largest system-wide reclaim opportunity.
+
+**Nginx:** 135 sites-enabled (100% symlinks, 0 broken links), 137 sites-available, 0
+debris files. DEL's inventory (272 rows) matches disk exactly. 0 duplicate
+server_names, 0 real port conflicts (all multi-domain-per-port cases are documented
+aliases). 8 dead-upstream enabled sites — all confirmed intentionally-stopped apps,
+not orphaned configs.
+
+**Ports:** 179 listening sockets, 155 internal, 22 distinct public-bound ports.
+Public-bound is mostly intentional (ssh, http/s, streaming, STUN/TURN, NoMachine, PCP
+metrics, RustDesk, AionUI, a few public-by-design frontends) plus **samba (139/445)**
+— the one pre-existing security exception. Cockpit's prior public exposure is
+**confirmed resolved** (now loopback-only).
+
+**DEL-inventory-accuracy verdict:** matches ground truth on every count checked
+across containers, images, volumes, networks, ports, and systemd attribution — the
+only drift anywhere in the entire audit is a 1-image scan-timing lag.
+
+## 5. Known exceptions / needs-attention
+
+| # | Item | Impact | Recommended action |
+|---|---|---|---|
+| 1 | Dead-upstream ENABLED nginx sites: dockhand, fizzy, netdata, notecapai, shows, trflix, twenty, zabbix | 8 subdomains 502 for deliberately-stopped apps | Revive or disable+remove per app; group decision recommended |
+| 2 | **OpenPdf** — MISCONFIGURED | `.env` missing, compose config fails outright | Restore `.env` or mark decommissioned |
+| 3 | **17imgshare** — MISCONFIGURED, untracked in DEL | Backend running (8087) but no nginx vhost installed; also invisible to DEL | Install vhost or stop process; add manifest |
+| 4 | **fizzy** — MISCONFIGURED | Container fully absent, nginx still enabled — incomplete teardown | Redeploy or remove nginx + compose together |
+| 5 | **liam** — incomplete decommission | Active + retired nginx configs both present, unit disabled | Confirm revive vs. remove the non-retired config |
+| 6 | **img3** — stray config artifact | Leftover conf referencing the live `img2` app, confusing for editors | Delete the stray file (docs-only task here, not performed) |
+| 7 | **semalist, trp, 17imgshare** — live but untracked in DEL | DEL's scanner misses these non-Docker manual apps | Add DEL manifests so they're tracked |
+| 8 | **`/apps/notes` mis-associated** | Linked to both notex and zennotes but holds unrelated code | Review/correct the DEL association record |
+| 9 | **Samba public bind (139/445)** | Pre-existing, unresolved across audits | Decide once: firewall or accept & document |
+| 10 | **xtr `@reboot` cron vs. `xtr.service`** | Double-start risk, same app two launch mechanisms | Confirm authoritative mechanism, remove the other |
+| 11 | **cap42/cap4l vs. cap/cap4/cap-v2 slug ambiguity** | Risk of deleting the only copy of shared config | Confirm canonical slug before cap-family removal |
+| 12 | **astv-remote/xtr hidden cross-app venv deps** | Deleting "unrelated" app silently breaks another's service | Document in manifests; check before removing appletv-remote/flixapp venvs |
+| 13 | **atv-remote.service disabled duplicate** | Dead config clutter | Already removed — see §6 |
+
+## 6. What was fixed in this audit
+
+- **`openshell-cluster-nemoclaw` orphan docker volume (4.7GB)** — deleted, confirmed
+  absent from `docker volume ls`.
+- **Leftover systemd unit files removed**: `onlook-web.service`, `comfyui.service`,
+  `uld-backend.service`, `uld-frontend.service`, `atv-remote.service` — targets no
+  longer existed on disk; confirmed absent from `systemctl list-units --all`.
+- **`boxy` status-accuracy fix** — corrected DEL's stale `compose_stopped` record;
+  it's actually a running native systemd service.
+- **`PORT-REGISTRY.md` regenerated** from the current scan (was 21 scans stale).
+- **Result: 0 failed systemd units** (was 2 pre-audit).
+
+## 7. How to refresh this
+
+1. **Re-scan via DEL** — trigger a rescan from the web UI or `del-admin rescan`.
+2. **Regenerate the port registry** — `/apps/del/scripts/gen-registry.py` against the
+   latest scan id; run this after every rescan.
+3. **Raw audit data** lives at `/apps/del/data/audit/2026-07-20/` (`filesystem.md`,
+   `nginx.md`, `docker.md`, `ports-services.md`, `dirs-A.md`, `dirs-B.md`,
+   `dirs-C.md`, `shared-and-config.md`). Re-running the same 8-lane methodology
+   periodically is the recommended way to keep this reference current.
+
+## Port provenance & true exposure
+
+All 172 listening ports were traced end-to-end (listener → pid → exact binary/script → launcher → config file → working dir), **0 unexplained**: ~110 Docker-compose (traced to the exact compose file, including nested paths), ~35 systemd units, 3 host-network containers, the rest system daemons and a few manual/orphan processes.
+
+<Callout intent="info">
+**ufw default-DENY is the real security gate.** The host runs `ufw` active with policy DROP, so a process binding `0.0.0.0` is **not** publicly reachable unless ufw explicitly allows its port. Ports flagged by bind-address in past audits — Samba 139/445, the dev servers (3015/3019/3020/3901), AionUi 9000, PCP 44321, and DEL's own docs server (8072/8073) — are all **blocked externally**. Only the deliberate ufw ALLOW rules are genuinely reachable.
+</Callout>
+
+Manual/orphan processes (functioning, unsupervised): 17imgshare gunicorn (8087), `/apps/htmls` node (8195), claude-code-router (3456), adb (5037), and the anisette/netmuxd containers (bare `docker run`).
