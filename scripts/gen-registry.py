@@ -89,8 +89,37 @@ def main() -> None:
             lines.append(f"| {sn} | {', '.join(str(x) for x in ports) or '—'} | {why} |")
         lines.append("")
 
+    # --- Port conflicts: one host port proxied by subdomains of DIFFERENT
+    # apps means only one can actually work. Same-app aliases are fine. ---
+    port_owners: dict[int, set] = {}
+    port_subs: dict[int, set] = {}
+    for sn, ports, app, kind, cports in entries:
+        for p in ports:
+            port_owners.setdefault(p, set()).add(app)
+            port_subs.setdefault(p, set()).add(sn)
+    conflicts, aliases = [], []
+    for p, owners in sorted(port_owners.items()):
+        distinct = {o for o in owners if o and o != "—"}
+        if len(distinct) > 1:
+            conflicts.append((p, sorted(port_subs[p]), sorted(distinct)))   # real: >1 app on one port
+        elif len(port_subs[p]) > 1:
+            aliases.append((p, sorted(port_subs[p]), sorted(distinct) or ["unattributed"]))  # same/one app, multiple domains
+    if conflicts:
+        lines += ["## ⚠️ Port CONFLICTS (one host port, multiple different apps — only one actually serves)", "",
+                  "| Host port | Subdomains pointing at it | Distinct apps |", "|---|---|---|"]
+        for p, subs, apps in conflicts:
+            lines.append(f"| {p} | {', '.join(subs)} | {', '.join(apps)} |")
+        lines.append("")
+    if aliases:
+        lines += ["## Shared ports (aliases — multiple domains, one app; normal)", "",
+                  "| Host port | Domains | App |", "|---|---|---|"]
+        for p, subs, apps in aliases:
+            lines.append(f"| {p} | {', '.join(subs)} | {', '.join(apps)} |")
+        lines.append("")
+
     with open(OUT, "w") as f:
         f.write("\n".join(lines))
+    globals()["_conflicts"] = conflicts
     print(f"wrote {OUT}: {len(seen)} subdomains, {len(set(g[0] for g in gaps))} needing attention")
 
 

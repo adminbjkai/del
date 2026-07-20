@@ -5,7 +5,9 @@ unit. Env var VALUES are stripped from `Environment=`; only names are kept.
 """
 from __future__ import annotations
 
+import glob
 import logging
+import os
 import re
 import subprocess
 
@@ -95,16 +97,20 @@ def _show_units(unit_names: list[str]) -> dict[str, dict]:
         for p in props:
             args.extend(["-p", p])
         raw = _run(args)
-        blocks = raw.split("\n\n")
-        for block in blocks:
-            fields: dict[str, str] = {}
-            for line in block.splitlines():
-                if "=" not in line:
-                    continue
-                k, _, v = line.partition("=")
-                fields[k] = v
-            if fields.get("Id"):
-                result[fields["Id"]] = fields
+        # Delimit records by the Id= property rather than blank lines: a
+        # property value can contain blank lines, which would merge adjacent
+        # units' blocks and drop one (its Id lost to the merged neighbour).
+        current: dict[str, str] = {}
+        for line in raw.splitlines():
+            if "=" not in line:
+                continue
+            k, _, v = line.partition("=")
+            if k == "Id" and current.get("Id"):
+                result[current["Id"]] = current
+                current = {}
+            current[k] = v
+        if current.get("Id"):
+            result[current["Id"]] = current
     return result
 
 
@@ -169,6 +175,53 @@ def collect() -> list[Resource]:
                 data=data,
             )
         )
+
+    # Also capture CUSTOM unit files that `list-units` omits because they are
+    # disabled / never-loaded (e.g. an inactive htmls-webapp.service). These are
+    # real app units on disk and must be visible so their app can be correlated.
+    try:
+        seen = {s["unit"] for s in services}
+        extra_files: list[str] = []
+        for d in ("/etc/systemd/system", "/usr/local/lib/systemd/system"):
+            for path in glob.glob(os.path.join(d, "*.service")) + glob.glob(os.path.join(d, "*.timer")):
+                name = os.path.basename(path)
+                if name not in seen and not os.path.islink(path):
+                    extra_files.append(name)
+        # Show extras individually: batched `systemctl show` intermittently
+        # drops records for certain inactive/unloaded units; the extras set is
+        # small (disabled custom units only), so per-unit calls are cheap+robust.
+        extra_details = {}
+        for name in extra_files:
+            extra_details.update(_show_units([name]))
+        for unit in extra_files:
+            detail = extra_details.get(unit, {})
+            fragment_path = detail.get("FragmentPath", "")
+            if not fragment_path.startswith(CUSTOM_UNIT_PREFIXES):
+                continue
+            if unit.endswith(".timer"):
+                resources.append(Resource(type="systemd_timer", key=unit, display=unit,
+                                          path=fragment_path or None,
+                                          state=detail.get("ActiveState") or "inactive",
+                                          data={"activates": unit[:-6] + ".service",
+                                                "is_custom": True, "unit_file_state": detail.get("UnitFileState")}))
+                continue
+            exec_m = re.search(r"argv\[\]=([^;]+);", detail.get("ExecStart", ""))
+            resources.append(Resource(
+                type="systemd_unit", key=unit, display=unit, path=fragment_path or None,
+                state=detail.get("ActiveState") or "inactive",
+                data={
+                    "load": detail.get("LoadState"), "active": detail.get("ActiveState"),
+                    "sub": detail.get("SubState"),
+                    "description": detail.get("Description"),
+                    "unit_file_state": unit_file_states.get(unit, detail.get("UnitFileState")),
+                    "fragment_path": fragment_path or None, "is_custom": True,
+                    "working_directory": detail.get("WorkingDirectory") or None,
+                    "exec_start": exec_m.group(1).strip() if exec_m else None,
+                    "environment_files": [t.split(" ")[0] for t in detail.get("EnvironmentFiles", "").split(";") if t.strip()],
+                    "environment_var_names": _env_names_from_line(detail.get("Environment", "")),
+                }))
+    except Exception:
+        logger.exception("systemd_src: extra custom-unit-file scan failed")
 
     try:
         for t in _list_timers():

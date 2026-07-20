@@ -165,3 +165,17 @@ correlation itself never promotes `possible` on its own.
 5. Add a unit test under `tests/test_discovery.py` following the existing
    per-source test pattern (mock the subprocess/file calls, assert on the
    returned `Resource` list).
+
+## Disabled/inactive unit capture (2026-07-20)
+systemd discovery now captures custom unit *files* under `/etc/systemd/system`
+even when the unit is disabled/inactive (not in `systemctl list-units`), by
+scanning the unit-file directories and showing each individually (batched
+`systemctl show` intermittently drops inactive records). This makes non-Docker
+apps whose service is stopped (e.g. `htmls`, `ppv`) first-class instead of
+invisible.
+
+## Port-conflict detection (registry)
+`scripts/gen-registry.py` flags **port conflicts** — one host port proxied by
+subdomains of two or more *different* apps (only one backend can actually
+serve; the others are misconfigured). Multiple domains resolving to a single
+app on one port are reported separately as normal **aliases**, not conflicts.
