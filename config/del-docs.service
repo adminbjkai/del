@@ -1,0 +1,16 @@
+[Unit]
+Description=DEL documentation site (Fern docs preview server)
+After=network.target
+
+[Service]
+Type=simple
+User=bjkai
+WorkingDirectory=/apps/del
+Environment=PATH=/usr/local/bin:/usr/bin:/bin
+ExecStart=/usr/local/bin/npx --yes fern-api docs dev --port 8072 --backend-port 8073
+Restart=on-failure
+RestartSec=10
+NoNewPrivileges=true
+
+[Install]
+WantedBy=multi-user.target

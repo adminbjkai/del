@@ -3,7 +3,7 @@ import shutil
 import pytest
 
 from del_app.correlate import build_apps
-from del_app.discovery import docker_src, nginx_src
+from del_app.discovery import docker_src, nginx_src, proc_src
 from del_app.models import Resource
 
 
@@ -452,3 +452,15 @@ def test_docker_src_collect_returns_many_resources_on_this_host():
         if r.type == "container":
             for name in r.data.get("env_var_names", []):
                 assert "=" not in name
+
+
+def test_proc_src_sanitize_args_redacts_secret_shaped_flags():
+    """A process command line can carry a secret-shaped flag; the value must
+    be stripped before args_redacted is stored/displayed (mirrors
+    del_app.jobs.sanitize_output's helper-output redaction)."""
+    raw = "myapp --password=hunter2 --token=abc123 --api-key=xyz --other=fine"
+    cleaned = proc_src._sanitize_args(raw)
+    assert "hunter2" not in cleaned
+    assert "abc123" not in cleaned
+    assert "xyz" not in cleaned
+    assert "--other=fine" in cleaned

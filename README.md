@@ -27,6 +27,7 @@ separate privileged helper over a unix socket. DEL cannot remove itself.
 | Admin CLI | `/apps/del/scripts/del-admin` (`create-admin`, `change-password`, `migrate`, `rescan`, `backup-db`) |
 | TLS | Nginx, existing `bjk.ai` wildcard cert |
 | Protection | DEL is flagged `protected=1`; the planner refuses to build a removal plan for it |
+| Inventory export | Self-contained, whole-server inventory dump (`/apps/del/miscwork/`, gitignored) served at `https://del.bjk.ai/miscwork.html` (and aliased at `/inventory`), basic-auth protected via the same Nginx `auth_basic_user_file` as `/docs` |
 
 ## Quick start
 
@@ -49,10 +50,13 @@ Rendered documentation (Fern) is served at https://del.bjk.ai/docs (basic-auth p
 | [RECOVERY.md](RECOVERY.md) | DB restore, helper socket troubleshooting, nginx rollback, venv rebuild, outage behavior |
 | [UNINSTALL.md](UNINSTALL.md) | Manual steps to remove DEL itself (DEL cannot do this to itself) |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Stack, process/privilege model, component layout, data model |
-| [docs/INTERFACES.md](docs/INTERFACES.md) | Authoritative module/function contracts for the backend |
+| `docs/INTERFACES.md` | internal module/function contracts — **local only, not committed** |
 | [docs/DISCOVERY.md](docs/DISCOVERY.md) | Discovery sources, confidence scoring, correlation rules, manifest format |
 | [docs/REMOVAL-LIFECYCLE.md](docs/REMOVAL-LIFECYCLE.md) | The 9-stage removal job lifecycle and its safety gates |
-| [docs/server-audit.md](docs/server-audit.md) | Phase-2 host audit this design was built from |
+| [docs/DEPLOYMENT-CONVENTION.md](docs/DEPLOYMENT-CONVENTION.md) | The house standard every app on this server follows (layout, ports, nginx, manifests, decommissioning) |
+| [docs/SYSTEM-STATE.md](docs/SYSTEM-STATE.md) | Consolidated point-in-time audit of the whole host (directory classification, shared resources, known exceptions) |
+| `docs/PORT-REGISTRY.md` | auto-generated port/subdomain map (`scripts/gen-registry.py`) — **local only, gitignored**, regenerate on demand |
+| `docs/server-audit.md` | Phase-2 host audit this design was built from — **local only, not committed** |
 
 ## Tests
 

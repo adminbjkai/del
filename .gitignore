@@ -6,8 +6,7 @@ backups/
 logs/
 data/audit/raw-*.txt
 config/secret.key
-config/admin-initial-password.txt
-config/docs-basic-auth-password.txt
+config/*-password.txt
 fern/node_modules/
 .pytest_cache/
 data/

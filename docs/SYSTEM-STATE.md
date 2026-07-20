@@ -35,12 +35,13 @@ questions about "what's running, what's shared, what's broken" are answered here
 **Verdict:** the system is clean and healthy. Docker, nginx, and DEL's own inventory all
 reconcile to ground truth with zero real discrepancies (only expected scan-lag drift, e.g.
 1 image count difference from timing). The known exceptions are narrow and already
-enumerated: 8 nginx sites serving 502 for deliberately-stopped apps, 3 genuinely
-misconfigured apps (OpenPdf, 17imgshare, fizzy), a couple of incomplete decommissions
-(liam, img3 stray config), ~3 apps DEL's automatic scanner doesn't yet track
-(semalist, trp, 17imgshare), and one pre-existing security note (samba public bind).
-None of these represent active incidents; all are enumerated with recommended actions
-in §5.
+enumerated: 6 nginx sites serving 502 for deliberately-stopped apps, 2 genuinely
+misconfigured apps (17imgshare, fizzy), one stray config artifact (img3), ~3 apps DEL's
+automatic scanner doesn't yet track (semalist, trp, 17imgshare), and one pre-existing
+security note (samba public bind). `liam`, `twenty`, `zabbix`, and `OpenPdf` — all
+previously listed here as needing attention — were fully removed via DEL later on
+2026-07-20; see §6. None of the remaining items represent active incidents; all are
+enumerated with recommended actions in §5.
 
 ---
 
@@ -198,19 +199,17 @@ Every actionable item across all 8 lanes, one table, prioritized by impact.
 
 | # | Item | Impact | Recommended action |
 |---|---|---|---|
-| 1 | **Dead-upstream ENABLED nginx sites for stopped apps**: dockhand (9230), fizzy (8077), netdata (19999), notecapai (9101), shows (8335), trflix (8048), twenty (8036), zabbix (8300) | Visitors get 502/connection-refused on these 8 subdomains; not a security issue, just broken UX | Per-app: either restart the compose stack / systemd unit to revive, or disable+remove the nginx site if permanently retired. Group decision recommended rather than one-by-one. |
-| 2 | **OpenPdf** — MISCONFIGURED | `docker compose config` fails outright: `.env` file missing. App cannot start at all in current state | Restore/recreate `/apps/OpenPdf/.env` from backup or redeploy config, or explicitly mark decommissioned |
-| 3 | **17imgshare** — MISCONFIGURED, untracked in DEL | Gunicorn backend actually running on 127.0.0.1:8087, but its nginx vhost was never installed to sites-available/enabled — app is up but unreachable from outside; also invisible to DEL's automatic inventory | Install the vhost config if the app should be public, or stop the gunicorn process if abandoned; add manifest so DEL tracks it |
-| 4 | **fizzy** — MISCONFIGURED (also listed in #1) | Container fully absent (not even stopped) while nginx site stays enabled — worse than a normal "paused app," looks like an incomplete teardown | Confirm intent: redeploy container or remove nginx site + compose files together |
-| 5 | **liam** — incomplete decommission | Both an active `liam.bjk.ai` nginx config and an explicitly-named `liam.bjk.ai.retired-20260623T231540Z` config exist side by side; systemd unit disabled | Confirm whether liam should be revived or the still-enabled (non-retired) nginx config removed to match the retirement |
-| 6 | **img3** — stray config artifact | Contains a leftover `nginx-img2.bjk.ai.conf` referencing the *different*, currently-live `img2` app — not active, but confusing for future editors | Delete the stray file from `/apps/img3` (not a live config, safe to remove; not performed here, docs-only task) |
-| 7 | **semalist, trp, 17imgshare** — live but untracked in DEL | These 3 apps are genuinely running (semalist: node behind nginx; trp: active openvpn tunnel; 17imgshare: see #3) but have zero DEL applications-table row — DEL's automatic scan misses non-Docker/non-systemd manual apps | Add DEL manifests for each so they're tracked, not rediscovered by manual audit each time |
-| 8 | **`/apps/notes` dir mis-associated** | DEL's association table links this directory to both `notex` and `zennotes`, but the directory itself holds an unrelated CMake/C++ project — looks like a false-positive name match | Review/correct the DEL association record; not an infra problem, a data-quality one |
-| 9 | **Samba public bind (139/445 on 0.0.0.0)** | Pre-existing, unresolved across multiple audits — the one standing security note | Decide once: firewall to LAN/Tailscale-only, or accept as intentional and document the acceptance |
-| 10 | **xtr: `@reboot` cron entry vs. `xtr.service`** | Root crontab has `@reboot /apps/flixapp/.venv/bin/python3 /apps/xtr/app.py` which duplicates what `xtr.service` already starts on boot via uvicorn — a double-start risk (same app dir, two uncoordinated launch mechanisms) | Confirm which is authoritative (recommend: keep `xtr.service`, remove the cron line) |
-| 11 | **`cap42`/`cap4l` vs. `cap`/`cap4`/`cap-v2` slug ambiguity** | Same underlying monorepo appears registered 2–3× under different DEL app slugs; risk of deleting the only copy of shared config if one slug is removed as a "duplicate" | Confirm canonical slug per deployment before any cap-family removal |
-| 12 | **`astv-remote.service` / `xtr.service` hidden cross-app venv dependencies** | `astv-remote.service` executes from `/apps/appletv-remote`'s venv; `xtr.service` executes from `/apps/flixapp`'s venv — deleting either "unrelated" app would silently break the other's service | Document the dependency in each app's manifest so future removal planning catches it; do not remove `/apps/appletv-remote` or `/apps/flixapp` venvs without checking |
-| 13 | **`atv-remote.service` — disabled duplicate unit** | Dead config clutter, identical target to `appletv-remote.service` | Remove once `appletv-remote.service` is confirmed canonical (already removed — see §6) |
+| 1 | **Dead-upstream ENABLED nginx sites for stopped apps**: dockhand (9230), fizzy (8077), netdata (19999), notecapai (9101), shows (8335), trflix (8048) | Visitors get 502/connection-refused on these 6 subdomains; not a security issue, just broken UX | Per-app: either restart the compose stack / systemd unit to revive, or disable+remove the nginx site if permanently retired. Group decision recommended rather than one-by-one. |
+| 2 | **17imgshare** — MISCONFIGURED, untracked in DEL | Gunicorn backend actually running on 127.0.0.1:8087, but its nginx vhost was never installed to sites-available/enabled — app is up but unreachable from outside; also invisible to DEL's automatic inventory | Install the vhost config if the app should be public, or stop the gunicorn process if abandoned; add manifest so DEL tracks it |
+| 3 | **fizzy** — MISCONFIGURED (also listed in #1) | Container fully absent (not even stopped) while nginx site stays enabled — worse than a normal "paused app," looks like an incomplete teardown | Confirm intent: redeploy container or remove nginx site + compose files together |
+| 4 | **img3** — stray config artifact | Contains a leftover `nginx-img2.bjk.ai.conf` referencing the *different*, currently-live `img2` app — not active, but confusing for future editors | Delete the stray file from `/apps/img3` (not a live config, safe to remove; not performed here, docs-only task) |
+| 5 | **semalist, trp, 17imgshare** — live but untracked in DEL | These 3 apps are genuinely running (semalist: node behind nginx; trp: active openvpn tunnel; 17imgshare: see #2) but have zero DEL applications-table row — DEL's automatic scan misses non-Docker/non-systemd manual apps | Add DEL manifests for each so they're tracked, not rediscovered by manual audit each time |
+| 6 | **`/apps/notes` dir mis-associated** | DEL's association table links this directory to both `notex` and `zennotes`, but the directory itself holds an unrelated CMake/C++ project — looks like a false-positive name match | Review/correct the DEL association record; not an infra problem, a data-quality one |
+| 7 | **Samba public bind (139/445 on 0.0.0.0)** | Pre-existing, unresolved across multiple audits — the one standing security note | Decide once: firewall to LAN/Tailscale-only, or accept as intentional and document the acceptance |
+| 8 | **xtr: `@reboot` cron entry vs. `xtr.service`** | Root crontab has `@reboot /apps/flixapp/.venv/bin/python3 /apps/xtr/app.py` which duplicates what `xtr.service` already starts on boot via uvicorn — a double-start risk (same app dir, two uncoordinated launch mechanisms) | Confirm which is authoritative (recommend: keep `xtr.service`, remove the cron line) |
+| 9 | **`cap42`/`cap4l` vs. `cap`/`cap4`/`cap-v2` slug ambiguity** | Same underlying monorepo appears registered 2–3× under different DEL app slugs; risk of deleting the only copy of shared config if one slug is removed as a "duplicate" | Confirm canonical slug per deployment before any cap-family removal |
+| 10 | **`astv-remote.service` / `xtr.service` hidden cross-app venv dependencies** | `astv-remote.service` executes from `/apps/appletv-remote`'s venv; `xtr.service` executes from `/apps/flixapp`'s venv — deleting either "unrelated" app would silently break the other's service | Document the dependency in each app's manifest so future removal planning catches it; do not remove `/apps/appletv-remote` or `/apps/flixapp` venvs without checking |
+| 11 | **`atv-remote.service` — disabled duplicate unit** | Dead config clutter, identical target to `appletv-remote.service` | Remove once `appletv-remote.service` is confirmed canonical (already removed — see §6) |
 
 ---
 
@@ -257,7 +256,7 @@ Every actionable item across all 8 lanes, one table, prioritized by impact.
 All 172 listening ports were traced end-to-end (listener -> pid -> exact binary/script -> launcher -> config file -> working dir). **0 unexplained.** Breakdown: ~110 Docker-compose-published (traced to the exact compose file incl. nested paths like /apps/AFFiNE/.docker/selfhost/, /apps/kanbu/docker/, /apps/komodo/compose/); ~35 systemd units under /etc/systemd/system (xtr, boxy, img2, ppv, n50-runner, del-web/del-docs, flixapp, glmflix, hls-manager, vshare, appletv-remote/astv-remote, etc.); 3 host-network containers (memos:8014, bjkflix:8061, notesnook-web:8018); remainder are system daemons + a few manual/orphan processes.
 
 ### Actual exposure — ufw default-DENY is the real gate
-Host runs **ufw active, policy DROP**. A process binding 0.0.0.0 is **NOT publicly reachable** unless ufw explicitly allows the port. Verified BLOCKED despite 0.0.0.0 bind: del-docs 8072/8073, AionUi 9000, dev servers 3015/3019/3020/3901, PCP pmcd 44321, **Samba 139/445**. This corrects the recurring "samba/dev-server public exposure" flag from prior audits — bind-address artifacts, not real exposure. Genuinely reachable = only ufw ALLOW rules (80/443 nginx, flussonic 8050, rustdesk 21118, and an operator-opened set, some scoped to admin IP 72.80.59.32). Worth a glance: 8087 (17imgshare gunicorn, manual/orphan) is ufw-allowed Anywhere.
+Host runs **ufw active, default policy deny (incoming)**. A process binding 0.0.0.0 is **NOT publicly reachable** unless ufw explicitly allows the port. Verified BLOCKED despite 0.0.0.0 bind: del-docs 8072/8073, AionUi 9000, dev servers 3015/3019/3020/3901, PCP pmcd 44321, **Samba 139/445**. This corrects the recurring "samba/dev-server public exposure" flag from prior audits — bind-address artifacts, not real exposure. Genuinely reachable = only ufw ALLOW rules (80/443 nginx, flussonic 8050, rustdesk 21118, and an operator-opened set, some scoped to admin IP 72.80.59.32). Worth a glance: 8087 (17imgshare gunicorn, manual/orphan) is ufw-allowed Anywhere.
 
 ### Manual / orphan processes (functioning, no systemd/compose supervisor)
 17imgshare gunicorn (8087), node server.js in /apps/htmls (8195), claude-code-router (3456), adb (5037), anisette container (6969, bare docker run), netmuxd container (5353, bare docker run), a stray Playwright relay. Candidates to convert to systemd units or leave as-is.

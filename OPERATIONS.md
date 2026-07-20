@@ -124,6 +124,16 @@ file is gitignored and gets stale as soon as anything changes on the server —
 regenerate it after adding/removing/re-porting an app, rather than trusting an
 old copy.
 
+## Whole-server inventory export
+
+A self-contained, browsable export of the full inventory (built from `del.db` plus
+the `/apps/del/miscwork/` build scripts, gitignored) is served at
+`https://del.bjk.ai/miscwork.html` (aliased at `/inventory`), basic-auth protected
+by the same Nginx `auth_basic_user_file` used for `/docs`. It is a point-in-time
+snapshot for browsing/handoff, not a live-refreshing view — regenerate it manually
+from `/apps/del/miscwork/extract.py` (and the other scripts in that directory) when
+it goes stale; there is no scheduled job that rebuilds it.
+
 ## Backup
 
 ```bash

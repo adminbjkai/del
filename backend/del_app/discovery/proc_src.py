@@ -21,6 +21,17 @@ LONG_RUNNING_ETIMES_THRESHOLD = 300  # 5 min: excludes short-lived/transient pro
 # containerized workloads or generic system daemons.
 SCAN_ROOT_PREFIXES = ("/apps", "/data/apps", "/opt", "/srv", "/var/www")
 
+# A command line can legitimately carry a secret-shaped flag (e.g.
+# `--password=...`, `--token=...`); strip the value before this ever reaches
+# the DB/UI. Mirrors del_app.jobs.sanitize_output's pattern.
+_SECRET_ARG_RE = re.compile(r"(?i)([-]{0,2}(?:password|token|secret|api[_-]?key|key)[=: ])\S+")
+
+
+def _sanitize_args(args: str) -> str:
+    """Redact secret-shaped values from a process's command line before it is
+    stored/displayed. Truncated separately by the caller."""
+    return _SECRET_ARG_RE.sub(r"\1***", args)
+
 
 def _run(args: list[str]) -> str:
     try:
@@ -302,7 +313,7 @@ def _collect_processes() -> list[Resource]:
                     "etimes": etimes,
                     "comm": comm,
                     "exe": exe,
-                    "args_redacted": args[:200],
+                    "args_redacted": _sanitize_args(args)[:200],
                     "cwd": cwd,
                     "container": container_name,
                     "systemd_unit": systemd_unit,
