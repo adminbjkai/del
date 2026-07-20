@@ -406,8 +406,11 @@ def build_apps(
         app = apps.get(slug)
         if app is None:
             app = apps.setdefault(slug, _AppBuilder(slug, slug, "systemd"))
-            if unit.state == "active":
-                app.status = "running"
+        # An active systemd unit means the app is running, even if a stopped
+        # compose file for the same dir made it look "compose_stopped" (e.g.
+        # boxy runs via boxy.service, not its compose file).
+        if unit.state == "active":
+            app.status = "running"
         app.dir_paths.add(app_dir)
         app.add(
             unit,
