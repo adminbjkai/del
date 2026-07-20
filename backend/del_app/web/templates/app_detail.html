@@ -60,7 +60,10 @@
       <tbody>
         {% for a in items %}
         <tr>
-          <td>{{ a.get('resource_display') or a.get('resource_key') }}{% if a.get('shared') %} <span class="badge badge-amber">shared</span>{% endif %}</td>
+          <td>{{ a.get('resource_display') or a.get('resource_key') }}{% if a.get('shared') %} <span class="badge badge-amber">shared</span>{% endif %}
+            {% set rk = a.get('resource_key') %}
+            {% if rk and rk.startswith('/') and rk != a.get('resource_display') %}<div class="muted mono" style="font-size:0.8em">{{ rk }}</div>{% endif %}
+          </td>
           {% if section_key == 'docker' %}
           {% set mappings = a.get('port_mappings') %}
           <td>{{ mappings | map(attribute='host') | list | join(', ') if mappings else '—' }}</td>
