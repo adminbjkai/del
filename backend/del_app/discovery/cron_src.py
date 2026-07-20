@@ -164,7 +164,12 @@ def collect() -> list[Resource]:
     try:
         if os.path.isdir("/etc/cron.d"):
             for name in sorted(os.listdir("/etc/cron.d")):
-                _parse_system_crontab(os.path.join("/etc/cron.d", name), resources)
+                path = os.path.join("/etc/cron.d", name)
+                try:
+                    _parse_system_crontab(path, resources)
+                except Exception:
+                    # one bad cron.d file must not skip the rest of the directory
+                    logger.exception("cron_src: failed to parse %s", path)
     except Exception:
         logger.exception("cron_src: /etc/cron.d parse failed")
 

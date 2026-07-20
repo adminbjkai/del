@@ -498,35 +498,47 @@ def dashboard(
 ) -> HTMLResponse:
     conn = get_db()
     try:
-        apps = _rows(q(conn, "SELECT * FROM applications"))
+        latest = _latest_scan_id(conn)
+        # Dashboard stat cards must match the counts on the pages they link
+        # to (/apps, /orphans): scope everything to the latest scan, not
+        # every application/resource ever seen across scan history.
+        apps_sql = "SELECT * FROM applications"
+        apps_params: tuple = ()
+        if latest is not None:
+            apps_sql += " WHERE last_seen = ?"
+            apps_params = (latest,)
+        apps = _rows(q(conn, apps_sql, apps_params))
         running_jobs = _rows(
             q(conn, "SELECT * FROM jobs WHERE status = 'running'")
         )
-        uncertain = _rows(
-            q(
-                conn,
-                "SELECT * FROM associations WHERE removal_eligible = 'uncertain'",
-            )
-        )
-        shared = _rows(q(conn, "SELECT * FROM resources WHERE state != 'removed'"))
+        uncertain_sql = """
+                SELECT a.* FROM associations a
+                JOIN resources r ON r.id = a.resource_id
+                WHERE a.removal_eligible = 'uncertain'
+                """
+        uncertain_params: tuple = ()
+        if latest is not None:
+            uncertain_sql += " AND r.last_seen = ?"
+            uncertain_params = (latest,)
+        uncertain = _rows(q(conn, uncertain_sql, uncertain_params))
         shared_count = len(
             _rows(q(conn, "SELECT DISTINCT resource_id FROM associations WHERE shared = 1"))
         )
-        orphan_candidates = _rows(
-            q(
-                conn,
-                """
+        orphan_sql = """
                 SELECT r.* FROM resources r
                 LEFT JOIN associations a ON a.resource_id = r.id
                 WHERE a.id IS NULL
-                """,
-            )
-        )
+                """
+        orphan_params: tuple = ()
+        if latest is not None:
+            orphan_sql += " AND r.last_seen = ?"
+            orphan_params = (latest,)
+        orphan_candidates = _rows(q(conn, orphan_sql, orphan_params))
         recent_scans = _rows(
             q(conn, "SELECT * FROM scans ORDER BY id DESC LIMIT 5")
         )
         recent_jobs = _rows(q(conn, "SELECT * FROM jobs ORDER BY id DESC LIMIT 5"))
-        disk_usage_bytes = _disk_usage_bytes(conn, _latest_scan_id(conn))
+        disk_usage_bytes = _disk_usage_bytes(conn, latest)
     finally:
         conn.close()
 
@@ -655,20 +667,22 @@ def app_detail(
         rows = q(conn, "SELECT * FROM applications WHERE slug = ?", (slug,))
         latest_scan = _latest_scan_id(conn)
         app = _rows(rows)[0] if rows else {"slug": slug, "name": slug}
-        assoc_rows = _rows(
-            q(
-                conn,
-                """
+        # Only show associations to resources still present as of the latest
+        # scan; otherwise a resource removed in an earlier scan (stale
+        # last_seen) would keep showing up here forever.
+        assoc_sql = """
                 SELECT a.*, r.type as resource_type, r.key as resource_key,
                        r.display as resource_display, r.path as resource_path,
                        r.state as resource_state, r.data_json as resource_data_json
                 FROM associations a
                 JOIN resources r ON r.id = a.resource_id
                 WHERE a.app_id = (SELECT id FROM applications WHERE slug = ?)
-                """,
-                (slug,),
-            )
-        )
+                """
+        assoc_params: tuple = (slug,)
+        if latest_scan is not None:
+            assoc_sql += " AND r.last_seen = ?"
+            assoc_params = (slug, latest_scan)
+        assoc_rows = _rows(q(conn, assoc_sql, assoc_params))
     finally:
         conn.close()
 
@@ -761,7 +775,6 @@ def plan_form(
     conn = get_db()
     try:
         rows = q(conn, "SELECT * FROM applications WHERE slug = ?", (slug,))
-        latest_scan = _latest_scan_id(conn)
         app = _rows(rows)[0] if rows else {"slug": slug, "name": slug}
         volumes = _rows(
             q(

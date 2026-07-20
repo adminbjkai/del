@@ -6,8 +6,6 @@ planner/jobs sibling-lane modules with simple fakes.
 """
 from __future__ import annotations
 
-import types
-
 import pytest
 from fastapi import FastAPI, Request
 from fastapi.responses import RedirectResponse
@@ -110,6 +108,36 @@ def test_dashboard_200(authed_client):
     resp = authed_client.get("/")
     assert resp.status_code == 200
     assert "Dashboard" in resp.text
+
+
+def test_dashboard_app_count_excludes_stale_scan_apps(authed_client, settings_env):
+    """The dashboard's 'Applications' stat card must match the /apps default
+    view: an application only present in an older scan (stale last_seen)
+    must not inflate the count."""
+    from del_app.db import get_db, x
+
+    conn = get_db()
+    try:
+        old_scan_id = x(conn, "INSERT INTO scans (status) VALUES ('done')")
+        new_scan_id = x(conn, "INSERT INTO scans (status) VALUES ('done')")
+        x(
+            conn,
+            "INSERT INTO applications (slug, name, status, kind, last_seen) VALUES (?,?,?,?,?)",
+            ("current-app", "Current App", "running", "compose", new_scan_id),
+        )
+        x(
+            conn,
+            "INSERT INTO applications (slug, name, status, kind, last_seen) VALUES (?,?,?,?,?)",
+            ("stale-removed-app", "Stale Removed App", "running", "compose", old_scan_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    resp = authed_client.get("/")
+    assert resp.status_code == 200
+    # exactly one app (current-app) counted, not both
+    assert '<div class="stat-value">1</div>' in resp.text
 
 
 def test_apps_list_200(authed_client):
@@ -230,6 +258,55 @@ def test_resources_tab_counts_reflect_latest_scan(authed_client, settings_env):
     assert "count-pill" in resp.text
 
 
+def test_app_detail_excludes_associations_from_stale_scan(authed_client, settings_env):
+    """A resource whose last_seen predates the latest scan (i.e. it was
+    removed/vanished in a later scan) must not show up as still associated
+    with the app on its detail page."""
+    from del_app.db import get_db, x
+
+    conn = get_db()
+    try:
+        old_scan_id = x(conn, "INSERT INTO scans (status) VALUES ('done')")
+        new_scan_id = x(conn, "INSERT INTO scans (status) VALUES ('done')")
+        app_id = x(
+            conn,
+            "INSERT INTO applications (slug, name, status, kind, last_seen) VALUES (?,?,?,?,?)",
+            ("stale-app", "Stale App", "running", "compose", new_scan_id),
+        )
+        stale_res_id = x(
+            conn,
+            "INSERT INTO resources (type, key, display, state, data_json, last_seen) "
+            "VALUES (?,?,?,?,?,?)",
+            ("container", "gone-container", "gone-container", "running", "{}", old_scan_id),
+        )
+        fresh_res_id = x(
+            conn,
+            "INSERT INTO resources (type, key, display, state, data_json, last_seen) "
+            "VALUES (?,?,?,?,?,?)",
+            ("container", "still-here", "still-here", "running", "{}", new_scan_id),
+        )
+        x(
+            conn,
+            "INSERT INTO associations (app_id, resource_id, confidence, ownership, shared) "
+            "VALUES (?,?,?,?,?)",
+            (app_id, stale_res_id, 95, "exclusive", 0),
+        )
+        x(
+            conn,
+            "INSERT INTO associations (app_id, resource_id, confidence, ownership, shared) "
+            "VALUES (?,?,?,?,?)",
+            (app_id, fresh_res_id, 95, "exclusive", 0),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    resp = authed_client.get("/apps/stale-app")
+    assert resp.status_code == 200
+    assert "still-here" in resp.text
+    assert "gone-container" not in resp.text
+
+
 def test_orphans_grouped_and_review_only(authed_client, settings_env):
     _seed_resources(settings_env)
     resp = authed_client.get("/orphans")
@@ -334,6 +411,29 @@ class _FakePlan:
 def _insert_app(conn, slug="testapp", name="Test App"):
     from del_app.db import x
     return x(conn, "INSERT INTO applications (slug, name) VALUES (?, ?)", (slug, name))
+
+
+def test_plan_form_has_complete_removal_preset(authed_client, settings_env):
+    """The plan-build form must expose a one-click 'complete removal' preset
+    that ticks every removal option, with a visible data-loss warning."""
+    from del_app.db import get_db
+    conn = get_db()
+    try:
+        _insert_app(conn, "presetapp", "Preset App")
+    finally:
+        conn.close()
+
+    resp = authed_client.get("/apps/presetapp/plan")
+    assert resp.status_code == 200
+    assert 'id="preset-complete-removal"' in resp.text
+    assert "Complete removal" in resp.text
+    assert "permanently deletes all data" in resp.text
+    # the individual options the preset must be able to drive are present
+    for expected_id in (
+        "remove-named-volumes", "remove_images", "remove-bind-data",
+        "remove-repo", "remove-networks", "backup",
+    ):
+        assert f'id="{expected_id}"' in resp.text
 
 
 def test_plan_post_builds_plan(authed_client, monkeypatch, settings_env):

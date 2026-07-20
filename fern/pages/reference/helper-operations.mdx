@@ -22,6 +22,11 @@ every request, success or refusal.
   <Accordion title="ping">
     Health check. No arguments. Confirms the helper socket is reachable.
   </Accordion>
+  <Accordion title="list_listeners">
+    Read-only `ss -lntp` as root. Used by discovery (`proc_src.py`) to resolve
+    listening-port ownership when the caller isn't already root/sudo-capable — e.g.
+    under a `NoNewPrivileges` web-process context. Never mutates anything.
+  </Accordion>
   <Accordion title="compose_down — project, config_files[], remove_volumes?, remove_images_mode?">
     Brings a Compose project down. The config files must exist and be under approved
     roots.

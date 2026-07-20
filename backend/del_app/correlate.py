@@ -15,7 +15,6 @@ from __future__ import annotations
 import difflib
 import logging
 import re
-from typing import Any
 
 from del_app.config import get_settings
 from del_app.manifests import Manifest
@@ -454,27 +453,36 @@ def build_apps(
             app.add(site, confidence=confidence, ownership="exclusive", data_loss_risk="config", evidence=evidence)
             app.domains.update(server_names)
 
-    # --- Step 8b: enabled nginx sites for stopped apps: exact server_name ---
-    # After an app's containers are removed, port matching has nothing to
-    # match, but an ENABLED site whose first server_name label slugifies to
-    # exactly the app slug is still that app's site (exact match only — no
-    # fuzzy similarity, which caused cross-app pollution before).
+    # --- Step 8b: nginx configs matched by exact server_name -----------------
+    # After an app's containers are removed, port matching has nothing to match.
+    # Any nginx config file (enabled OR a differently-named / .conf / .bak
+    # available copy) whose first server_name label slugifies to EXACTLY the
+    # app slug is that app's config — include it so removal is complete and no
+    # stale config file is left behind. Exact match only (no fuzzy similarity,
+    # which previously caused cross-app pollution). Only ENABLED sites
+    # contribute to app.domains; non-enabled copies are config debris.
     for site in nginx_sites:
-        if not site.data.get("enabled"):
-            continue
+        enabled = bool(site.data.get("enabled"))
         for sn in site.data.get("server_names", []) or []:
             label = _slugify(sn.split(".")[0])
             app = apps.get(label)
             if app is None or (site.type, site.key) in app.assocs:
                 continue
+            if enabled:
+                conf = 85
+                stmt = f"enabled site server_name {sn} exactly matches app slug (no live upstream — app stopped)"
+            else:
+                conf = 80
+                stmt = f"nginx config (not enabled) with server_name {sn} exactly matching app slug — config debris to remove with the app"
             app.add(
                 site,
-                confidence=85,
+                confidence=conf,
                 ownership="exclusive",
                 data_loss_risk="config",
-                evidence=[Evidence(source="nginx_src", statement=f"enabled site server_name {sn} exactly matches app slug (no live upstream — app stopped)", weight=85)],
+                evidence=[Evidence(source="nginx_src", statement=stmt, weight=conf)],
             )
-            app.domains.add(sn)
+            if enabled:
+                app.domains.add(sn)
 
     # --- Step 9: systemd units: WorkingDirectory/ExecStart under app dir ----
     unit_slug: dict[str, str] = {}

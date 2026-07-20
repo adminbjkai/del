@@ -74,39 +74,3 @@ def save(m: Manifest) -> None:
         yaml.safe_dump(m.model_dump(exclude_none=True), f, sort_keys=False)
 
 
-def generate_from_app(app, assocs) -> Manifest:
-    """Build a starter Manifest from a correlated AppRecord + its Associations,
-    pre-populating fields from the resources currently associated with the app."""
-    compose = []
-    host_paths = []
-    systemd_units = []
-    nginx = []
-    cron = []
-
-    for a in assocs:
-        if a.resource_type == "compose_project":
-            compose.append(a.resource_key)
-        elif a.resource_type in ("directory", "bind_mount", "git_repo"):
-            host_paths.append(a.resource_key)
-        elif a.resource_type in ("systemd_unit", "systemd_timer"):
-            systemd_units.append(a.resource_key)
-        elif a.resource_type == "nginx_site":
-            nginx.append(a.resource_key)
-        elif a.resource_type == "cron_entry":
-            cron.append(a.resource_key)
-
-    return Manifest(
-        id=app.slug,
-        name=app.name,
-        status=app.status,
-        domains=list(app.domains),
-        compose=compose,
-        repositories=[],
-        host_paths=host_paths,
-        systemd_units=systemd_units,
-        nginx=nginx,
-        cron=cron,
-        notes=None,
-        shared=[a.resource_key for a in assocs if a.shared],
-        excluded=[a.resource_key for a in assocs if a.excluded],
-    )

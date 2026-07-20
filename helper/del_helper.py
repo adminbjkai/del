@@ -25,7 +25,6 @@ import json
 import os
 import pwd
 import signal
-import socket
 import socketserver
 import stat
 import subprocess
@@ -283,7 +282,9 @@ class Operations:
 
     def systemd_rm_unit(self, args, dry_run):
         unit_file = V.validate_unit_name(args.get("unit", ""), self.policy,
-                                         require_unit_file=True)
+                                         require_unit_file=True, must_exist=False)
+        if not os.path.isfile(unit_file):
+            return {"output": f"unit file already absent: {unit_file}", "changed": []}
         cmds = [["rm", "--", unit_file], ["systemctl", "daemon-reload"]]
         if dry_run:
             return {"output": _fmt_cmds(cmds), "changed": []}
@@ -297,7 +298,9 @@ class Operations:
 
     # -- cron ----------------------------------------------------------------
     def cron_rm(self, args, dry_run):
-        path = V.validate_cron_path(args.get("path", ""), self.policy)
+        path = V.validate_cron_path(args.get("path", ""), self.policy, must_exist=False)
+        if not os.path.isfile(path):
+            return {"output": f"cron file already absent: {path}", "changed": []}
         cmd = ["rm", "--", path]
         if dry_run:
             return {"output": _fmt_cmds([cmd]), "changed": []}
@@ -309,6 +312,11 @@ class Operations:
     # -- nginx ---------------------------------------------------------------
     def nginx_rm_site(self, args, dry_run):
         paths = V.validate_nginx_site_paths(args.get("paths"), self.policy)
+        # idempotent: paths already removed (e.g. a prior partial run, or
+        # sites-enabled already unlinked) need no backup/removal action.
+        existing = [p for p in paths if os.path.lexists(p)]
+        if not existing:
+            return {"output": f"nginx site paths already absent: {paths}", "changed": []}
         backup_dir = self.policy.get("backup_dir", "/apps/del/backups")
         ts = _timestamp()
         # plan: backup each file, remove each, nginx -t, reload-or-restore
@@ -316,7 +324,7 @@ class Operations:
             (p, os.path.join(
                 backup_dir,
                 f"nginx-{os.path.basename(os.path.dirname(p))}-{os.path.basename(p)}.{ts}.bak"))
-            for p in paths
+            for p in existing
         ]
         if dry_run:
             cmds = []
@@ -380,7 +388,10 @@ class Operations:
 
     # -- filesystem ----------------------------------------------------------
     def path_delete(self, args, dry_run):
-        realpath = V.validate_path_for_deletion(args.get("path", ""), self.policy)
+        realpath = V.validate_path_for_deletion(args.get("path", ""), self.policy,
+                                                must_exist=False)
+        if not os.path.lexists(realpath):
+            return {"output": f"path already absent: {realpath}", "changed": []}
         # defence-in-depth guard, matches validation but re-asserted at exec site
         assert realpath.count("/") >= 2, "refusing shallow path"
         cmd = ["rm", "-rf", "--one-file-system", "--", realpath]

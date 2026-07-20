@@ -68,12 +68,13 @@ def _matched_root(realpath: str, roots: Iterable[str]) -> str | None:
 # ---------------------------------------------------------------------------
 # path deletion
 # ---------------------------------------------------------------------------
-def validate_path_for_deletion(path: str, policy: dict) -> str:
+def validate_path_for_deletion(path: str, policy: dict, must_exist: bool = True) -> str:
     """Validate ``path`` for deletion and return its canonical realpath.
 
     Rules enforced (in order):
       1. must be a non-empty absolute path string
-      2. realpath must exist
+      2. realpath must exist (unless ``must_exist=False``, for idempotent
+         callers that treat an already-absent target as success)
       3. realpath must live strictly under an approved deletion root
          (root + at least one deeper component)
       4. realpath must NOT be, nor resolve to, any protected root
@@ -91,7 +92,7 @@ def validate_path_for_deletion(path: str, policy: dict) -> str:
 
     if not os.path.isabs(realpath):
         raise ValidationError(f"resolved path is not absolute: {realpath!r}")
-    if not os.path.exists(realpath):
+    if must_exist and not os.path.exists(realpath):
         raise ValidationError(f"path does not exist: {realpath!r}")
 
     approved = policy.get("approved_deletion_roots", [])
@@ -125,13 +126,16 @@ def validate_path_for_deletion(path: str, policy: dict) -> str:
 # systemd unit names
 # ---------------------------------------------------------------------------
 def validate_unit_name(name: str, policy: dict | None = None,
-                       require_unit_file: bool = False) -> str:
+                       require_unit_file: bool = False,
+                       must_exist: bool = True) -> str:
     """Validate a systemd unit/timer name.
 
     Rejects anything that is not ``^[A-Za-z0-9@_.\\-]+\\.(service|timer)$`` — which
     excludes shell metacharacters, spaces, slashes and injection attempts such as
     ``foo.service; rm -rf /``.  When ``require_unit_file`` is set (unit removal),
-    the corresponding file must exist under the configured systemd unit dir.
+    the corresponding file must exist under the configured systemd unit dir,
+    unless ``must_exist=False`` (for idempotent callers that treat an
+    already-absent unit file as success).
     """
     if not isinstance(name, str) or not _UNIT_RE.match(name):
         raise ValidationError(f"invalid systemd unit name: {name!r}")
@@ -144,7 +148,7 @@ def validate_unit_name(name: str, policy: dict | None = None,
         if not _is_under(realpath, unit_dir):
             raise ValidationError(
                 f"unit file escapes {unit_dir}: {realpath!r}")
-        if not os.path.isfile(realpath):
+        if must_exist and not os.path.isfile(realpath):
             raise ValidationError(f"unit file not found: {candidate!r}")
         return realpath
 
@@ -235,15 +239,17 @@ def validate_nginx_site_paths(paths, policy: dict) -> list[str]:
 # ---------------------------------------------------------------------------
 # cron.d files
 # ---------------------------------------------------------------------------
-def validate_cron_path(path: str, policy: dict) -> str:
-    """A cron.d file must resolve under the configured cron.d dir and exist."""
+def validate_cron_path(path: str, policy: dict, must_exist: bool = True) -> str:
+    """A cron.d file must resolve under the configured cron.d dir and exist,
+    unless ``must_exist=False`` (for idempotent callers that treat an
+    already-absent cron file as success)."""
     cron_dir = policy.get("cron_d_dir", "/etc/cron.d")
     if not isinstance(path, str) or not os.path.isabs(path):
         raise ValidationError(f"cron path must be absolute: {path!r}")
     realpath = os.path.realpath(path)
     if _matched_root(realpath, [cron_dir]) is None:
         raise ValidationError(f"cron path not under {cron_dir}: {realpath!r}")
-    if not os.path.isfile(realpath):
+    if must_exist and not os.path.isfile(realpath):
         raise ValidationError(f"cron file does not exist: {path!r}")
     return realpath
 

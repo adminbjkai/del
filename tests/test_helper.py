@@ -222,6 +222,46 @@ def test_path_delete_dry_run_does_not_execute(tmp_policy):
     assert os.path.isdir(target)  # still present -> nothing executed
 
 
+def test_path_delete_already_absent_is_idempotent_success(tmp_policy):
+    """A target that no longer exists (e.g. removed by a prior partial run)
+    must be reported as success, not raise."""
+    approved = tmp_policy["approved_deletion_roots"][0]
+    target = os.path.join(approved, "already-gone")
+    ops = H.Operations(tmp_policy)
+    res = ops.path_delete({"path": target}, dry_run=False)
+    assert "already absent" in res["output"]
+    assert res["changed"] == []
+
+
+def test_cron_rm_already_absent_is_idempotent_success(tmp_policy):
+    cron_dir = tmp_policy["cron_d_dir"]
+    os.makedirs(cron_dir, exist_ok=True)
+    path = os.path.join(cron_dir, "ghost")
+    ops = H.Operations(tmp_policy)
+    res = ops.cron_rm({"path": path}, dry_run=False)
+    assert "already absent" in res["output"]
+    assert res["changed"] == []
+
+
+def test_systemd_rm_unit_already_absent_is_idempotent_success(tmp_policy):
+    unit_dir = tmp_policy["systemd_unit_dir"]
+    os.makedirs(unit_dir, exist_ok=True)
+    ops = H.Operations(tmp_policy)
+    res = ops.systemd_rm_unit({"unit": "ghost.service"}, dry_run=False)
+    assert "already absent" in res["output"]
+    assert res["changed"] == []
+
+
+def test_nginx_rm_site_already_absent_is_idempotent_success(tmp_policy):
+    site_dir = tmp_policy["nginx_site_roots"][0]
+    os.makedirs(site_dir, exist_ok=True)
+    ghost = os.path.join(site_dir, "ghost.conf")
+    ops = H.Operations(tmp_policy)
+    res = ops.nginx_rm_site({"paths": [ghost]}, dry_run=False)
+    assert "already absent" in res["output"]
+    assert res["changed"] == []
+
+
 # ---------------------------------------------------------------------------
 # request dispatch: unknown op + malformed JSON
 # ---------------------------------------------------------------------------

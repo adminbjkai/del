@@ -34,10 +34,11 @@ subprocess argument arrays (`shell=False`) — never a shell string.
 
 ### Allowlisted operations (summary)
 
-`ping`, `compose_down`, `container_stop`/`container_rm`, `image_rm`, `volume_rm`,
-`network_rm`, `systemd_stop`/`systemd_disable`/`systemd_rm_unit`, `cron_rm`,
-`nginx_rm_site`, `nginx_test`, `nginx_test_reload`, `path_delete`, `path_restore`,
-`tmux_kill`, `process_term`, `backup_tar`, `volume_backup`, `file_backup`. Nothing
+`ping`, `list_listeners`, `compose_down`, `container_stop`/`container_rm`,
+`image_rm`, `volume_rm`, `network_rm`, `systemd_stop`/`systemd_disable`/`systemd_rm_unit`,
+`cron_rm`, `nginx_rm_site`, `nginx_test`, `nginx_test_reload`, `path_delete`,
+`path_restore`, `tmux_kill`, `process_term`, `backup_tar`, `volume_backup`,
+`file_backup` — 22 operations total. Nothing
 outside this fixed list is possible; a compromised `del-web` cannot smuggle an
 arbitrary command past the
 helper. Every operation supports `dry_run` (returns what would happen without
@@ -98,7 +99,7 @@ Full attacker/vector/mitigation table: see
 | Vector | Mitigation |
 |---|---|
 | Internet → Nginx → auth bypass | TLS termination + security headers at Nginx; `del-web` bound to 127.0.0.1 only; auth on every route but `/healthz`; rate-limited login |
-| Compromised web session → arbitrary host command | Fixed ~21-op helper allowlist with independent re-validation bounds the blast radius regardless of what `del-web` is tricked into requesting |
+| Compromised web session → arbitrary host command | Fixed 22-op helper allowlist with independent re-validation bounds the blast radius regardless of what `del-web` is tricked into requesting |
 | Path traversal / symlink escape | `realpath` canonicalization + protected-root refusal + approved-root/approved-plan checks on every path argument |
 | Command/argument injection | subprocess arg-arrays only, `shell=False`, everywhere |
 | Secrets exposure | env values stripped at collection; never logged or stored |

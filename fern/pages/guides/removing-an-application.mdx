@@ -16,29 +16,40 @@ touch. The example app throughout is a disposable demo called *DEL Demo*.
   the steps; don't skip the dry-run.
 </Callout>
 
-## Removing everything (complete uninstall)
+## The easy way: "Complete removal (everything)"
 
-If your goal is to wipe an application off the host **entirely** — every container,
-image, volume, network, nginx site, systemd unit, cron job, and its whole project
-directory — this is the exact set of choices to make in the plan builder (Step 3
-below). Anything you leave unchecked is deliberately kept.
+If your goal is to wipe an application off the host **entirely**, don't hand-pick
+options one at a time — the plan builder has a single checkbox for exactly this.
+
+<Steps>
+  <Step title="Open the plan builder and check the box">
+    On the app detail page, click **Plan removal**, then tick
+    **Complete removal (everything)** at the top of the form. This one click selects
+    every teardown option for you: **Remove named volumes** (on, with every
+    per-volume checkbox ticked — no separate approval step needed), **Remove
+    images: Exclusive to this app**, **Remove bind-mounted data directories** (on),
+    **Remove project repository / directory** (on), **Remove app-specific
+    networks** (on), and **Backup mode: Full (config + volumes)**.
+  </Step>
+  <Step title="Build the plan, dry-run it, then run it live">
+    Click **Build plan**, read the preview (below), dry-run it, then run it live and
+    type **`DELETE VOLUMES`** at the execute gate — the one confirmation still
+    required for the one irreversible operation, even on a one-click plan.
+  </Step>
+</Steps>
 
 <Callout intent="warning">
-  Take a backup first. Set **Backup mode: Full (config + volumes)** so a complete
-  removal is still recoverable from `/apps/del/backups/`.
+  **Complete removal permanently deletes all data for this app.** The preset takes a
+  full backup first (so it's recoverable from `/apps/del/backups/`), but it still
+  requires the dry-run and the typed live-execution phrase below — the checkbox
+  chooses *what* to remove, not *whether* to skip DEL's safety gates.
 </Callout>
 
-| Plan option | Set it to | If you leave it off, this survives |
-|---|---|---|
-| **Backup mode** | **Full (config + volumes)** | You keep no safety net — a wrong deletion can't be undone. |
-| **Remove named volumes** + tick every volume | **On**, all volumes checked | The app's named volumes (its persistent data) stay on the host. |
-| **Remove images** | **Exclusive to this app** | The app's Docker images stay in your image store. |
-| **Remove bind-mounted data directories** | **On** | Host directories the app bind-mounted (real data on disk) stay. |
-| **Remove project repository / directory** | **On** | The project folder — Compose files, source — stays. |
-| **Remove app-specific networks** | **On** | The app's Docker network stays. |
-
-Then, at execution time, choose **Live** and type the **`DELETE VOLUMES`** phrase to
-authorize the (irreversible) volume deletion.
+Per-volume approval happens right here on the plan form — ticking (or preset-ticking)
+a volume's checkbox **is** the approval; there's no separate "approve this volume"
+step elsewhere. Live deletion of any ticked volume additionally requires the typed
+`DELETE VOLUMES` phrase at execution time (Step 6 below) — that's the one extra gate
+that can't be skipped by a preset.
 
 <Callout intent="error">
   **What DEL never auto-removes, even on a "remove everything" plan:**
@@ -189,10 +200,29 @@ manual-follow-up list for you to finish by hand.
       <img src="../../assets/10-live-job.png" alt="Completed live removal job" />
     </Frame>
 
-    The application is now removed. A follow-up [scan](/guides/scanning) will show it
-    gone from your inventory.
+    The application is now removed.
   </Step>
 </Steps>
+
+## After a successful removal: what the UI does next
+
+A successful **live** removal job automatically triggers a rescan — you don't need
+to run one yourself. Because of that, the UI updates immediately:
+
+- The app **disappears from Applications** on its own, since that list only shows
+  apps present in the latest scan.
+- Visiting the app's URL directly (e.g. from a bookmark or an old link) shows its
+  detail page with a **"not present in the latest scan"** banner instead of an
+  error — its history (jobs, plans, backups) is still there, it just isn't treated
+  as a currently-installed app anymore.
+- Add `?show=removed` to the **Applications** URL if you want to see removed apps
+  listed alongside active ones.
+
+<Callout intent="info">
+  If you don't see this — the app still listed as if nothing happened — check the
+  job actually finished `success` and was a **live** run, not a dry-run. Dry-runs
+  never trigger a rescan because they never change anything.
+</Callout>
 
 ## If a step fails
 

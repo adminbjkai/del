@@ -5,6 +5,7 @@ no process is signalled, no port is touched, no tmux session is created/killed.
 from __future__ import annotations
 
 import logging
+import os
 import re
 import subprocess
 
@@ -83,8 +84,6 @@ def _proc_fd_socket_inodes(pid: int) -> set[str]:
     not silently faked."""
     inodes: set[str] = set()
     try:
-        import os
-
         fd_dir = f"/proc/{pid}/fd"
         for entry in os.listdir(fd_dir):
             try:
@@ -274,12 +273,18 @@ def _collect_processes() -> list[Resource]:
 
         cwd = None
         try:
-            cwd = __import__("os").readlink(f"/proc/{pid}/cwd")
+            cwd = os.readlink(f"/proc/{pid}/cwd")
         except OSError:
             pass
 
         if not cwd or not cwd.startswith(SCAN_ROOT_PREFIXES):
             continue  # not a host-run app process under a scan root; skip noise
+
+        exe = None
+        try:
+            exe = os.readlink(f"/proc/{pid}/exe")
+        except OSError:
+            pass  # e.g. gone by the time we look, or a permission-denied exe link
 
         container_name, systemd_unit = _cgroup_owner(pid, docker_map)
 
@@ -296,6 +301,7 @@ def _collect_processes() -> list[Resource]:
                     "user": user,
                     "etimes": etimes,
                     "comm": comm,
+                    "exe": exe,
                     "args_redacted": args[:200],
                     "cwd": cwd,
                     "container": container_name,

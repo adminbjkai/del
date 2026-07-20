@@ -13,9 +13,9 @@
   {% endif %}
 
   <section class="panel">
-    <h2>Steps</h2>
+    <h2>Steps to remove ({{ plan.get('steps', [])|length }})</h2>
     {% for stage, steps in plan.get('stages', {}).items() %}
-    <h3>{{ stage }}</h3>
+    <h3>{{ stage }} ({{ steps|length }})</h3>
     <table class="table">
       <thead><tr><th>#</th><th>Operation</th><th>Description</th><th>Danger</th><th>Reversible</th></tr></thead>
       <tbody>
@@ -35,14 +35,14 @@
 
   {% if plan.get('preserved') %}
   <div class="box box-info">
-    <h3>Preserved (not removed)</h3>
+    <h3>Preserved, not removed ({{ plan.get('preserved')|length }})</h3>
     <ul>{% for p in plan.get('preserved') %}<li>{{ p }}</li>{% endfor %}</ul>
   </div>
   {% endif %}
 
   {% if plan.get('manual_followup') %}
   <div class="box box-info">
-    <h3>Manual follow-up required</h3>
+    <h3>Manual follow-up required ({{ plan.get('manual_followup')|length }})</h3>
     <ul>{% for m in plan.get('manual_followup') %}<li>{{ m }}</li>{% endfor %}</ul>
   </div>
   {% endif %}
@@ -67,10 +67,21 @@
   <form method="post" action="/apps/{{ app.get('slug') }}/plan" class="stacked-form">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
+    <div class="box box-warning" id="preset-complete-removal-box">
+      <label>
+        <input type="checkbox" id="preset-complete-removal">
+        <strong>Complete removal (everything)</strong> — one-click selects every
+        removal option below: named volumes (and every per-volume approval),
+        images exclusive to this app, bind-mounted data, the project
+        repository/directory, app-specific networks, and a full backup first.
+        <strong>This permanently deletes all data for this app.</strong>
+      </label>
+    </div>
+
     <label><input type="checkbox" name="remove_named_volumes" id="remove-named-volumes"> Remove named volumes</label>
     <div class="indent" id="volume-approvals">
       {% for v in volumes %}
-      <label><input type="checkbox" name="approved_volume" value="{{ v.get('key') }}"> {{ v.get('display') or v.get('key') }}</label>
+      <label><input type="checkbox" name="approved_volume" class="approved-volume-checkbox" value="{{ v.get('key') }}"> {{ v.get('display') or v.get('key') }}</label>
       {% else %}
       <p class="muted">No named volumes discovered for this app.</p>
       {% endfor %}
@@ -82,9 +93,9 @@
       <option value="exclusive">Exclusive to this app</option>
     </select>
 
-    <label><input type="checkbox" name="remove_bind_data"> Remove bind-mounted data directories</label>
-    <label><input type="checkbox" name="remove_repo"> Remove project repository / directory</label>
-    <label><input type="checkbox" name="remove_networks" checked> Remove app-specific networks</label>
+    <label><input type="checkbox" name="remove_bind_data" id="remove-bind-data"> Remove bind-mounted data directories</label>
+    <label><input type="checkbox" name="remove_repo" id="remove-repo"> Remove project repository / directory</label>
+    <label><input type="checkbox" name="remove_networks" id="remove-networks" checked> Remove app-specific networks</label>
 
     <label for="backup">Backup mode</label>
     <select name="backup" id="backup">

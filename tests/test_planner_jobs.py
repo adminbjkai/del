@@ -192,6 +192,45 @@ def test_confirmed_container_becomes_stop_and_rm_steps(settings_env):
     assert any(s.stage == "validate" and s.operation == "validate_removal" for s in plan.steps)
 
 
+def test_confirmed_process_becomes_process_term_step(settings_env):
+    """A standalone process resource with a confirmed pid+exe association
+    must produce a process_term step, not be silently dropped."""
+    conn = get_db()
+    app_id = _insert_app(conn, "app_proc", kind="standalone")
+    res_id = _insert_resource(
+        conn, "process", "pid:1234:myapp",
+        data={"pid": 1234, "exe": "/apps/myapp/bin/myapp", "comm": "myapp"},
+    )
+    _insert_assoc(conn, app_id, res_id, confidence=95)
+    conn.close()
+
+    plan = planner.build_plan("app_proc", {})
+    term_steps = [s for s in plan.steps if s.operation == "process_term"]
+    assert len(term_steps) == 1
+    assert term_steps[0].stage == "quiesce"
+    assert term_steps[0].args == {"pid": 1234, "expected_exe": "/apps/myapp/bin/myapp"}
+    assert plan.preserved == []
+
+
+def test_process_without_exe_is_preserved_not_dropped(settings_env):
+    """If pid/exe is unavailable (e.g. older scan data, or exe unreadable),
+    the association must be preserved with a warning rather than silently
+    disappearing from the plan."""
+    conn = get_db()
+    app_id = _insert_app(conn, "app_proc2", kind="standalone")
+    res_id = _insert_resource(
+        conn, "process", "pid:5678:ghost",
+        data={"pid": 5678, "exe": None, "comm": "ghost"},
+    )
+    _insert_assoc(conn, app_id, res_id, confidence=95)
+    conn.close()
+
+    plan = planner.build_plan("app_proc2", {})
+    assert not any(s.operation == "process_term" for s in plan.steps)
+    assert "pid:5678:ghost" in plan.preserved
+    assert any("pid:5678:ghost" in w for w in plan.warnings)
+
+
 # ---------------------------------------------------------------------------
 # HMAC persistence + tamper guard
 # ---------------------------------------------------------------------------
@@ -312,6 +351,35 @@ def test_failure_mid_job_halts_downstream_steps(settings_env, monkeypatch):
     assert by_op["container_stop"] == "done"
     assert by_op["container_rm"] == "failed"
     assert by_op["network_rm"] == "pending"
+
+
+def test_unexpected_exception_mid_step_fails_job_instead_of_corrupting_state(
+    settings_env, monkeypatch
+):
+    """An unexpected (non-HelperError) exception raised while executing a
+    step must be recorded as a normal failed step/job, not left running
+    forever or propagated out of the worker thread."""
+    _patch_audit(monkeypatch)
+
+    class _BoomHelper:
+        def call(self, op, args, dry_run=True, timeout=300, plan_id=None, step_id=None):
+            raise RuntimeError("boom: unexpected helper crash")
+
+    monkeypatch.setattr(jobs, "helper_client", _BoomHelper())
+
+    steps = [
+        PlanStep(seq=1, stage="quiesce", operation="container_stop",
+                  args={"container_id": "c1"}, description="stop", reversible=True, danger="safe"),
+    ]
+    plan_id = _persist_manual_plan("boomapp", steps)
+    job_id = jobs.create_job(plan_id, "live", user_id=1)
+
+    jobs._run_job(job_id, None)  # must not raise
+
+    status = jobs.job_status(job_id)
+    assert status["status"] == "failed"
+    by_op = {s["operation"]: s["state"] for s in status["steps"]}
+    assert by_op["container_stop"] == "failed"
 
 
 def test_live_volume_removal_without_confirm_phrase_is_refused(settings_env, monkeypatch):

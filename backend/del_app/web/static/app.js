@@ -313,6 +313,31 @@
   });
 
   // =========================================================================
+  // Plan build: "Complete removal (everything)" preset
+  // =========================================================================
+  var presetComplete = document.getElementById("preset-complete-removal");
+  if (presetComplete) {
+    presetComplete.addEventListener("change", function () {
+      if (!presetComplete.checked) return;
+      var namedVolumes = document.getElementById("remove-named-volumes");
+      if (namedVolumes) namedVolumes.checked = true;
+      document.querySelectorAll(".approved-volume-checkbox").forEach(function (cb) {
+        cb.checked = true;
+      });
+      var removeImages = document.getElementById("remove_images");
+      if (removeImages) removeImages.value = "exclusive";
+      var bindData = document.getElementById("remove-bind-data");
+      if (bindData) bindData.checked = true;
+      var repo = document.getElementById("remove-repo");
+      if (repo) repo.checked = true;
+      var networks = document.getElementById("remove-networks");
+      if (networks) networks.checked = true;
+      var backup = document.getElementById("backup");
+      if (backup) backup.value = "full";
+    });
+  }
+
+  // =========================================================================
   // Plan execute: typed-phrase gate for live volume deletion
   // =========================================================================
   var modeLive = document.getElementById("mode-live");

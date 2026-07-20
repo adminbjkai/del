@@ -67,6 +67,7 @@ subprocess arg-arrays (never shell=True).
 | Operation | Args | Notes |
 |---|---|---|
 | ping | — | health |
+| list_listeners | — | read-only `ss -lntp` as root; used by `proc_src.py` to resolve listener ownership when the caller can't run `ss` itself |
 | compose_down | project, config_files[], remove_volumes?, remove_images_mode? | config files must exist & be under approved roots |
 | container_stop / container_rm | container_id | id validated against docker inspect |
 | image_rm | image_id | refused if other containers reference it |
@@ -77,7 +78,7 @@ subprocess arg-arrays (never shell=True).
 | nginx_rm_site | paths[] | only under /etc/nginx/sites-{enabled,available}; backup first; nginx -t; reload only on pass; restore on fail |
 | nginx_test | — | read-only `nginx -t`, never reloads; safe in dry_run and live |
 | nginx_test_reload | — | nginx -t, reload if ok |
-| path_delete | path | canonicalized; must be under approved roots (/apps, /data, /srv, /opt, /home/bjkai, /var/www) AND not a protected root AND listed in the approved plan; refuses mountpoints |
+| path_delete | path | canonicalized; must be under approved roots (/apps, /data, /srv, /var/www, /home/bjkai, /etc/nginx/sites-{available,enabled}, /etc/systemd/system, /etc/cron.d) AND not a protected root AND listed in the approved plan; refuses mountpoints |
 | path_restore | backup_path, original_path | restores a prior backup_tar/file_backup copy back to original_path (`cp -a`); original_path must be absolute |
 | tmux_kill | session | exact name from plan |
 | process_term | pid, expected_exe | TERM then KILL after grace; pid+exe must still match |
@@ -150,7 +151,19 @@ the helper; the helper re-validates each argument against its own rules regardle
 Levels: confirmed (95–100), high (80–94), probable (60–79), possible (30–59),
 unrelated (<30), manual (user-assigned). Each association stores evidence items
 {source, statement, weight}. Compose project label = confirmed. Nginx proxy_pass
-port → published container port = high. Name similarity alone = possible, never
+port → published container port = high. For host-network containers (no published
+port mapping to key off), `proc_src` traces a listening port's pid back to its
+owning container via `/proc/<pid>/cgroup`; a proxy_pass port matching that
+cgroup-resolved container's listener is also high confidence, with evidence
+naming the container and noting "(host network)". Networks are correlated the
+same way compose projects are seeded plus by attached-container name (not id, so
+a network survives container recreation without losing its owner mapping); a
+network attached to containers from more than one app is `shared` and preserved
+unless approved per-app. Nginx configs that no longer have a live upstream to
+match (app already stopped) are still attached to the correct app when the
+config's `server_name` slugifies to *exactly* the app's slug — this catches
+config debris (`.conf`/`.bak`/disabled copies included) that plain port-matching
+would otherwise leave behind. Name similarity alone = possible, never
 auto-removable. Only confirmed/high/manual associations are eligible for removal;
 probable requires explicit user approval per-resource; possible is always blocked
 until manually confirmed.

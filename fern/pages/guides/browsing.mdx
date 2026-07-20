@@ -25,6 +25,15 @@ clickable link to the site), **Host ports**, **Resources** (count), **Warnings**
 amber badge when non-zero), and **Protected** (a blue badge for apps DEL will refuse
 to remove, such as DEL itself).
 
+<Callout intent="info">
+  By default, **Applications** only shows apps present in the **latest scan** — once
+  an app is fully removed, it disappears from this list on its own (a successful live
+  removal triggers an automatic rescan, so you don't have to remember to refresh it
+  yourself). Add `?show=removed` to the URL to see removed apps too; visiting a
+  removed app's detail page directly shows a "not present in the latest scan" banner
+  instead of a 404, so its history stays reachable.
+</Callout>
+
 ## Table controls
 
 Every table in DEL behaves the same way, all client-side (no page reloads):

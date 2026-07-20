@@ -386,7 +386,13 @@ def _collect_networks(container_index: dict[str, dict]) -> list[Resource]:
                     "compose_project": labels.get("com.docker.compose.project"),
                     "projects_using": projects_using,
                     "shared_across_projects": len(projects_using) > 1,
-                    "attached_containers": list((detail.get("Containers") or {}).keys()),
+                    # store container NAMES (correlation matches by name); the
+                    # Containers dict is keyed by id -> {"Name": ...}.
+                    "attached_containers": [
+                        (info or {}).get("Name") or cid
+                        for cid, info in (detail.get("Containers") or {}).items()
+                    ],
+                    "attached_container_ids": list((detail.get("Containers") or {}).keys()),
                 },
             )
         )

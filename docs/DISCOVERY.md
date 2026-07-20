@@ -72,12 +72,45 @@ def build_apps(resources: list[Resource], manifests: dict[str, Manifest]) -> lis
   a shared root (e.g. `/apps` or `/data` itself, rather than a specific app
   subdirectory) does not count as evidence that an app owns that path; this
   prevents one over-broad mount from making everything under it look "owned."
+- **Networks attach by compose label or by attached-container name** — a Docker
+  network is seeded by its compose project label (confirmed) or by the **names**
+  of the containers attached to it (high, `docker_src.py` stores container names,
+  not just ids, so the mapping survives container recreation). A network attached
+  to containers from more than one application is `shared=True` and preserved
+  unless explicitly approved for a given app's removal.
+- **Host-network containers correlate via listener ownership** — a container run
+  with `--network host` publishes no distinct container port, so `proc_src.py`
+  traces a listening port's pid back to its owning container via
+  `/proc/<pid>/cgroup` (falling back to the `list_listeners` helper op under
+  `NoNewPrivileges`, since sudo isn't available there); an nginx site proxying to
+  that port is then attached to the resolved container's app at `high` confidence,
+  with evidence naming the container and noting "(host network)".
+- **Nginx config debris matched by exact `server_name`**: once an app's containers
+  are stopped, proxy-port matching has nothing left to match against. Any nginx
+  config file — enabled or not, including differently-named/`.bak`/disabled
+  `sites-available` copies — whose first `server_name` label slugifies to
+  *exactly* the app's slug is still attached to that app, so removal deletes the
+  leftover config file too and doesn't leave stale debris. This is an exact-slug
+  match only; fuzzy/partial matches are never used here.
 - **Manifest override**: entries in `/apps/del/manifests/*.yaml` override or augment
   automatic correlation, and are recorded at `level=manual` or `confirmed`.
 - **Shared-resource detection**: if a resource is associated with more than one
   application, `shared=True` is set on all of its associations. Shared resources
   are **blocked from removal until explicitly approved** per-application — removing
   one app's plan will never silently take a resource another app depends on.
+
+## Latest-scan-only views
+
+The **Applications** list and an application's **detail page** only show
+applications/resources present as of the *most recent* scan by default (filtered
+on `last_seen`/`state` against the latest `scans.id`) — a resource or app removed
+in an earlier scan does not linger in the UI forever. Add `?show=removed` to the
+Applications URL to see history including apps no longer present. An app's detail
+page shows a "not present in the latest scan" banner instead of hiding it
+outright, so a completed removal is discoverable but not confused with a
+currently-installed app. A successful **live** removal job automatically triggers
+a rescan (`jobs.py`) so this reflects reality immediately, without the operator
+needing to remember to rescan by hand.
 
 ## Manifest format
 

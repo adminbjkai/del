@@ -18,7 +18,6 @@ import hmac as hmac_mod
 import json
 import os
 import sqlite3
-from typing import Any
 
 from del_app.auth import get_secret_key
 from del_app.config import get_settings
@@ -93,16 +92,35 @@ def _is_protected_root(path: str) -> bool:
     return real in PROTECTED_ROOTS
 
 
+def _approved_deletion_roots() -> list[str]:
+    """Mirror the helper policy's approved deletion roots so the planner never
+    proposes a path the helper would (correctly) refuse — e.g. host system
+    bind mounts like /var/run/docker.sock, /etc/localtime, /proc."""
+    try:
+        with open("/apps/del/config/helper-policy.json") as f:
+            return json.load(f).get("approved_deletion_roots", []) or []
+    except Exception:
+        return ["/apps", "/data", "/srv", "/var/www", "/home/bjkai"]
+
+
 def _is_safe_delete_path(path: str | None) -> bool:
     """A path is only deletable if absolute, resolves to a real filesystem
-    entry, and is not a protected root."""
+    entry, is not a protected root, and (like the helper) resolves strictly
+    under an approved deletion root at least one component deep."""
     if not path or not os.path.isabs(path):
         return False
-    if not os.path.exists(path):
+    real = os.path.realpath(path)
+    if not os.path.exists(real):
         return False
-    if _is_protected_root(path):
+    if _is_protected_root(real) or _is_protected_root(path):
         return False
-    return True
+    for root in _approved_deletion_roots():
+        r = root.rstrip("/")
+        if real == r:  # the root itself is never deletable
+            return False
+        if real.startswith(r + "/"):
+            return True
+    return False
 
 
 class _SeqCounter:
@@ -283,6 +301,24 @@ def build_plan(app_slug: str, options: dict) -> Plan:
             seq=seq.next(), stage="quiesce", operation="tmux_kill",
             args={"session": row["resource_key"]},
             description=f"Kill tmux session {row['resource_key']}",
+            reversible=False, danger="warning",
+        ))
+    for row in by_type.get("process", []):
+        data = _data(row)
+        pid = data.get("pid")
+        exe = data.get("exe")
+        if not isinstance(pid, int) or not exe:
+            # can't safely terminate without a verified pid+exe pair (matches
+            # what the helper's process_term precondition requires); preserve
+            # instead of silently dropping the association.
+            preserved.append(row["resource_key"])
+            warnings.append(
+                f"{row['resource_key']}: process pid/exe unavailable, skipping termination")
+            continue
+        steps.append(PlanStep(
+            seq=seq.next(), stage="quiesce", operation="process_term",
+            args={"pid": pid, "expected_exe": exe},
+            description=f"Terminate process {row['resource_display'] or row['resource_key']}",
             reversible=False, danger="warning",
         ))
     for row in by_type.get("container", []):
@@ -483,11 +519,6 @@ def build_plan(app_slug: str, options: dict) -> Plan:
         reversible=True, danger="safe",
     ))
 
-    domains: list[str] = []
-    try:
-        domains = json.loads(app["manifest_path"]) if False else []
-    except Exception:
-        domains = []
     for row in by_type.get("nginx_site", []):
         data = _data(row)
         for d in data.get("domains", []):

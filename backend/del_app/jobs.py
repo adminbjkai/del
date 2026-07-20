@@ -171,48 +171,57 @@ def _run_job(job_id: int, confirm_phrase: str | None) -> None:
             auditlog.audit(user_id, "step_running", f"job:{job_id}:seq:{step['seq']}",
                             {"operation": step["operation"]})
 
-            args = json.loads(step["args_json"]) if step["args_json"] else {}
+            # Any unexpected exception in this block (malformed args_json, a
+            # helper_client bug, etc.) must become a normal failed step
+            # rather than propagate out of the background thread and leave
+            # the job stuck in "running" forever with no error recorded.
+            try:
+                args = json.loads(step["args_json"]) if step["args_json"] else {}
 
-            if step["stage"] == "validate" and step["operation"] == "validate_removal":
-                app_row = q(
-                    conn,
-                    "SELECT a.slug FROM plans p JOIN applications a ON a.id = p.app_id WHERE p.id = ?",
-                    (job["plan_id"],),
-                )
-                app_slug = app_row[0]["slug"] if app_row else args.get("app_slug", "")
-                checks = validate_removal(app_slug, plan)
-                if mode == "dry_run":
-                    # Nothing was actually removed in a dry run, so failing
-                    # checks are expected; report them as informational.
-                    ok = True
-                    output = json.dumps({
-                        "dry_run": True,
-                        "note": "validation checks that will run after live removal; "
-                                "current failures are expected pre-removal",
-                        "checks": checks,
-                    })
-                    exit_code = 0
-                else:
-                    ok = all(c["ok"] for c in checks)
-                    output = json.dumps(checks)
-                    exit_code = 0 if ok else 1
-            else:
-                if step["operation"] == "volume_rm":
-                    # The helper independently requires confirmed_twice; grant it
-                    # only when the double-confirmation gate has actually passed
-                    # (dry runs delete nothing; live jobs with volume_rm steps
-                    # were already refused above without the exact phrase).
-                    args["confirmed_twice"] = (
-                        mode == "dry_run" or confirm_phrase == CONFIRM_VOLUMES_PHRASE
+                if step["stage"] == "validate" and step["operation"] == "validate_removal":
+                    app_row = q(
+                        conn,
+                        "SELECT a.slug FROM plans p JOIN applications a ON a.id = p.app_id WHERE p.id = ?",
+                        (job["plan_id"],),
                     )
-                try:
-                    result = helper_client.call(step["operation"], args, dry_run=(mode == "dry_run"))
-                    ok = bool(result.get("ok"))
-                    output = str(result.get("output") or result.get("error") or "")
-                except helper_client.HelperError as e:
-                    ok = False
-                    output = str(e)
-                exit_code = 0 if ok else 1
+                    app_slug = app_row[0]["slug"] if app_row else args.get("app_slug", "")
+                    checks = validate_removal(app_slug, plan)
+                    if mode == "dry_run":
+                        # Nothing was actually removed in a dry run, so failing
+                        # checks are expected; report them as informational.
+                        ok = True
+                        output = json.dumps({
+                            "dry_run": True,
+                            "note": "validation checks that will run after live removal; "
+                                    "current failures are expected pre-removal",
+                            "checks": checks,
+                        })
+                        exit_code = 0
+                    else:
+                        ok = all(c["ok"] for c in checks)
+                        output = json.dumps(checks)
+                        exit_code = 0 if ok else 1
+                else:
+                    if step["operation"] == "volume_rm":
+                        # The helper independently requires confirmed_twice; grant it
+                        # only when the double-confirmation gate has actually passed
+                        # (dry runs delete nothing; live jobs with volume_rm steps
+                        # were already refused above without the exact phrase).
+                        args["confirmed_twice"] = (
+                            mode == "dry_run" or confirm_phrase == CONFIRM_VOLUMES_PHRASE
+                        )
+                    try:
+                        result = helper_client.call(step["operation"], args, dry_run=(mode == "dry_run"))
+                        ok = bool(result.get("ok"))
+                        output = str(result.get("output") or result.get("error") or "")
+                    except helper_client.HelperError as e:
+                        ok = False
+                        output = str(e)
+                    exit_code = 0 if ok else 1
+            except Exception as e:
+                ok = False
+                output = f"internal error: {e}"
+                exit_code = 1
 
             output = sanitize_output(output)
             state = "done" if ok else "failed"
