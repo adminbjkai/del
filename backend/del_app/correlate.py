@@ -534,8 +534,13 @@ def build_apps(
         for sn in site.data.get("server_names", []) or []:
             label = _slugify(sn.split(".")[0])
             app = apps.get(label)
-            if app is None or (site.type, site.key) in app.assocs:
+            if app is None:
                 continue
+            # Do NOT skip if already associated: a weaker port-match may have
+            # added this stale copy at low confidence; an exact server_name
+            # match means it is unambiguously this app's config file and must
+            # be removal-eligible so removal leaves no debris. app.add keeps
+            # the stronger confidence, upgrading a prior weak (e.g. 60) claim.
             if enabled:
                 conf = 85
                 stmt = f"enabled site server_name {sn} exactly matches app slug (no live upstream — app stopped)"
