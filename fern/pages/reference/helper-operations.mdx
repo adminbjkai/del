@@ -28,6 +28,8 @@ every request, success or refusal.
     under a `NoNewPrivileges` web-process context. Never mutates anything.
   </Accordion>
   <Accordion title="compose_down — project, config_files[], remove_volumes?, remove_images_mode?">
+    Robust to broken project state: lowercases the project name (Compose requires lowercase), falls back to a label-based container teardown when the compose file is missing/unparseable, and always sweeps any remaining project-labeled containers so stragglers can't block volume removal.
+
     Brings a Compose project down. The config files must exist and be under approved
     roots.
   </Accordion>
