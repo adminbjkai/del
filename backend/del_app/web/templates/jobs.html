@@ -1,13 +1,19 @@
 {% extends "base.html" %}
 {% block title %}Jobs{% endblock %}
 {% block content %}
-<h1>Jobs <span class="count-pill">{{ jobs | length }}</span></h1>
-<table class="table" data-enhanced data-empty="No jobs yet." data-search-placeholder="Filter jobs…">
+<div class="page-header">
+  <h1>Jobs <span class="count-pill">{{ jobs | length }}</span></h1>
+  <div class="page-actions">
+    <button type="button" class="btn btn-sm" data-export-table="jobs-table" title="Export the currently filtered rows as CSV">Export CSV</button>
+  </div>
+</div>
+<table id="jobs-table" class="table" data-enhanced data-empty="No jobs yet." data-search-placeholder="Filter jobs…">
+  <caption class="sr-only">Removal jobs with mode, status, duration and timestamps.</caption>
   <thead>
     <tr>
-      <th>ID</th><th>App</th><th>Plan</th>
-      <th data-filter="mode">Mode</th><th data-filter="status">Status</th>
-      <th>Duration</th><th>Started</th><th>Finished</th>
+      <th scope="col">ID</th><th scope="col">App</th><th scope="col">Plan</th>
+      <th scope="col">Mode</th><th scope="col">Status</th>
+      <th scope="col">Duration</th><th scope="col">Started</th><th scope="col">Finished</th>
     </tr>
   </thead>
   <tbody>

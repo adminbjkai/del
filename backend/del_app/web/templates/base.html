@@ -3,7 +3,10 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="DEL — application inventory and safe uninstall for this host: discover apps, map their resources, and remove them with an auditable plan.">
+  <meta name="theme-color" content="#0c0e13">
   <title>{% block title %}DEL{% endblock %} · DEL</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/app.css">
 </head>
 {% set path = request.url.path %}
@@ -32,7 +35,8 @@
 {% else %}
   {% set glossary_ctx = 'general' %}
 {% endif %}
-<body data-glossary="{{ glossary_ctx }}" class="has-shell">
+<body data-glossary="{{ glossary_ctx }}">
+  <a class="skip-link" href="#main-content">Skip to main content</a>
   <div class="layout" id="app-layout">
     <nav class="sidebar" id="sidebar" aria-label="Main">
       <div class="sidebar-top">
@@ -64,8 +68,9 @@
 
     <div class="main-wrap">
       <main class="content" id="main-content">
-        {% if flash %}<div class="flash flash-ok" data-autodismiss>{{ flash }}</div>{% endif %}
-        {% if error %}<div class="flash flash-error" data-autodismiss>{{ error }}</div>{% endif %}
+        {# Successes time out; errors stay until dismissed (app.js adds the button). #}
+        {% if flash %}<div class="flash flash-ok" role="status" data-autodismiss>{{ flash }}</div>{% endif %}
+        {% if error %}<div class="flash flash-error" role="alert">{{ error }}</div>{% endif %}
         {% block content %}{% endblock %}
       </main>
 

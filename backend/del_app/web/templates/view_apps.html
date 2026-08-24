@@ -3,13 +3,15 @@
 {% block content %}
 <div class="page-header app-gallery-header">
   <div>
-    <h1>View Apps <span class="count-pill" id="gallery-visible-count">{{ apps | length }}</span></h1>
+    {# The count is what actually changes as filters run, so the live region lives here. #}
+    <h1>View Apps <span class="count-pill" id="gallery-visible-count" role="status">{{ apps | length }}</span></h1>
     <p class="muted gallery-lede">A launchpad for domains verified from the latest DEL scan and a live HTTPS check.</p>
   </div>
   <div class="page-actions">
     <span class="badge badge-ok">{{ apps | length }} online</span>
     {% if excluded_count %}<span class="badge badge-grey" title="Enabled domains that failed the live HTTPS check">{{ excluded_count }} unavailable hidden</span>{% endif %}
-    <a class="btn btn-sm" href="/view-apps?refresh=1" title="Bypass the two-minute health cache and check every domain again">Refresh health</a>
+    <a class="btn btn-sm" href="/view-apps?refresh=1" data-pending-label="Checking…"
+       title="Bypass the two-minute health cache and check every domain again">Refresh health</a>
   </div>
 </div>
 
@@ -60,7 +62,7 @@
   <button type="button" class="btn btn-sm" id="gallery-reset">Reset gallery preferences</button>
 </section>
 
-<div class="gallery-meta muted" id="gallery-meta" aria-live="polite">
+<div class="gallery-meta muted" id="gallery-meta">
   {% if checked_at %}Health checked {{ relative_dt(checked_at) }} · {% endif %}latest completed scan #{{ latest_scan or '—' }}
 </div>
 
@@ -78,7 +80,6 @@
                data-app-id="{{ app.id }}" data-name="{{ app.name | lower }}"
                data-domain="{{ app.domain }}" data-category="{{ app.category }}"
                data-latency="{{ app.latency_ms or 999999 }}">
-        <button type="button" class="app-favorite" aria-label="Add {{ app.name }} to favorites" aria-pressed="false" title="Favorite">☆</button>
         <span class="gallery-drag-handle" aria-hidden="true" title="Drag to reorder">⋮⋮</span>
         <a class="app-launch-link" href="{{ app.url }}" target="_blank" rel="noopener noreferrer">
           <span class="app-icon-shell">
@@ -91,6 +92,9 @@
           </span>
           <span class="app-launch-arrow" aria-hidden="true">↗</span>
         </a>
+        {# After the link on purpose: Tab reaches each app before its star.
+           The button is absolutely positioned, so nothing moves visually. #}
+        <button type="button" class="app-favorite" aria-label="Add {{ app.name }} to favorites" aria-pressed="false" title="Favorite">☆</button>
         <div class="app-card-meta">
           <span class="live-dot" aria-hidden="true"></span><span>Online</span>
           <span>HTTP {{ app.http_status }}</span>

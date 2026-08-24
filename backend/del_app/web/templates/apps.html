@@ -21,17 +21,18 @@
   date or project directory age), falling back to when DEL first discovered the app.</p>
 
 <table id="apps-table" class="table" data-enhanced data-empty="No applications found." data-search-placeholder="Filter apps…"{% if search %} data-prefill="{{ search }}"{% endif %}>
+  <caption class="sr-only">Applications discovered by the latest scan, with status, install date, domains, ports and resource counts.</caption>
   <thead>
     <tr>
-      <th>Name</th>
-      <th data-filter="status">Status</th>
-      <th data-filter="kind">Kind</th>
-      <th>Installed</th>
-      <th>Domains</th>
-      <th>Host ports</th>
-      <th>Resources</th>
-      <th>Warnings</th>
-      <th data-filter="protected">Protected</th>
+      <th scope="col">Name</th>
+      <th scope="col">Status</th>
+      <th scope="col">Kind</th>
+      <th scope="col">Installed</th>
+      <th scope="col">Domains</th>
+      <th scope="col">Host ports</th>
+      <th scope="col">Resources</th>
+      <th scope="col">Warnings</th>
+      <th scope="col">Protected</th>
     </tr>
   </thead>
   <tbody>
@@ -40,7 +41,7 @@
       <td>
         <a href="/apps/{{ app.slug }}">{{ app.name }}</a>
         <div class="muted mono" style="font-size:.75rem">
-          <span class="copy" data-copy="{{ app.slug }}" title="Copy slug">{{ app.slug }}<span class="copy-mark">⧉</span></span>
+          <button type="button" class="copy" data-copy="{{ app.slug }}" title="Copy slug" aria-label="Copy slug {{ app.slug }} to clipboard">{{ app.slug }}<span class="copy-mark" aria-hidden="true">⧉</span></button>
           {% if app.is_removed %}<span class="badge badge-grey" style="margin-left:.35rem">removed</span>{% endif %}
         </div>
       </td>

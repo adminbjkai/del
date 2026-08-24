@@ -14,7 +14,7 @@
   {% if value %}
     {% set s = value|string %}
     {% set short = s.split(':')[-1] %}
-    <span class="mono copy" data-copy="{{ s }}" title="{{ s }} (click to copy)">{{ short[:length] }}<span class="copy-mark">⧉</span></span>
+    <button type="button" class="mono copy" data-copy="{{ s }}" title="{{ s }} (click to copy)" aria-label="Copy {{ s }} to clipboard">{{ short[:length] }}<span class="copy-mark" aria-hidden="true">⧉</span></button>
   {% else %}—{% endif %}
 {%- endmacro %}
 

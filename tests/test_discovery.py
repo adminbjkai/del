@@ -724,3 +724,47 @@ def test_docker_builtin_networks_are_never_associated_to_an_app():
     _record, assocs = apps[0]
     network_keys = {a.resource_key for a in assocs if a.resource_type == "network"}
     assert network_keys == {"solo_default"}, f"built-ins leaked in: {network_keys}"
+
+
+def test_app_claims_its_project_root_when_compose_lives_in_a_subdirectory():
+    """`/apps/karakeep` belongs to karakeep even though its compose file is at
+    `/apps/karakeep/docker/`.
+
+    Regression: the directory step only matched an app's own working dir or a
+    path *nested* under it, never the parent. The project root therefore fell
+    to the 50-point name-similarity fallback, which is below the removable
+    threshold — so removing the app left its entire directory on disk.
+    """
+    container = _container("karakeep_web", compose_project="karakeep",
+                           compose_working_dir="/apps/karakeep/docker")
+    project_root = Resource(
+        type="directory", key="/apps/karakeep", display="karakeep",
+        path="/apps/karakeep", state="present", data={"size_kb": 4096},
+    )
+    apps = build_apps([container, project_root], {})
+    by_slug = {r.slug: assocs for r, assocs in apps}
+    assoc = next(
+        a for a in by_slug["karakeep"]
+        if a.resource_type == "directory" and a.resource_key == "/apps/karakeep"
+    )
+    assert assoc.confidence >= 90, f"project root only reached {assoc.confidence}"
+    assert assoc.removal_eligible == "safe"
+
+
+def test_project_root_rule_does_not_reach_across_to_a_sibling_app():
+    """The parent rule is anchored at `{scan_root}/{one component}`, so an app
+    under /apps/foo can never claim /apps (or a sibling) as its project root."""
+    a = _container("foo_web", compose_project="foo", compose_working_dir="/apps/foo/docker")
+    sibling = Resource(
+        type="directory", key="/apps/bar", display="bar",
+        path="/apps/bar", state="present", data={},
+    )
+    scan_root = Resource(
+        type="directory", key="/apps", display="apps",
+        path="/apps", state="present", data={},
+    )
+    apps = build_apps([a, sibling, scan_root], {})
+    by_slug = {r.slug: assocs for r, assocs in apps}
+    claimed = {x.resource_key for x in by_slug["foo"] if x.resource_type == "directory"}
+    assert "/apps/bar" not in claimed
+    assert "/apps" not in claimed

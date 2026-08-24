@@ -21,17 +21,28 @@
     return num * mult;
   }
 
+  // Job durations as rendered server-side: "42s", "1.5m", "2.3h". Checked before
+  // parseSize, which would otherwise read "1.5m" as 1.5 MB and sort it above "42s".
+  var DURATION_UNITS = { s: 1, m: 60, h: 3600, d: 86400 };
+
+  function parseDuration(str) {
+    var m = /^([0-9]*\.?[0-9]+)\s*([smhd])$/.exec(str.trim());
+    if (!m) return null;
+    return parseFloat(m[1]) * DURATION_UNITS[m[2]];
+  }
+
   var ISO_RE = /^\d{4}-\d{2}-\d{2}([ T]\d{2}:\d{2}(:\d{2})?)?/;
 
-  // Return a comparable value for a cell: {n: number} or {s: string}.
-  function cellValue(td) {
-    var explicit = td.getAttribute("data-sort-value");
-    var raw = explicit !== null ? explicit : (td.textContent || "");
-    raw = raw.trim();
+  // Return a comparable value for a raw string: {n: number|null, s: string}.
+  // Single source of truth for both the vanilla sort and the AG Grid comparator.
+  function sortValue(raw) {
+    raw = (raw == null ? "" : String(raw)).trim();
     if (raw === "" || raw === "—") return { n: null, s: "" };
     // plain number (allow commas, %, leading currency-free)
     var plain = raw.replace(/,/g, "").replace(/%$/, "");
     if (/^-?[0-9]*\.?[0-9]+$/.test(plain)) return { n: parseFloat(plain), s: raw };
+    var dur = parseDuration(raw);
+    if (dur !== null) return { n: dur, s: raw };
     var size = parseSize(raw);
     if (size !== null) return { n: size, s: raw };
     if (ISO_RE.test(raw)) {
@@ -39,6 +50,12 @@
       if (!isNaN(t)) return { n: t, s: raw };
     }
     return { n: null, s: raw.toLowerCase() };
+  }
+
+  // Return a comparable value for a cell: {n: number} or {s: string}.
+  function cellValue(td) {
+    var explicit = td.getAttribute("data-sort-value");
+    return sortValue(explicit !== null ? explicit : (td.textContent || ""));
   }
 
   function compareRows(a, b, col, dir) {
@@ -60,10 +77,24 @@
   // =========================================================================
   // Tables → AG Grid Community (filters, sort, pagination) with vanilla fallback
   // =========================================================================
-  var TEXT_FILTER_OPTS = [
-    "contains", "notContains", "equals", "notEqual",
-    "startsWith", "endsWith", "blank", "notBlank",
-  ];
+  // Single mobile breakpoint, shared by JS and the CSS @media rules below 900px.
+  var MOBILE_MAX = 900;
+  var MOBILE_MQ = "(max-width: " + MOBILE_MAX + "px)";
+
+  function matchesMobile() {
+    try {
+      return !!(window.matchMedia && window.matchMedia(MOBILE_MQ).matches);
+    } catch (e) {
+      return (window.innerWidth || 0) <= MOBILE_MAX;
+    }
+  }
+
+  function escapeHtml(str) {
+    return String(str == null ? "" : str)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  }
+
   var gridApisById = {};
   var agGridReady = null;
 
@@ -102,61 +133,38 @@
 
   function delGridTheme() {
     // Clearer contrast + slightly larger type than the shell defaults.
-    var dark = true;
-    try {
-      dark = document.documentElement.getAttribute("data-theme") !== "light";
-    } catch (e) {}
+    // The app is dark-only (both templates hardcode data-theme="dark").
     if (!window.agGrid || !window.agGrid.themeQuartz) return undefined;
-    if (dark) {
-      return window.agGrid.themeQuartz.withParams({
-        backgroundColor: "#12151c",
-        foregroundColor: "#f2f4f8",
-        cellTextColor: "#f2f4f8",
-        headerBackgroundColor: "#0f1218",
-        headerTextColor: "#c8ceda",
-        borderColor: "#2e3545",
-        rowHoverColor: "#1a2030",
-        oddRowBackgroundColor: "#141820",
-        selectedRowBackgroundColor: "rgba(79,140,255,0.18)",
-        accentColor: "#6da0ff",
-        chromeBackgroundColor: "#0f1218",
-        inputBackgroundColor: "#1a2030",
-        inputTextColor: "#f2f4f8",
-        inputPlaceholderTextColor: "#9aa3b5",
-        inputBorder: { color: "#3a4254" },
-        wrapperBorder: { color: "#2e3545" },
-        rowBorder: { color: "#2a3140" },
-        headerColumnBorder: { color: "#2e3545" },
-        headerColumnResizeHandleColor: "#6da0ff",
-        headerColumnResizeHandleWidth: 2,
-        headerColumnResizeHandleHeight: "60%",
-        columnBorder: { color: "#252b38" },
-        fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
-        fontSize: "14px",
-        headerFontSize: "12.5px",
-        headerFontWeight: 600,
-        wrapperBorderRadius: "6px",
-        browserColorScheme: "dark",
-        spacing: 6,
-      });
-    }
     return window.agGrid.themeQuartz.withParams({
-      backgroundColor: "#ffffff",
-      foregroundColor: "#111827",
-      cellTextColor: "#111827",
-      accentColor: "#2563eb",
-      borderColor: "#d1d5db",
-      headerBackgroundColor: "#f3f4f6",
-      headerTextColor: "#374151",
-      rowHoverColor: "#f3f4f6",
-      inputTextColor: "#111827",
-      headerColumnResizeHandleColor: "#2563eb",
+      backgroundColor: "#12151c",
+      foregroundColor: "#f2f4f8",
+      cellTextColor: "#f2f4f8",
+      headerBackgroundColor: "#0f1218",
+      headerTextColor: "#c8ceda",
+      borderColor: "#2e3545",
+      rowHoverColor: "#1a2030",
+      oddRowBackgroundColor: "#141820",
+      selectedRowBackgroundColor: "rgba(79,140,255,0.18)",
+      accentColor: "#6da0ff",
+      chromeBackgroundColor: "#0f1218",
+      inputBackgroundColor: "#1a2030",
+      inputTextColor: "#f2f4f8",
+      inputPlaceholderTextColor: "#9aa3b5",
+      inputBorder: { color: "#3a4254" },
+      wrapperBorder: { color: "#2e3545" },
+      rowBorder: { color: "#2a3140" },
+      headerColumnBorder: { color: "#2e3545" },
+      headerColumnResizeHandleColor: "#6da0ff",
       headerColumnResizeHandleWidth: 2,
-      browserColorScheme: "light",
+      headerColumnResizeHandleHeight: "60%",
+      columnBorder: { color: "#252b38" },
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
       fontSize: "14px",
       headerFontSize: "12.5px",
-      spacing: 6,
+      headerFontWeight: 600,
       wrapperBorderRadius: "6px",
+      browserColorScheme: "dark",
+      spacing: 6,
     });
   }
 
@@ -384,7 +392,6 @@
     if (!tbody || !headRow) return null;
     var rows = [];
     Array.prototype.forEach.call(tbody.rows, function (r) {
-      if (r.hasAttribute("data-empty-row")) return;
       var row = {};
       Array.prototype.forEach.call(r.cells, function (td, idx) {
         var text = (td.getAttribute("data-filter-value") || td.textContent || "").replace(/\s+/g, " ").trim();
@@ -437,7 +444,9 @@
           span.innerHTML = html || "";
           return span;
         },
-        // Always sort by data-sort-value when present (ISO dates, numbers, …)
+        // Always sort by data-sort-value when present (ISO dates, numbers, …).
+        // Uses the same sortValue() as the vanilla phone path so a column can
+        // never sort one way on desktop and another on a phone.
         comparator: function (valueA, valueB, nodeA, nodeB) {
           var sa = nodeA && nodeA.data ? nodeA.data["s" + idx] : valueA;
           var sb = nodeB && nodeB.data ? nodeB.data["s" + idx] : valueB;
@@ -447,15 +456,12 @@
           if (!sa && !sb) return 0;
           if (!sa) return 1;
           if (!sb) return -1;
-          // Numeric
-          var na = parseFloat(sa), nb = parseFloat(sb);
-          if (!isNaN(na) && !isNaN(nb) && /^-?[0-9]+(\.[0-9]+)?$/.test(sa.trim()) && /^-?[0-9]+(\.[0-9]+)?$/.test(sb.trim())) {
-            return na - nb;
-          }
-          // ISO datetime keys sort lexicographically as chronological
-          var ta = sa.toLowerCase();
-          var tb = sb.toLowerCase();
-          return ta < tb ? -1 : ta > tb ? 1 : 0;
+          var va = sortValue(sa);
+          var vb = sortValue(sb);
+          if (va.n !== null && vb.n !== null) return va.n - vb.n;
+          if (va.n !== null) return -1;
+          if (vb.n !== null) return 1;
+          return va.s < vb.s ? -1 : va.s > vb.s ? 1 : 0;
         },
         getQuickFilterText: function (params) {
           return params.data ? params.data["c" + idx] : "";
@@ -465,13 +471,16 @@
     return { colDefs: colDefs, rows: rows };
   }
 
-  function enhanceTableWithAgGrid(table) {
+  function enhanceTableWithAgGrid(table, host) {
     var parsed = parseHtmlTable(table);
     if (!parsed) return;
 
     var wrap = document.createElement("div");
     wrap.className = "table-block del-grid-block";
-    table.parentNode.insertBefore(wrap, table);
+    // `host` is the placeholder inserted before the bundle downloaded; reuse its
+    // slot so the grid lands exactly where the "Loading table…" box was.
+    if (host && host.parentNode) host.parentNode.insertBefore(wrap, host);
+    else table.parentNode.insertBefore(wrap, table);
 
     var toolbar = document.createElement("div");
     toolbar.className = "table-toolbar";
@@ -512,6 +521,7 @@
 
     var status = document.createElement("div");
     status.className = "table-status";
+    status.setAttribute("role", "status");
     wrap.appendChild(status);
 
     var gridHost = document.createElement("div");
@@ -519,6 +529,15 @@
     var defaultPage = parseInt(table.getAttribute("data-page-size") || "50", 10);
     if (!defaultPage || defaultPage < 1) defaultPage = 50;
     wrap.appendChild(gridHost);
+    if (host && host.parentNode) host.parentNode.removeChild(host);
+
+    // Short tables (dashboard panels) size to their content instead of burning
+    // 72vh on three rows; long ones get an explicit height so the grid scrolls.
+    var rowCount = parsed.rows.length;
+    var autoHeight = rowCount <= 12;
+    if (!autoHeight) {
+      gridHost.style.height = Math.min(760, 96 + rowCount * 48) + "px";
+    }
 
     // Hide original table (keep in DOM for progressive enhancement / export fallback id)
     table.style.display = "none";
@@ -526,6 +545,8 @@
 
     var prefill = table.getAttribute("data-prefill");
     if (prefill) search.value = prefill;
+
+    var emptyText = table.getAttribute("data-empty") || "No rows match the current filter.";
 
     var api = window.agGrid.createGrid(gridHost, {
       theme: delGridTheme(),
@@ -552,12 +573,15 @@
       paginationPageSize: defaultPage,
       paginationPageSizeSelector: [25, 50, 100, 200],
       quickFilterText: prefill || "",
-      domLayout: "normal",
+      domLayout: autoHeight ? "autoHeight" : "normal",
+      // data-empty is honoured by the vanilla path too; keep the wording identical.
+      overlayNoRowsTemplate:
+        '<span class="table-empty">' + escapeHtml(emptyText) + "</span>",
       onGridReady: function (e) {
         try {
           // Fit first so phones/narrow panes show values immediately; desktop
           // can still Autosize from the toolbar for content-based widths.
-          if (window.matchMedia && window.matchMedia("(max-width: 900px)").matches) {
+          if (matchesMobile()) {
             e.api.sizeColumnsToFit();
           } else {
             e.api.autoSizeAllColumns(false);
@@ -568,9 +592,7 @@
       },
       onFirstDataRendered: function (e) {
         try {
-          if (window.matchMedia && window.matchMedia("(max-width: 900px)").matches) {
-            e.api.sizeColumnsToFit();
-          }
+          if (matchesMobile()) e.api.sizeColumnsToFit();
         } catch (err) {}
       },
       onFilterChanged: function () { updateStatus(); },
@@ -628,14 +650,7 @@
     var headRow = table.tHead ? table.tHead.rows[0] : null;
     if (!tbody || !headRow) return;
 
-    var allRows = [];
-    Array.prototype.forEach.call(tbody.rows, function (r) {
-      if (r.hasAttribute("data-empty-row")) {
-        r.parentNode.removeChild(r);
-      } else {
-        allRows.push(r);
-      }
-    });
+    var allRows = Array.prototype.slice.call(tbody.rows);
 
     var wrap = document.createElement("div");
     wrap.className = "table-block";
@@ -652,6 +667,7 @@
 
     var status = document.createElement("div");
     status.className = "table-status";
+    status.setAttribute("role", "status");
     wrap.appendChild(status);
 
     var emptyMsg = document.createElement("div");
@@ -664,6 +680,7 @@
     search.type = "text";
     search.className = "table-filter";
     search.placeholder = table.getAttribute("data-search-placeholder") || "Quick filter…";
+    search.setAttribute("aria-label", "Quick filter all columns");
     toolbar.appendChild(search);
 
     var clearBtn = document.createElement("button");
@@ -701,6 +718,7 @@
       inp.type = "text";
       inp.className = "table-col-input";
       inp.placeholder = "text…";
+      inp.setAttribute("aria-label", "Filter text for " + (th.textContent || "").trim());
       var multi = document.createElement("select");
       multi.className = "table-col-multi";
       multi.multiple = true;
@@ -774,20 +792,29 @@
     Array.prototype.forEach.call(headRow.cells, function (th, idx) {
       if (th.hasAttribute("data-nosort")) return;
       th.classList.add("sortable");
-      th.tabIndex = 0;
+      // aria-sort belongs on the columnheader; the button carries the click
+      // affordance. Putting role="button" on the <th> itself would drop the
+      // columnheader role that makes aria-sort meaningful.
+      th.setAttribute("aria-sort", "none");
+      var trigger = document.createElement("button");
+      trigger.type = "button";
+      trigger.className = "th-sort-btn";
+      trigger.innerHTML = th.innerHTML;
+      trigger.setAttribute("aria-label", "Sort by " + (th.textContent || "").trim());
+      th.innerHTML = "";
+      th.appendChild(trigger);
       function doSort() {
         if (sortCol === idx) sortDir = sortDir === "asc" ? "desc" : "asc";
         else { sortCol = idx; sortDir = "asc"; }
         Array.prototype.forEach.call(headRow.cells, function (h) {
           h.classList.remove("sort-asc", "sort-desc");
+          if (h.hasAttribute("aria-sort")) h.setAttribute("aria-sort", "none");
         });
         th.classList.add(sortDir === "asc" ? "sort-asc" : "sort-desc");
+        th.setAttribute("aria-sort", sortDir === "asc" ? "ascending" : "descending");
         render();
       }
-      th.addEventListener("click", doSort);
-      th.addEventListener("keydown", function (e) {
-        if (e.key === "Enter" || e.key === " ") { e.preventDefault(); doSort(); }
-      });
+      trigger.addEventListener("click", doSort);
     });
 
     function cellText(r, col) {
@@ -892,38 +919,51 @@
     prevBtn.addEventListener("click", function () { if (page > 0) { page--; render(); } });
     nextBtn.addEventListener("click", function () { page++; render(); });
 
+    // Pagination physically removes off-page rows, so CSV export has to ask for
+    // the filtered set rather than reading what is currently in the DOM.
+    table._delFilteredRows = function () { return filtered; };
+
     var prefill = table.getAttribute("data-prefill");
     if (prefill) search.value = prefill;
     applyFilter();
     render();
   }
 
-  function isPhoneViewport() {
-    try {
-      return !!(window.matchMedia && window.matchMedia("(max-width: 768px)").matches);
-    } catch (e) {
-      return (window.innerWidth || 0) <= 768;
-    }
-  }
-
   function enhanceTable(table) {
-    // Phones: skip the 2MB AG Grid path — vanilla HTML tables with sideways
-    // scroll reliably show cell values on Pixel / Android Chrome.
-    if (isPhoneViewport()) {
+    // Phones / small tablets: skip the 2MB AG Grid path — vanilla HTML tables
+    // with sideways scroll reliably show cell values on Pixel / Android Chrome.
+    // Same 900px breakpoint the mobile CSS uses, so the two never disagree.
+    if (matchesMobile()) {
       enhanceTableVanilla(table);
       return;
     }
+
+    // Claim the grid's slot before the 1.9 MB bundle downloads so the raw table
+    // isn't shown and then yanked out from under the reader.
+    var placeholder = document.createElement("div");
+    placeholder.className = "del-grid-loading";
+    placeholder.textContent = "Loading table…";
+    table.parentNode.insertBefore(placeholder, table);
+    table.style.display = "none";
+    table.setAttribute("aria-hidden", "true");
+
+    function revertToTable() {
+      if (placeholder.parentNode) placeholder.parentNode.removeChild(placeholder);
+      table.style.display = "";
+      table.removeAttribute("aria-hidden");
+    }
+
     loadAgGrid(function (err) {
       if (err || !window.agGrid || !window.agGrid.createGrid) {
+        revertToTable();
         enhanceTableVanilla(table);
         return;
       }
       try {
-        enhanceTableWithAgGrid(table);
+        enhanceTableWithAgGrid(table, placeholder);
       } catch (e) {
         console.warn("AG Grid enhance failed, falling back", e);
-        table.style.display = "";
-        table.removeAttribute("aria-hidden");
+        revertToTable();
         var orphan = table.previousElementSibling;
         if (orphan && orphan.classList && orphan.classList.contains("del-grid-block")) {
           orphan.parentNode.removeChild(orphan);
@@ -989,21 +1029,22 @@
       headers.push(csvEscape(th.textContent));
     });
     var lines = [headers.join(",")];
-    var tbody = table.tBodies[0];
-    if (tbody) {
-      Array.prototype.forEach.call(tbody.rows, function (r) {
-        if (r.hidden || r.style.display === "none") return;
-        if (r.hasAttribute("data-empty-row")) return;
-        if (r.classList.contains("table-filter-row")) return;
-        var cols = [];
-        Array.prototype.forEach.call(r.cells, function (td) {
-          var explicit = td.getAttribute("data-sort-value");
-          var text = explicit !== null && explicit !== "" ? explicit : (td.textContent || "");
-          cols.push(csvEscape(text));
-        });
-        lines.push(cols.join(","));
+    // Prefer the vanilla renderer's filtered set: pagination removes off-page
+    // rows from the DOM, so tbody.rows alone would export one page only.
+    var rows = table._delFilteredRows
+      ? table._delFilteredRows()
+      : (table.tBodies[0] ? Array.prototype.slice.call(table.tBodies[0].rows) : []);
+    rows.forEach(function (r) {
+      if (r.hidden || r.style.display === "none") return;
+      if (r.classList.contains("table-filter-row")) return;
+      var cols = [];
+      Array.prototype.forEach.call(r.cells, function (td) {
+        var explicit = td.getAttribute("data-sort-value");
+        var text = explicit !== null && explicit !== "" ? explicit : (td.textContent || "");
+        cols.push(csvEscape(text));
       });
-    }
+      lines.push(cols.join(","));
+    });
     var blob = new Blob([lines.join("\n") + "\n"], { type: "text/csv;charset=utf-8" });
     var url = URL.createObjectURL(blob);
     var a = document.createElement("a");
@@ -1049,14 +1090,26 @@
   });
 
   // =========================================================================
-  // Flash auto-dismiss
+  // Flash messages: always dismissible by hand; only successes time out
   // =========================================================================
-  document.querySelectorAll(".flash[data-autodismiss]").forEach(function (f) {
-    setTimeout(function () {
-      f.style.transition = "opacity .4s";
-      f.style.opacity = "0";
-      setTimeout(function () { if (f.parentNode) f.parentNode.removeChild(f); }, 450);
-    }, 4000);
+  function removeFlash(f) {
+    f.style.transition = "opacity .4s";
+    f.style.opacity = "0";
+    setTimeout(function () { if (f.parentNode) f.parentNode.removeChild(f); }, 450);
+  }
+
+  document.querySelectorAll(".flash").forEach(function (f) {
+    var close = document.createElement("button");
+    close.type = "button";
+    close.className = "flash-dismiss";
+    close.setAttribute("aria-label", "Dismiss message");
+    close.textContent = "×";
+    close.addEventListener("click", function () { removeFlash(f); });
+    f.appendChild(close);
+    // Errors stay put — they used to vanish after 4s before anyone read them.
+    if (f.hasAttribute("data-autodismiss")) {
+      setTimeout(function () { removeFlash(f); }, 4000);
+    }
   });
 
   // =========================================================================
@@ -1065,6 +1118,38 @@
   document.querySelectorAll("[data-confirm]").forEach(function (el) {
     el.addEventListener("click", function (evt) {
       if (!window.confirm(el.getAttribute("data-confirm"))) evt.preventDefault();
+    });
+  });
+
+  // =========================================================================
+  // Double-submit guard for destructive forms (scan, build plan, execute, …)
+  // =========================================================================
+  document.addEventListener("submit", function (evt) {
+    var form = evt.target;
+    if (!form || !form.hasAttribute || !form.hasAttribute("data-submit-guard")) return;
+    // A confirm dialog or the live-execute gate may have cancelled the submit.
+    if (evt.defaultPrevented) return;
+    if (form._delSubmitting) { evt.preventDefault(); return; }
+    form._delSubmitting = true;
+    var btn = evt.submitter || form.querySelector('button[type="submit"], button:not([type])');
+    if (!btn) return;
+    var busyLabel = form.getAttribute("data-submit-guard") || "Working…";
+    // Deferred: disabling synchronously would drop the button's own name/value
+    // from the submitted form data (the approve/exclude buttons rely on it).
+    setTimeout(function () {
+      btn.disabled = true;
+      btn.classList.add("is-busy");
+      if (btn.querySelector(".logout-label")) return;
+      btn.textContent = busyLabel;
+    }, 0);
+  });
+
+  // Live HTTPS probes take ~800ms; say so instead of looking dead.
+  document.querySelectorAll("[data-pending-label]").forEach(function (el) {
+    el.addEventListener("click", function () {
+      el.setAttribute("aria-busy", "true");
+      el.classList.add("is-busy");
+      el.textContent = el.getAttribute("data-pending-label");
     });
   });
 
@@ -1220,8 +1305,14 @@
       card.classList.toggle("is-user-hidden", hidden);
       card.draggable = galleryEditing;
       if (favoriteBtn) {
+        var appName = card.querySelector(".app-launch-name");
+        appName = appName ? appName.textContent.trim() : "app";
         favoriteBtn.textContent = favorite ? "★" : "☆";
         favoriteBtn.setAttribute("aria-pressed", favorite ? "true" : "false");
+        favoriteBtn.setAttribute(
+          "aria-label",
+          (favorite ? "Remove " : "Add ") + appName + (favorite ? " from favorites" : " to favorites")
+        );
       }
       if (hiddenInput) hiddenInput.checked = hidden;
       if (categoryInput) categoryInput.value = cardCategory(card);
@@ -1295,10 +1386,17 @@
         else delete galleryPrefs.hidden[cardId(card)];
         saveGalleryPrefs(); renderGallery();
       });
-      card.addEventListener("dragstart", function () {
+      card.addEventListener("dragstart", function (event) {
         if (!galleryEditing) return;
         draggedCard = card;
         card.classList.add("is-dragging");
+        // Firefox refuses to start a drag unless dataTransfer carries something.
+        if (event.dataTransfer) {
+          try {
+            event.dataTransfer.effectAllowed = "move";
+            event.dataTransfer.setData("text/plain", cardId(card));
+          } catch (e) {}
+        }
       });
       card.addEventListener("dragend", function () {
         card.classList.remove("is-dragging");
@@ -1367,6 +1465,69 @@
   }
 
   // =========================================================================
+  // Focus management for the two modal surfaces (nav drawer, glossary sheet)
+  // =========================================================================
+  var FOCUSABLE =
+    'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]),' +
+    ' textarea:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
+  function focusableIn(container) {
+    if (!container) return [];
+    return Array.prototype.filter.call(container.querySelectorAll(FOCUSABLE), function (el) {
+      return el.offsetWidth || el.offsetHeight || el.getClientRects().length;
+    });
+  }
+
+  // Looked up live: the nav drawer can close before the sheet element is bound.
+  function glossarySheetOpen() {
+    var sheet = document.getElementById("glossary-sheet");
+    return !!(sheet && !sheet.hidden);
+  }
+
+  // Returns an object that moves focus in, keeps Tab inside, and restores focus
+  // to whatever was focused before the surface opened.
+  function makeFocusTrap(getContainer) {
+    var lastFocused = null;
+    var active = false;
+
+    function onKeydown(e) {
+      if (e.key !== "Tab" || !active) return;
+      var items = focusableIn(getContainer());
+      if (!items.length) return;
+      var first = items[0];
+      var last = items[items.length - 1];
+      if (e.shiftKey && document.activeElement === first) {
+        e.preventDefault();
+        last.focus();
+      } else if (!e.shiftKey && document.activeElement === last) {
+        e.preventDefault();
+        first.focus();
+      }
+    }
+
+    return {
+      activate: function () {
+        if (active) return;
+        active = true;
+        lastFocused = document.activeElement;
+        document.addEventListener("keydown", onKeydown, true);
+        setTimeout(function () {
+          var items = focusableIn(getContainer());
+          if (items.length) items[0].focus();
+        }, 50);
+      },
+      release: function (fallback) {
+        if (!active) return;
+        active = false;
+        document.removeEventListener("keydown", onKeydown, true);
+        var target = fallback || lastFocused;
+        lastFocused = null;
+        if (target && target.focus && document.contains(target)) target.focus();
+      },
+    };
+  }
+
+  // =========================================================================
   // Shell: desktop collapse rail  vs  mobile flyout (never mixed)
   // =========================================================================
   var layout = document.getElementById("app-layout");
@@ -1378,8 +1539,10 @@
   var SIDEBAR_KEY = "del.sidebarCollapsed";
 
   function isMobileNav() {
-    return window.matchMedia("(max-width: 900px)").matches;
+    return matchesMobile();
   }
+
+  var navTrap = makeFocusTrap(function () { return navDrawer; });
 
   function setSidebarCollapsed(collapsed) {
     if (!layout) return;
@@ -1401,13 +1564,18 @@
   }
 
   function closeMobileNav() {
+    var wasOpen = !!(sidebar && sidebar.classList.contains("open"));
     if (sidebar) sidebar.classList.remove("open");
     if (navToggle) {
       navToggle.setAttribute("aria-expanded", "false");
       navToggle.setAttribute("aria-label", "Open menu");
     }
     if (navBackdrop) navBackdrop.hidden = true;
-    if (isMobileNav()) document.body.style.overflow = "";
+    // Always clear: syncShellMode() calls this on the desktop branch, where
+    // isMobileNav() is already false — guarding here left the page unscrollable
+    // after opening the menu and widening past the breakpoint.
+    if (!glossarySheetOpen()) document.body.style.overflow = "";
+    if (wasOpen) navTrap.release(navToggle);
   }
 
   function openMobileNav() {
@@ -1421,11 +1589,7 @@
     }
     if (navBackdrop) navBackdrop.hidden = false;
     document.body.style.overflow = "hidden";
-    // Focus first link for keyboard / a11y
-    if (navDrawer) {
-      var first = navDrawer.querySelector(".nav-links a");
-      if (first) setTimeout(function () { first.focus(); }, 50);
-    }
+    navTrap.activate();
   }
 
   function syncShellMode() {
@@ -1582,20 +1746,27 @@
   var glossaryClose = document.getElementById("glossary-sheet-close");
   var glossaryBackdrop = document.getElementById("glossary-sheet-backdrop");
 
+  var glossaryTrap = makeFocusTrap(function () {
+    return glossarySheet ? glossarySheet.querySelector(".glossary-sheet-panel") : null;
+  });
+
   function openGlossary() {
     if (!glossarySheet) return;
     applyGlossaryContext(document.body.getAttribute("data-glossary") || glossaryCtxFromPath());
     glossarySheet.hidden = false;
     if (glossaryFab) glossaryFab.setAttribute("aria-expanded", "true");
     document.body.style.overflow = "hidden";
+    // aria-modal="true" is a promise: move focus in and keep Tab inside.
+    glossaryTrap.activate();
   }
   function closeGlossary() {
-    if (!glossarySheet) return;
+    if (!glossarySheet || glossarySheet.hidden) return;
     glossarySheet.hidden = true;
     if (glossaryFab) glossaryFab.setAttribute("aria-expanded", "false");
     if (!sidebar || !sidebar.classList.contains("open")) {
       document.body.style.overflow = "";
     }
+    glossaryTrap.release(glossaryFab);
   }
   if (glossaryFab) glossaryFab.addEventListener("click", openGlossary);
   if (glossaryClose) glossaryClose.addEventListener("click", closeGlossary);
@@ -1616,6 +1787,57 @@
     var statusEl = document.getElementById("job-status");
     var scrollToggle = document.getElementById("autoscroll-toggle");
     var TERMINAL_STATES = ["done", "failed", "success", "error", "refused"];
+    var fallbackTable = document.getElementById("job-steps");
+
+    // Build the stage panel a late-arriving step belongs to, mirroring the
+    // server-rendered markup in job_detail.html.
+    function stageTableFor(stage) {
+      var table = outputBox.querySelector('table[data-stage="' + stage.replace(/"/g, "") + '"]');
+      if (table) return table;
+      var section = document.createElement("section");
+      section.className = "panel";
+      section.innerHTML =
+        "<h2>" + escapeHtml(stage) + ' <span class="count-pill">0</span></h2>' +
+        '<div class="table-scroll"><table class="table job-steps" data-stage="' + escapeHtml(stage) + '">' +
+        '<caption class="sr-only">Steps in the ' + escapeHtml(stage) + " stage</caption>" +
+        '<thead><tr><th scope="col">#</th><th scope="col">Operation</th><th scope="col">State</th>' +
+        '<th scope="col">Exit</th><th scope="col">Duration</th><th scope="col">Output</th></tr></thead>' +
+        "<tbody></tbody></table></div>";
+      outputBox.appendChild(section);
+      return section.querySelector("table");
+    }
+
+    function appendStepRow(step) {
+      var row = document.createElement("tr");
+      row.setAttribute("data-step-seq", step.seq);
+      // A job with no steps at page load renders the compact 4-column table.
+      if (fallbackTable && document.contains(fallbackTable)) {
+        var placeholder = fallbackTable.querySelector("tbody tr td[colspan]");
+        if (placeholder) {
+          var emptyRow = placeholder.parentNode;
+          emptyRow.parentNode.removeChild(emptyRow);
+        }
+        row.innerHTML =
+          "<td>" + escapeHtml(step.seq) + "</td>" +
+          "<td>" + escapeHtml(step.stage || "") + "</td>" +
+          '<td class="mono">' + escapeHtml(step.operation || "") + "</td>" +
+          '<td class="step-state"></td>';
+        fallbackTable.tBodies[0].appendChild(row);
+        return row;
+      }
+      var table = stageTableFor(step.stage || "steps");
+      row.innerHTML =
+        "<td>" + escapeHtml(step.seq) + "</td>" +
+        '<td class="mono">' + escapeHtml(step.operation || "") + "</td>" +
+        '<td class="step-state"></td>' +
+        "<td>" + (step.exit_code === null || step.exit_code === undefined ? "—" : escapeHtml(step.exit_code)) + "</td>" +
+        "<td>—</td><td>—</td>";
+      table.tBodies[0].appendChild(row);
+      var section = table.closest("section");
+      var pill = section ? section.querySelector(".count-pill") : null;
+      if (pill) pill.textContent = String(table.tBodies[0].rows.length);
+      return row;
+    }
 
     function applyStatus(data) {
       if (!data) return;
@@ -1625,11 +1847,15 @@
       }
       (data.steps || []).forEach(function (step) {
         var row = outputBox.querySelector('tr[data-step-seq="' + step.seq + '"]');
-        if (row) {
-          var stateCell = row.querySelector(".step-state");
-          if (stateCell) {
-            stateCell.innerHTML = '<span class="badge status-' + step.state + '">' + step.state + "</span>";
-          }
+        if (!row) {
+          // Steps created after page load were polled but never rendered.
+          row = appendStepRow(step);
+          if (!row) return;
+        }
+        var stateCell = row.querySelector(".step-state");
+        if (stateCell) {
+          stateCell.innerHTML =
+            '<span class="badge status-' + escapeHtml(step.state) + '">' + escapeHtml(step.state) + "</span>";
         }
       });
       if (scrollToggle && scrollToggle.checked && outputBox) {

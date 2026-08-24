@@ -34,7 +34,8 @@ from fastapi.templating import Jinja2Templates
 from del_app import auditlog, auth
 from del_app.auth import User
 from del_app.config import get_settings
-from del_app.db import get_db, q
+from del_app.correlate import _DOCKER_BUILTIN_NETWORKS
+from del_app.db import get_db, latest_done_scan_id, q
 
 # Lazy/defensive imports of sibling lanes' modules. Accessed as
 # `<name>.<func>` at call time so tests can monkeypatch these module
@@ -98,8 +99,8 @@ ORPHAN_REASONS = {
     "tmux_session": "tmux session not matched to any known application",
 }
 
-# Docker built-in networks — never "orphans"; they always exist.
-_DOCKER_BUILTIN_NETWORKS = frozenset({"bridge", "host", "none"})
+# Docker built-in networks — never "orphans"; they always exist. Imported from
+# correlate so the classifier and the correlation engine cannot disagree.
 
 # OS cron.daily/etc. basenames that are not app leftovers.
 _SYSTEM_CRON_BASENAMES = frozenset({
@@ -904,17 +905,80 @@ def _reclaimable_bytes() -> int:
     return value
 
 
+# An association only counts as "this resource has an owner" when it points at
+# an application that still exists in the latest scan AND carries at least
+# `probable` confidence. Without the first condition, a resource left behind by
+# an app that was removed scans ago stays permanently hidden from Orphans —
+# which is precisely the leftover the page exists to surface. Without the
+# second, a sub-60 name-similarity guess (Step 11's difflib fallback) is enough
+# to hide a resource while still being too weak to make it removable anywhere:
+# a dead zone where the resource is neither actionable nor cleanable.
+_ORPHAN_MIN_OWNING_CONFIDENCE = 60
+
+
+def _orphan_query(latest: int | None) -> tuple[str, tuple]:
+    """SQL + params for 'resources with no current, confident owner'."""
+    sql = """
+        SELECT r.* FROM resources r
+        WHERE NOT EXISTS (
+            SELECT 1 FROM associations a
+            JOIN applications ap ON ap.id = a.app_id
+            WHERE a.resource_id = r.id
+              AND a.excluded = 0
+              AND a.confidence >= ?
+    """
+    params: list[Any] = [_ORPHAN_MIN_OWNING_CONFIDENCE]
+    if latest is not None:
+        sql += " AND ap.last_seen = ?"
+        params.append(latest)
+    sql += " )"
+    if latest is not None:
+        sql += " AND r.last_seen = ?"
+        params.append(latest)
+    sql += " ORDER BY r.type, r.display"
+    return sql, tuple(params)
+
+
+# The dashboard needs one integer — the actionable-orphan count — but deriving
+# it means fetching every unassociated resource and classifying it in Python.
+# The inputs only change when a scan completes, so memoise on the scan id.
+_ORPHAN_COUNT_CACHE: dict[str, Any] = {"scan": None, "count": 0}
+_ORPHAN_COUNT_LOCK = threading.Lock()
+
+
+def _actionable_orphan_count(conn, latest: int | None) -> int:
+    with _ORPHAN_COUNT_LOCK:
+        if _ORPHAN_COUNT_CACHE["scan"] == latest:
+            return _ORPHAN_COUNT_CACHE["count"]
+
+    sql, params = _orphan_query(latest)
+    rows = _rows(q(conn, sql, params))
+    compose_images = _compose_declared_images(conn)
+    count = 0
+    for r in rows:
+        cls = classify_orphan_candidate(
+            r.get("type") or "",
+            r.get("key") or "",
+            r.get("display") or "",
+            r.get("path"),
+            _json_or(r.get("data_json"), {}),
+            compose_images,
+        )
+        if _is_actionable_orphan(cls):
+            count += 1
+
+    with _ORPHAN_COUNT_LOCK:
+        _ORPHAN_COUNT_CACHE["scan"] = latest
+        _ORPHAN_COUNT_CACHE["count"] = count
+    return count
+
+
 def _latest_scan_id(conn) -> int | None:
-    # Latest *completed* scan only. A scan row is inserted as 'running' at the
-    # start of run_scan() and only populated with app/resource rows when it
-    # finishes (status='done'). Using MAX(id) regardless of status would point
-    # the UI at an empty in-progress scan during the post-removal rescan, making
-    # every app look removed ("No applications found") until the scan completes.
-    rows = q(conn, "SELECT MAX(id) AS m FROM scans WHERE status = 'done'")
-    if rows:
-        r = dict(rows[0]) if hasattr(rows[0], "keys") else rows[0]
-        return r.get("m")
-    return None
+    """Latest *completed* scan id. Thin wrapper over db.latest_done_scan_id so
+    tests can monkeypatch it on this module; both call sites share one
+    definition of "latest scan" (see db.latest_done_scan_id for why the
+    status filter matters)."""
+    return latest_done_scan_id(conn)
 
 
 def _valid_gallery_domain(value: Any) -> str | None:
@@ -1194,30 +1258,44 @@ def dashboard(
         running_jobs = _rows(
             q(conn, "SELECT * FROM jobs WHERE status = 'running'")
         )
+        # COUNT(*) rather than materialising rows just to call len(). The
+        # EXISTS form is deliberate: the equivalent JOIN becomes plan-unstable
+        # once sqlite_stat1 exists (it flips to a skip-scan and degrades ~10x).
         uncertain_sql = """
-                SELECT a.* FROM associations a
-                JOIN resources r ON r.id = a.resource_id
+                SELECT COUNT(*) AS n FROM associations a
                 WHERE a.removal_eligible = 'uncertain'
+                  AND EXISTS (SELECT 1 FROM resources r
+                              WHERE r.id = a.resource_id
                 """
-        uncertain_params: tuple = ()
+        uncertain_params: list[Any] = []
         if latest is not None:
             uncertain_sql += " AND r.last_seen = ?"
-            uncertain_params = (latest,)
-        uncertain = _rows(q(conn, uncertain_sql, uncertain_params))
-        shared_count = len(
-            _rows(q(conn, "SELECT DISTINCT resource_id FROM associations WHERE shared = 1"))
-        )
-        orphan_sql = """
-                SELECT r.* FROM resources r
-                LEFT JOIN associations a ON a.resource_id = r.id
-                WHERE a.id IS NULL
+            uncertain_params.append(latest)
+        uncertain_sql += """)
+                  AND EXISTS (SELECT 1 FROM applications ap
+                              WHERE ap.id = a.app_id
                 """
-        orphan_params: tuple = ()
         if latest is not None:
-            orphan_sql += " AND r.last_seen = ?"
-            orphan_params = (latest,)
-        orphan_raw = _rows(q(conn, orphan_sql, orphan_params))
-        compose_images_dash = _compose_declared_images(conn)
+            uncertain_sql += " AND ap.last_seen = ?"
+            uncertain_params.append(latest)
+        uncertain_sql += ")"
+        uncertain_count = _rows(q(conn, uncertain_sql, tuple(uncertain_params)))[0]["n"]
+
+        # Scope shared resources the same way. Counting across all scan history
+        # made this the one stat card that disagreed with the page it links to.
+        shared_sql = """
+                SELECT COUNT(DISTINCT a.resource_id) AS n FROM associations a
+                JOIN resources r ON r.id = a.resource_id
+                JOIN applications ap ON ap.id = a.app_id
+                WHERE a.shared = 1 AND a.excluded = 0
+                """
+        shared_params: tuple = ()
+        if latest is not None:
+            shared_sql += " AND r.last_seen = ? AND ap.last_seen = ?"
+            shared_params = (latest, latest)
+        shared_count = _rows(q(conn, shared_sql, shared_params))[0]["n"]
+
+        orphan_actionable = _actionable_orphan_count(conn, latest)
         recent_scans = _rows(
             q(conn, "SELECT * FROM scans ORDER BY id DESC LIMIT 5")
         )
@@ -1225,21 +1303,6 @@ def dashboard(
         disk_usage_bytes = _disk_usage_bytes(conn, latest)
     finally:
         conn.close()
-
-    # Dashboard count matches Orphans default view: actionable only.
-    orphan_actionable = 0
-    for r in orphan_raw:
-        data = _json_or(r.get("data_json"), {})
-        cls = classify_orphan_candidate(
-            r.get("type") or "",
-            r.get("key") or "",
-            r.get("display") or "",
-            r.get("path"),
-            data,
-            compose_images_dash,
-        )
-        if _is_actionable_orphan(cls):
-            orphan_actionable += 1
 
     # Last completed scan summary for the dashboard header strip.
     last_scan = None
@@ -1256,7 +1319,7 @@ def dashboard(
         "running": len(running_jobs),
         "orphan_candidates": orphan_actionable,
         "shared_resources": shared_count,
-        "uncertain_mappings": len(uncertain),
+        "uncertain_mappings": uncertain_count,
         "disk_usage_bytes": disk_usage_bytes,
         "reclaimable_bytes": _reclaimable_bytes(),
     }
@@ -1943,16 +2006,7 @@ def orphans_view(
     conn = get_db()
     try:
         latest = _latest_scan_id(conn)
-        sql = """
-            SELECT r.* FROM resources r
-            LEFT JOIN associations a ON a.resource_id = r.id
-            WHERE a.id IS NULL
-        """
-        params: tuple = ()
-        if latest is not None:
-            sql += " AND r.last_seen = ?"
-            params = (latest,)
-        sql += " ORDER BY r.type, r.display"
+        sql, params = _orphan_query(latest)
         rows = _rows(q(conn, sql, params))
         compose_images = _compose_declared_images(conn)
     finally:

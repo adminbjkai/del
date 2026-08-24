@@ -7,6 +7,7 @@ See docs/ARCHITECTURE.md "Removal job engine" and docs/INTERFACES.md jobs.py.
 from __future__ import annotations
 
 import json
+import logging
 import re
 import subprocess
 import threading
@@ -29,6 +30,8 @@ _FOREIGN_GUARD_OPS = {
     "systemd_stop", "systemd_disable", "systemd_rm_unit", "process_term",
 }
 
+logger = logging.getLogger("del_app.jobs")
+
 CONFIRM_VOLUMES_PHRASE = "y"
 
 _SECRET_RE = re.compile(r"(?i)(password|token|secret|key)=\S+")
@@ -41,6 +44,19 @@ _HALTING_STAGES = {"backup", "quiesce", "remove_runtime", "remove_host", "remove
 # Failures in these stages attempt an automatic restore from the backups
 # recorded earlier in this job before the job is marked failed.
 _RESTORE_ON_FAILURE_OPS = {"nginx_rm_site", "nginx_test_reload", "systemd_disable", "systemd_rm_unit"}
+
+# Backup-stage operations whose destination must be recorded in the `backups`
+# table. Without this the rollback path below has nothing to restore from —
+# it silently iterated an empty result set while auditing "restore attempted".
+_BACKUP_OPS = {"file_backup", "volume_backup", "backup_tar"}
+
+# Per-operation name of the argument holding the *source* that was backed up,
+# i.e. where a restore has to put the file back.
+_BACKUP_SRC_ARG = {
+    "file_backup": "path",
+    "volume_backup": "volume",
+    "backup_tar": "src_path",
+}
 
 
 def _now() -> str:
@@ -151,17 +167,56 @@ def _mark_job(conn, job_id: int, status: str, *, started: bool = False, finished
         x(conn, "UPDATE jobs SET status = ? WHERE id = ?", (status, job_id))
 
 
-def _restore_from_backups(conn, job_id: int, failed_step: dict) -> None:
+def _record_backup(conn, job_id: int, operation: str, args: dict) -> None:
+    """Record a completed backup so the rollback path has something to restore.
+
+    A volume backup is a tar of the volume's contents, not a filesystem path,
+    so it is recorded but is not restorable by `path_restore`; `_restore_from
+    _backups` skips those rather than issuing a call that must fail.
+    """
+    dest = args.get("dest")
+    if not dest:
+        return
+    src = args.get(_BACKUP_SRC_ARG.get(operation, "path"))
+    try:
+        x(
+            conn,
+            "INSERT INTO backups (job_id, kind, src, dest) VALUES (?, ?, ?, ?)",
+            (job_id, operation, src, dest),
+        )
+    except Exception:
+        logger.exception("job %s: failed to record backup row for %s", job_id, operation)
+
+
+def _restore_from_backups(conn, job_id: int, failed_step: dict) -> list[dict]:
+    """Restore this job's file backups, newest first. Returns a per-backup
+    outcome list so the caller can audit what actually happened — the previous
+    version swallowed every failure and reported success unconditionally."""
+    outcomes: list[dict] = []
     backups = q(conn, "SELECT * FROM backups WHERE job_id = ? ORDER BY id DESC", (job_id,))
     for b in backups:
+        if b["kind"] == "volume_backup":
+            outcomes.append({
+                "dest": b["dest"], "ok": False,
+                "error": "volume archive — restore manually with docker run + tar",
+            })
+            continue
+        if not b["src"]:
+            outcomes.append({"dest": b["dest"], "ok": False, "error": "no recorded source path"})
+            continue
         try:
-            helper_client.call(
+            result = helper_client.call(
                 "path_restore",
-                {"src": b["dest"], "dest": b["src"]},
+                {"backup_path": b["dest"], "original_path": b["src"]},
                 dry_run=False,
             )
-        except Exception:
-            continue
+            outcomes.append({
+                "dest": b["dest"], "src": b["src"], "ok": bool(result.get("ok")),
+                "error": result.get("error"),
+            })
+        except Exception as exc:
+            outcomes.append({"dest": b["dest"], "src": b["src"], "ok": False, "error": str(exc)})
+    return outcomes
 
 
 def _run_job(job_id: int, confirm_phrase: str | None) -> None:
@@ -207,20 +262,24 @@ def _run_job(job_id: int, confirm_phrase: str | None) -> None:
                 # halted: leave remaining steps pending
                 break
 
-            x(
-                conn,
-                "UPDATE job_steps SET state = 'running', started = ? WHERE id = ?",
-                (_now(), step["id"]),
-            )
-            conn.commit()
-            auditlog.audit(user_id, "step_running", f"job:{job_id}:seq:{step['seq']}",
-                            {"operation": step["operation"]})
-
             # Any unexpected exception in this block (malformed args_json, a
-            # helper_client bug, etc.) must become a normal failed step
-            # rather than propagate out of the background thread and leave
-            # the job stuck in "running" forever with no error recorded.
+            # helper_client bug, a full disk while auditing) must become a
+            # normal failed step rather than propagate out of the background
+            # thread and leave the job stuck in "running" forever with no
+            # error recorded. The state write and audit call are INSIDE the
+            # guard for exactly that reason: auditlog.audit opens its own DB
+            # connection and appends to a log file, either of which can fail.
+            args = {}
             try:
+                x(
+                    conn,
+                    "UPDATE job_steps SET state = 'running', started = ? WHERE id = ?",
+                    (_now(), step["id"]),
+                )
+                conn.commit()
+                auditlog.audit(user_id, "step_running", f"job:{job_id}:seq:{step['seq']}",
+                               {"operation": step["operation"]})
+
                 args = json.loads(step["args_json"]) if step["args_json"] else {}
 
                 if step["stage"] == "validate" and step["operation"] == "validate_removal":
@@ -269,10 +328,16 @@ def _run_job(job_id: int, confirm_phrase: str | None) -> None:
                             ok = False
                             output = str(e)
                         exit_code = 0 if ok else 1
-            except Exception as e:
+            except BaseException as e:
                 ok = False
                 output = f"internal error: {e}"
                 exit_code = 1
+                logger.exception("job %s step seq %s raised", job_id, step["seq"])
+
+            # A completed backup must be recorded before any deletion runs, so
+            # a later failure in this job has something to roll back to.
+            if ok and mode == "live" and step["operation"] in _BACKUP_OPS:
+                _record_backup(conn, job_id, step["operation"], args)
 
             output = sanitize_output(output)
             state = "done" if ok else "failed"
@@ -290,9 +355,16 @@ def _run_job(job_id: int, confirm_phrase: str | None) -> None:
             if not ok:
                 job_failed = True
                 if step["operation"] in _RESTORE_ON_FAILURE_OPS:
-                    _restore_from_backups(conn, job_id, dict(step))
-                    auditlog.audit(user_id, "job_restore_attempted", f"job:{job_id}",
-                                    {"failed_operation": step["operation"]})
+                    outcomes = _restore_from_backups(conn, job_id, dict(step))
+                    auditlog.audit(
+                        user_id, "job_restore_attempted", f"job:{job_id}",
+                        {
+                            "failed_operation": step["operation"],
+                            "backups_found": len(outcomes),
+                            "restored": sum(1 for o in outcomes if o["ok"]),
+                            "outcomes": outcomes,
+                        },
+                    )
 
         final_status = "failed" if job_failed else "success"
         _mark_job(conn, job_id, final_status, finished=True)
@@ -308,8 +380,14 @@ def _run_job(job_id: int, confirm_phrase: str | None) -> None:
             from del_app import scanner
             scan_id = scanner.run_scan()
             auditlog.audit(user_id, "post_removal_rescan", f"job:{job_id}", {"scan_id": scan_id})
-        except Exception:
-            pass
+        except Exception as exc:
+            # Swallowing this used to leave the operator looking at a stale
+            # inventory after a successful removal with no indication why.
+            logger.exception("job %s: post-removal rescan failed", job_id)
+            auditlog.audit(
+                user_id, "post_removal_rescan_failed", f"job:{job_id}",
+                {"error": str(exc)[:300]},
+            )
 
 
 def retry_job(job_id: int, confirm_phrase: str | None = None) -> None:

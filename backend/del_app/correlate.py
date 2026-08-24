@@ -33,13 +33,13 @@ _DOCKER_BUILTIN_NETWORKS = frozenset({"bridge", "host", "none"})
 # it by basename invents a phantom app called "docker" that then accumulates
 # unrelated projects' compose roots and reports them safe to delete.
 _GENERIC_DIR_BASENAMES = frozenset({
-    "docker", "compose", "deploy", "deployment", "deployments", "server",
-    "backend", "frontend", "client", "cli", "config", "conf", "agent", "hub",
-    "core", "cloud", "gateway", "scripts", "script", "build", "dist", "src",
+    "docker", "compose", "docker-compose", "compose-project", "local-docker",
+    "containers", "deploy", "deployment", "deployments",
+    "server", "backend", "frontend", "client", "cli",
+    "config", "conf", "scripts", "script", "build", "dist", "src",
     "app", "apps", "service", "services", "stack", "infra", "infrastructure",
-    "docker-compose", "compose-project", "examples", "example", "samples",
-    "sample", "test", "tests", "e2e-tests", "monitoring", "etcd", "mcp",
-    "nextjs", "macro", "resources", "local-docker", "containers",
+    "examples", "example", "samples", "sample", "test", "tests", "e2e-tests",
+    "resources",
 })
 
 
@@ -321,9 +321,24 @@ def build_apps(
     # --- Step 2: compose_src projects not matched by a running container's
     #     project label become their own (stopped/orphaned) app -------------
     running_project_slugs = {_slugify(p) for p in project_containers}
-    for cp in compose_projects:
+    # Shallowest working_dir first, so a parent project has already created its
+    # app by the time a compose file nested inside it is considered — otherwise
+    # the nesting rule below finds nothing to attach to and the sub-directory
+    # becomes its own app.
+    for cp in sorted(
+        compose_projects,
+        key=lambda r: ((r.data.get("working_dir") or "").count("/"),
+                       r.data.get("working_dir") or ""),
+    ):
         working_dir = cp.data.get("working_dir")
-        name_candidates = [cp.data.get("declared_name"), cp.display]
+        # `declared_name` comes from the compose file and is meaningful.
+        # `cp.display` is only the directory basename — matching an existing app
+        # by a generic one (`gateway`, `server`, `docker`) is how an unrelated
+        # project's sub-directory gets absorbed into a same-named app, which
+        # then also drags in that project's root via the parent-directory rule.
+        name_candidates = [cp.data.get("declared_name")]
+        if _slugify(cp.display) not in _GENERIC_DIR_BASENAMES:
+            name_candidates.append(cp.display)
         matched_slug = None
         for cand in name_candidates:
             if cand and _slugify(cand) in apps:
@@ -522,15 +537,37 @@ def build_apps(
     # --- Step 7: directories -------------------------------------------------
     matched_directory_keys: set[str] = set()
     for d in directories:
+        dpath = (d.path or "").rstrip("/")
         for slug, app in apps.items():
             if d.path and d.path in app.dir_paths:
                 app.add(
                     d,
                     confidence=95,
                     ownership="exclusive",
-                    data_loss_risk="data" if any(d.path == bm_path for bm_path in app.dir_paths) else "config",
+                    data_loss_risk="data",
                     evidence=[Evidence(source="fs_src", statement="directory matches compose working_dir / bind mount source", weight=95)],
                 )
+                matched_directory_keys.add(d.key)
+            elif dpath and any(
+                dp and _project_dir_for(dp) == dpath and dp.rstrip("/") != dpath
+                for dp in app.dir_paths
+            ):
+                # The app's compose file / working dir lives in a SUB-directory
+                # (/apps/karakeep/docker), so its own project root was never
+                # claimed and fell through to the 50-point name-similarity
+                # fallback — leaving the whole directory behind on removal.
+                app.add(
+                    d,
+                    confidence=92,
+                    ownership="exclusive",
+                    data_loss_risk="data",
+                    evidence=[Evidence(
+                        source="fs_src",
+                        statement=f"project root containing this app's working directory ({dpath})",
+                        weight=92,
+                    )],
+                )
+                app.dir_paths.add(dpath)
                 matched_directory_keys.add(d.key)
             elif d.path and any(d.path.startswith(dp.rstrip("/") + "/") for dp in app.dir_paths):
                 app.add(

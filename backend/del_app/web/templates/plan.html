@@ -2,18 +2,23 @@
 {% block title %}Removal plan{% endblock %}
 {% block content %}
 {% if plan %}
-  <h1>Plan #{{ plan.get('id') }} · {{ app.get('name', app.get('slug')) }}</h1>
-  <p class="muted">status: <span class="badge">{{ plan.get('status') }}</span> · created <span class="dt">{{ format_dt(plan.get('created')) }}</span></p>
+  <div class="page-header">
+    <h1>Plan #{{ plan.get('id') }} · {{ app.get('name', app.get('slug')) }}</h1>
+  </div>
+  <p class="muted">status: <span class="badge status-{{ plan.get('status') }}">{{ plan.get('status') }}</span> · created <span class="dt">{{ format_dt(plan.get('created')) }}</span></p>
 
   <section class="panel box-danger">
     <h2>Execute</h2>
-    <form method="post" action="/plans/{{ plan.get('id') }}/execute" id="execute-form" class="stacked-form">
+    <form method="post" action="/plans/{{ plan.get('id') }}/execute" id="execute-form" class="stacked-form" data-submit-guard="Executing…">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <label><input type="radio" name="mode" value="dry_run" checked> Dry run</label>
       <label><input type="radio" name="mode" value="live" id="mode-live"> Live (irreversible steps will run)</label>
       <div id="live-confirm-box" class="box box-danger" hidden>
-        <p>Type <code>y</code> to confirm permanent volume deletion.</p>
-        <input type="text" name="confirm_phrase" id="confirm-phrase" placeholder="y" autocomplete="off">
+        <p id="confirm-phrase-help">Type <code>y</code> to confirm permanent volume deletion.
+          This deletes data that cannot be recovered.</p>
+        <label for="confirm-phrase">Confirmation phrase</label>
+        <input type="text" name="confirm_phrase" id="confirm-phrase" placeholder="y"
+               autocomplete="off" aria-describedby="confirm-phrase-help">
       </div>
       <button type="submit" class="btn btn-danger" id="execute-btn">Execute plan</button>
     </form>
@@ -30,8 +35,10 @@
     <h2>Steps to remove ({{ plan.get('steps', [])|length }})</h2>
     {% for stage, steps in plan.get('stages', {}).items() %}
     <h3>{{ stage }} ({{ steps|length }})</h3>
+    <div class="table-scroll">
     <table class="table">
-      <thead><tr><th>#</th><th>Operation</th><th>Description</th><th>Danger</th><th>Reversible</th></tr></thead>
+      <caption class="sr-only">Planned {{ stage }} steps with danger level and reversibility.</caption>
+      <thead><tr><th scope="col">#</th><th scope="col">Operation</th><th scope="col">Description</th><th scope="col">Danger</th><th scope="col">Reversible</th></tr></thead>
       <tbody>
         {% for s in steps %}
         <tr class="{% if s.get('danger') == 'data_loss' %}row-danger{% elif s.get('danger') == 'warning' %}row-warning{% endif %}">
@@ -44,6 +51,7 @@
         {% endfor %}
       </tbody>
     </table>
+    </div>
     {% endfor %}
   </section>
 
@@ -63,8 +71,10 @@
 
   <p>Estimated reclaim: <strong>{{ plan.get('est_reclaim_bytes', 0) }} bytes</strong></p>
 {% else %}
-  <h1>Build removal plan · {{ app.get('name', app.get('slug')) }}</h1>
-  <form method="post" action="/apps/{{ app.get('slug') }}/plan" class="stacked-form">
+  <div class="page-header">
+    <h1>Build removal plan · {{ app.get('name', app.get('slug')) }}</h1>
+  </div>
+  <form method="post" action="/apps/{{ app.get('slug') }}/plan" class="stacked-form" data-submit-guard="Building plan…">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
     <div class="box box-warning" id="preset-complete-removal-box">

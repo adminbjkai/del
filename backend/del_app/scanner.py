@@ -176,6 +176,20 @@ def run_scan() -> int:
                     ),
                 )
                 assoc_count += 1
+
+        # Drop associations belonging to applications that no longer exist in
+        # this scan. Only apps that were re-correlated above had their rows
+        # replaced, so an app removed from the host kept its associations
+        # forever — and because those rows point at resources that are still
+        # live, they went on claiming ownership of them. That both hid real
+        # leftovers from the Orphans page and left resources looking "shared"
+        # with a ghost, which blocks a clean removal of the surviving app.
+        cur = conn.execute(
+            "DELETE FROM associations WHERE app_id IN "
+            "(SELECT id FROM applications WHERE last_seen < ?)",
+            (scan_id,),
+        )
+        stale_assoc_removed = cur.rowcount or 0
         conn.commit()
 
         stats = {
@@ -184,6 +198,7 @@ def run_scan() -> int:
             "resources_by_source": per_source_counts,
             "apps_total": app_count,
             "associations_total": assoc_count,
+            "stale_associations_removed": stale_assoc_removed,
         }
         conn.execute(
             "UPDATE scans SET finished=datetime('now'), status='done', stats_json=? WHERE id=?",

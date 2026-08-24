@@ -2,7 +2,12 @@
 {% import "_macros.html" as m %}
 {% block title %}Resources · {{ res_label }}{% endblock %}
 {% block content %}
-<h1>Resources</h1>
+<div class="page-header">
+  <h1>Resources</h1>
+  <div class="page-actions">
+    <button type="button" class="btn btn-sm" data-export-table="resources-table" title="Export the currently filtered rows as CSV">Export CSV</button>
+  </div>
+</div>
 
 <nav class="tabbar">
   {% for t in type_counts %}
@@ -18,8 +23,9 @@
 
 {# ---------- container ---------- #}
 {% if res_type == 'container' %}
-<table class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
-  <thead><tr><th>Name</th><th data-filter="state">State/health</th><th>Image</th><th>Host port(s)</th><th>Container port(s)</th><th>Compose project</th><th>Owner app(s)</th><th data-filter="shared">Shared</th></tr></thead>
+<table id="resources-table" class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
+  <caption class="sr-only">{{ res_label }} from the latest scan, with the application(s) that own each one.</caption>
+  <thead><tr><th scope="col">Name</th><th scope="col">State/health</th><th scope="col">Image</th><th scope="col">Host port(s)</th><th scope="col">Container port(s)</th><th scope="col">Compose project</th><th scope="col">Owner app(s)</th><th scope="col">Shared</th></tr></thead>
   <tbody>
     {% for r in rows %}
     {% set mappings = r.data.get('port_mappings') %}
@@ -46,8 +52,9 @@
 
 {# ---------- image ---------- #}
 {% elif res_type == 'image' %}
-<table class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
-  <thead><tr><th>Repo:tag</th><th>ID</th><th>Size</th><th data-filter="dangling">Dangling</th><th>Used by</th><th>Owner app(s)</th></tr></thead>
+<table id="resources-table" class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
+  <caption class="sr-only">{{ res_label }} from the latest scan, with the application(s) that own each one.</caption>
+  <thead><tr><th scope="col">Repo:tag</th><th scope="col">ID</th><th scope="col">Size</th><th scope="col">Dangling</th><th scope="col">Used by</th><th scope="col">Owner app(s)</th></tr></thead>
   <tbody>
     {% for r in rows %}
     <tr>
@@ -64,8 +71,9 @@
 
 {# ---------- volume ---------- #}
 {% elif res_type == 'volume' %}
-<table class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
-  <thead><tr><th>Name</th><th>Mountpoint</th><th>Containers using</th><th data-filter="orphan">Orphan</th><th>Owner app(s)</th><th data-filter="shared">Shared</th></tr></thead>
+<table id="resources-table" class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
+  <caption class="sr-only">{{ res_label }} from the latest scan, with the application(s) that own each one.</caption>
+  <thead><tr><th scope="col">Name</th><th scope="col">Mountpoint</th><th scope="col">Containers using</th><th scope="col">Orphan</th><th scope="col">Owner app(s)</th><th scope="col">Shared</th></tr></thead>
   <tbody>
     {% for r in rows %}
     {% set using = r.data.get('containers_using') or [] %}
@@ -83,8 +91,9 @@
 
 {# ---------- network ---------- #}
 {% elif res_type == 'network' %}
-<table class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
-  <thead><tr><th>Name</th><th data-filter="driver">Driver</th><th>Attached</th><th>Owner app(s)</th><th data-filter="shared">Shared</th></tr></thead>
+<table id="resources-table" class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
+  <caption class="sr-only">{{ res_label }} from the latest scan, with the application(s) that own each one.</caption>
+  <thead><tr><th scope="col">Name</th><th scope="col">Driver</th><th scope="col">Attached</th><th scope="col">Owner app(s)</th><th scope="col">Shared</th></tr></thead>
   <tbody>
     {% for r in rows %}
     <tr>
@@ -100,8 +109,9 @@
 
 {# ---------- nginx_site ---------- #}
 {% elif res_type == 'nginx_site' %}
-<table class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
-  <thead><tr><th>Server names</th><th>Config path</th><th>Upstream port(s)</th><th data-filter="ssl">SSL</th><th>Owner app(s)</th></tr></thead>
+<table id="resources-table" class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
+  <caption class="sr-only">{{ res_label }} from the latest scan, with the application(s) that own each one.</caption>
+  <thead><tr><th scope="col">Server names</th><th scope="col">Config path</th><th scope="col">Upstream port(s)</th><th scope="col">SSL</th><th scope="col">Owner app(s)</th></tr></thead>
   <tbody>
     {% for r in rows %}
     {% set ups = (r.data.get('upstreams') or []) | map(attribute='port') | select | unique | list %}
@@ -118,8 +128,9 @@
 
 {# ---------- systemd_unit / systemd_timer ---------- #}
 {% elif res_type in ('systemd_unit', 'systemd_timer') %}
-<table class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
-  <thead><tr><th>Unit</th><th data-filter="active">Active</th><th>Exec / target</th><th>Working dir</th><th>Owner app(s)</th></tr></thead>
+<table id="resources-table" class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
+  <caption class="sr-only">{{ res_label }} from the latest scan, with the application(s) that own each one.</caption>
+  <thead><tr><th scope="col">Unit</th><th scope="col">Active</th><th scope="col">Exec / target</th><th scope="col">Working dir</th><th scope="col">Owner app(s)</th></tr></thead>
   <tbody>
     {% for r in rows %}
     <tr>
@@ -135,8 +146,9 @@
 
 {# ---------- directory / git_repo ---------- #}
 {% elif res_type in ('directory', 'git_repo') %}
-<table class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
-  <thead><tr><th>Path</th><th>Size</th><th>Git branch</th><th data-filter="dirty">Dirty</th><th>Owner app(s)</th></tr></thead>
+<table id="resources-table" class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
+  <caption class="sr-only">{{ res_label }} from the latest scan, with the application(s) that own each one.</caption>
+  <thead><tr><th scope="col">Path</th><th scope="col">Size</th><th scope="col">Git branch</th><th scope="col">Dirty</th><th scope="col">Owner app(s)</th></tr></thead>
   <tbody>
     {% for r in rows %}
     {% set git = r.data.get('git') or {} %}
@@ -155,8 +167,9 @@
 
 {# ---------- port / process ---------- #}
 {% elif res_type in ('port', 'process') %}
-<table class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
-  <thead><tr><th>Port</th><th>Bind addr</th><th data-filter="proto">Proto</th><th>Process</th><th>PID</th><th>Owner app(s)</th></tr></thead>
+<table id="resources-table" class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
+  <caption class="sr-only">{{ res_label }} from the latest scan, with the application(s) that own each one.</caption>
+  <thead><tr><th scope="col">Port</th><th scope="col">Bind addr</th><th scope="col">Proto</th><th scope="col">Process</th><th scope="col">PID</th><th scope="col">Owner app(s)</th></tr></thead>
   <tbody>
     {% for r in rows %}
     <tr>
@@ -173,8 +186,9 @@
 
 {# ---------- env_file ---------- #}
 {% elif res_type == 'env_file' %}
-<table class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
-  <thead><tr><th>Path</th><th>Variable count</th><th>Owner app(s)</th></tr></thead>
+<table id="resources-table" class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
+  <caption class="sr-only">{{ res_label }} from the latest scan, with the application(s) that own each one.</caption>
+  <thead><tr><th scope="col">Path</th><th scope="col">Variable count</th><th scope="col">Owner app(s)</th></tr></thead>
   <tbody>
     {% for r in rows %}
     <tr>
@@ -188,8 +202,9 @@
 
 {# ---------- cron_entry ---------- #}
 {% elif res_type == 'cron_entry' %}
-<table class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
-  <thead><tr><th>Schedule</th><th data-filter="user">User</th><th>Command</th><th>Source</th><th>Owner app(s)</th></tr></thead>
+<table id="resources-table" class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
+  <caption class="sr-only">{{ res_label }} from the latest scan, with the application(s) that own each one.</caption>
+  <thead><tr><th scope="col">Schedule</th><th scope="col">User</th><th scope="col">Command</th><th scope="col">Source</th><th scope="col">Owner app(s)</th></tr></thead>
   <tbody>
     {% for r in rows %}
     <tr>
@@ -205,8 +220,9 @@
 
 {# ---------- compose_project ---------- #}
 {% elif res_type == 'compose_project' %}
-<table class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
-  <thead><tr><th>Project</th><th>Working dir</th><th>Services</th><th>Owner app(s)</th></tr></thead>
+<table id="resources-table" class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
+  <caption class="sr-only">{{ res_label }} from the latest scan, with the application(s) that own each one.</caption>
+  <thead><tr><th scope="col">Project</th><th scope="col">Working dir</th><th scope="col">Services</th><th scope="col">Owner app(s)</th></tr></thead>
   <tbody>
     {% for r in rows %}
     <tr>
@@ -221,8 +237,9 @@
 
 {# ---------- bind_mount ---------- #}
 {% elif res_type == 'bind_mount' %}
-<table class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
-  <thead><tr><th>Source</th><th>Destination</th><th>Container</th><th>Compose project</th><th>Owner app(s)</th></tr></thead>
+<table id="resources-table" class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
+  <caption class="sr-only">{{ res_label }} from the latest scan, with the application(s) that own each one.</caption>
+  <thead><tr><th scope="col">Source</th><th scope="col">Destination</th><th scope="col">Container</th><th scope="col">Compose project</th><th scope="col">Owner app(s)</th></tr></thead>
   <tbody>
     {% for r in rows %}
     <tr>
@@ -238,14 +255,18 @@
 
 {# ---------- tmux_session ---------- #}
 {% elif res_type == 'tmux_session' %}
-<table class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
-  <thead><tr><th>Session</th><th>Windows</th><th>Created</th><th>Owner app(s)</th></tr></thead>
+<table id="resources-table" class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
+  <caption class="sr-only">{{ res_label }} from the latest scan, with the application(s) that own each one.</caption>
+  <thead><tr><th scope="col">Session</th><th scope="col">Windows</th><th scope="col">Created</th><th scope="col">Owner app(s)</th></tr></thead>
   <tbody>
     {% for r in rows %}
     <tr>
       <td>{{ r.data.get('session') or r.display or r.key }}</td>
       <td>{{ r.data.get('windows') or '—' }}</td>
-      <td>{{ r.data.get('created') or '—' }}</td>
+      {# tmux reports a ctime string ("Fri Jun  5 01:34:01 2026") that format_dt /
+         iso_sort cannot parse, so the raw value is shown in the shared .dt style
+         and sorted as text until _parse_dt learns that format. #}
+      <td><span class="dt">{{ r.data.get('created') or '—' }}</span></td>
       <td>{{ m.owner_cell(r) }}</td>
     </tr>
     {% endfor %}
@@ -254,8 +275,9 @@
 
 {# ---------- fallback ---------- #}
 {% else %}
-<table class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
-  <thead><tr><th>Display</th><th>Key</th><th>Path</th><th data-filter="state">State</th><th>Owner app(s)</th></tr></thead>
+<table id="resources-table" class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
+  <caption class="sr-only">{{ res_label }} from the latest scan, with the application(s) that own each one.</caption>
+  <thead><tr><th scope="col">Display</th><th scope="col">Key</th><th scope="col">Path</th><th scope="col">State</th><th scope="col">Owner app(s)</th></tr></thead>
   <tbody>
     {% for r in rows %}
     <tr>

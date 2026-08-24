@@ -53,11 +53,13 @@ def create_app() -> FastAPI:
             conn.close()
         return JSONResponse({"ok": True, "scan": scan_id})
 
-    try:
-        from del_app.web.routes import router
-        app.include_router(router)
-    except ImportError:
-        pass
+    # Deliberately NOT guarded: a broken import here used to be swallowed,
+    # producing a process that started cleanly, answered /healthz green (it is
+    # defined above, in this module) and served 404 for the entire UI. A failed
+    # deploy must fail loudly.
+    from del_app.web.routes import router
+
+    app.include_router(router)
 
     return app
 

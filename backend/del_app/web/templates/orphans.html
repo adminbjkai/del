@@ -31,17 +31,23 @@
 
 {% for g in grouped %}
 <section class="panel">
-  <h2><a href="/resources/{{ g.type }}">{{ g.label }}</a> <span class="count-pill">{{ g.rows | length }}</span></h2>
+  <div class="page-header">
+    <h2><a href="/resources/{{ g.type }}">{{ g.label }}</a> <span class="count-pill">{{ g.rows | length }}</span></h2>
+    <div class="page-actions">
+      <button type="button" class="btn btn-sm" data-export-table="orphans-{{ g.type }}-table" title="Export the currently filtered rows as CSV">Export CSV</button>
+    </div>
+  </div>
   <p class="muted">{{ g.explainer }}</p>
-  <table class="table" data-enhanced data-empty="No orphaned {{ g.label|lower }}." data-page-size="25">
+  <table id="orphans-{{ g.type }}-table" class="table" data-enhanced data-empty="No orphaned {{ g.label|lower }}." data-page-size="25">
+    <caption class="sr-only">Unassociated {{ g.label|lower }} from the latest scan, with why each one is listed.</caption>
     <thead>
       <tr>
-        <th>Display</th>
-        <th>Key</th>
-        <th>Path</th>
-        <th data-filter="state">State</th>
-        <th data-filter="class">Class</th>
-        <th>Why listed</th>
+        <th scope="col">Display</th>
+        <th scope="col">Key</th>
+        <th scope="col">Path</th>
+        <th scope="col">State</th>
+        <th scope="col">Class</th>
+        <th scope="col">Why listed</th>
       </tr>
     </thead>
     <tbody>

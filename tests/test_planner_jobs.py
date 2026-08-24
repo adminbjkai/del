@@ -589,3 +589,103 @@ def test_validate_removal_uses_preserved_to_skip_checks(monkeypatch):
     )
     checks = jobs.validate_removal("x", plan)
     assert checks == []
+
+
+# ---------------------------------------------------------------------------
+# Backup recording + rollback (2026-08-24)
+#
+# The `backups` table was created by the initial migration but never written
+# to, so `_restore_from_backups` always iterated zero rows while the job still
+# audited "job_restore_attempted" — operators were told a rollback happened
+# when none had. These lock in the corrected behaviour.
+# ---------------------------------------------------------------------------
+
+def _backup_then_fail_steps(tmp_path):
+    return [
+        PlanStep(
+            seq=1, stage="backup", operation="file_backup",
+            args={"path": f"{tmp_path}/site.conf", "dest": f"{tmp_path}/backups/site.conf"},
+            description="back up nginx site", reversible=True, danger="safe",
+        ),
+        PlanStep(
+            seq=2, stage="remove_host", operation="nginx_rm_site",
+            args={"paths": ["/etc/nginx/sites-enabled/site.conf"]},
+            description="remove nginx site", reversible=True, danger="warning",
+        ),
+    ]
+
+
+def test_live_backup_step_records_a_backups_row(settings_env, tmp_path, monkeypatch):
+    _patch_audit(monkeypatch)
+    fake = _FakeHelper()
+    monkeypatch.setattr(jobs, "helper_client", fake)
+
+    plan_id = _persist_manual_plan("bk1", _backup_then_fail_steps(tmp_path))
+    job_id = jobs.create_job(plan_id, "live", user_id=1)
+    jobs._run_job(job_id, confirm_phrase=None)
+
+    conn = get_db()
+    rows = q(conn, "SELECT * FROM backups WHERE job_id = ?", (job_id,))
+    conn.close()
+    assert len(rows) == 1, "a successful live backup step must record a backups row"
+    assert rows[0]["kind"] == "file_backup"
+    assert rows[0]["src"] == f"{tmp_path}/site.conf"
+    assert rows[0]["dest"] == f"{tmp_path}/backups/site.conf"
+
+
+def test_dry_run_backup_step_records_nothing(settings_env, tmp_path, monkeypatch):
+    _patch_audit(monkeypatch)
+    monkeypatch.setattr(jobs, "helper_client", _FakeHelper())
+
+    plan_id = _persist_manual_plan("bk2", _backup_then_fail_steps(tmp_path))
+    job_id = jobs.create_job(plan_id, "dry_run", user_id=1)
+    jobs._run_job(job_id, confirm_phrase=None)
+
+    conn = get_db()
+    rows = q(conn, "SELECT * FROM backups WHERE job_id = ?", (job_id,))
+    conn.close()
+    assert rows == [], "a dry run backs nothing up, so it must record nothing"
+
+
+def test_failed_removal_restores_recorded_backup_with_correct_helper_args(
+    settings_env, tmp_path, monkeypatch
+):
+    """The restore call previously sent {src, dest}; the helper requires
+    {backup_path, original_path} and rejected every one of them."""
+    audits = _patch_audit(monkeypatch)
+    fake = _FakeHelper(failing_ops={"nginx_rm_site"})
+    monkeypatch.setattr(jobs, "helper_client", fake)
+
+    plan_id = _persist_manual_plan("bk3", _backup_then_fail_steps(tmp_path))
+    job_id = jobs.create_job(plan_id, "live", user_id=1)
+    jobs._run_job(job_id, confirm_phrase=None)
+
+    restores = [c for c in fake.calls if c["op"] == "path_restore"]
+    assert len(restores) == 1, "the failed removal did not trigger a restore"
+    assert restores[0]["args"] == {
+        "backup_path": f"{tmp_path}/backups/site.conf",
+        "original_path": f"{tmp_path}/site.conf",
+    }
+    assert restores[0]["dry_run"] is False
+
+    attempted = [kw or a[3] for a, kw in audits if a[1] == "job_restore_attempted"]
+    assert attempted, "restore attempt was not audited"
+    detail = attempted[0]
+    assert detail["backups_found"] == 1
+    assert detail["restored"] == 1, "audit must report the real outcome, not just the attempt"
+
+
+def test_restore_reports_failure_instead_of_claiming_success(
+    settings_env, tmp_path, monkeypatch
+):
+    audits = _patch_audit(monkeypatch)
+    fake = _FakeHelper(failing_ops={"nginx_rm_site", "path_restore"})
+    monkeypatch.setattr(jobs, "helper_client", fake)
+
+    plan_id = _persist_manual_plan("bk4", _backup_then_fail_steps(tmp_path))
+    job_id = jobs.create_job(plan_id, "live", user_id=1)
+    jobs._run_job(job_id, confirm_phrase=None)
+
+    detail = next(kw or a[3] for a, kw in audits if a[1] == "job_restore_attempted")
+    assert detail["backups_found"] == 1
+    assert detail["restored"] == 0, "a failed restore must not be recorded as restored"

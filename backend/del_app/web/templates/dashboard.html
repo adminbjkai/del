@@ -28,7 +28,8 @@
 <section class="panel">
   <h2>Recent scans</h2>
   <table class="table" data-enhanced data-empty="No scans yet." data-page-size="25">
-    <thead><tr><th>ID</th><th>Started</th><th>Finished</th><th data-filter="status">Status</th></tr></thead>
+    <caption class="sr-only">The most recent inventory scans and their outcome.</caption>
+    <thead><tr><th scope="col">ID</th><th scope="col">Started</th><th scope="col">Finished</th><th scope="col">Status</th></tr></thead>
     <tbody>
       {% for s in recent_scans %}
       <tr>
@@ -40,7 +41,7 @@
       {% endfor %}
     </tbody>
   </table>
-  <form method="post" action="/scan" style="margin-top:.75rem;">
+  <form method="post" action="/scan" style="margin-top:.75rem;" data-submit-guard="Starting scan…">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <button type="submit" class="btn btn-primary">Run scan now</button>
   </form>
@@ -49,7 +50,8 @@
 <section class="panel">
   <h2>Recent jobs</h2>
   <table class="table" data-enhanced data-empty="No jobs yet." data-page-size="25">
-    <thead><tr><th>ID</th><th data-filter="mode">Mode</th><th data-filter="status">Status</th><th>Started</th></tr></thead>
+    <caption class="sr-only">The most recent removal jobs, their mode and status.</caption>
+    <thead><tr><th scope="col">ID</th><th scope="col">Mode</th><th scope="col">Status</th><th scope="col">Started</th></tr></thead>
     <tbody>
       {% for j in recent_jobs %}
       <tr>
