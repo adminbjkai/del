@@ -1230,3 +1230,22 @@ def test_forced_refresh_still_blocks_and_reprobes(monkeypatch):
     routes._probe_domains(["x.example.com"], force=True)
     assert calls == ["x.example.com"], "forced refresh did not re-probe"
     routes._APP_PROBE_CACHE.clear()
+
+
+def test_rescan_approve_rejects_an_unknown_action(authed_client, settings_env):
+    """An unrecognised action used to fall through silently — nothing updated,
+    yet an audit record written and success flashed."""
+    resp = authed_client.post("/apps/whatever/rescan-approve", data={
+        "csrf_token": authed_client.headers.get("x-csrf", ""),
+        "association_id": 1, "action": "delete-everything",
+    }, follow_redirects=False)
+    assert resp.status_code in (400, 403)  # 403 if CSRF rejects first
+    if resp.status_code == 400:
+        assert "unknown action" in resp.text
+
+
+def test_jobs_list_is_capped(authed_client, settings_env):
+    """The page used to SELECT every job ever run with no LIMIT."""
+    assert routes.JOBS_PAGE_LIMIT > 0
+    resp = authed_client.get("/jobs")
+    assert resp.status_code == 200

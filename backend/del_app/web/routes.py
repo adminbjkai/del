@@ -72,6 +72,10 @@ router = APIRouter()
 # Jinja globals registered after helpers are defined (see bottom of module).
 
 # DB resource types are SINGULAR. Ordered for the Resources tab bar.
+# The jobs page rendered every job ever run. Cap it; the table is already
+# client-side paginated, and older jobs stay reachable by direct URL.
+JOBS_PAGE_LIMIT = 200
+
 ALL_RESOURCE_TYPES = [
     "container", "image", "volume", "network", "compose_project",
     "nginx_site", "systemd_unit", "systemd_timer", "cron_entry",
@@ -188,11 +192,6 @@ def _compose_declared_images(conn) -> dict[str, str]:
     return mapping
 
 
-def _orphan_reason(res_type: str, data: dict, compose_images: dict[str, str] | None = None) -> str:
-    """Backward-compatible reason string (uses classify_orphan_candidate)."""
-    return classify_orphan_candidate(res_type, "", "", None, data, compose_images)["reason"]
-
-
 def classify_orphan_candidate(
     res_type: str,
     key: str,
@@ -272,7 +271,6 @@ def classify_orphan_candidate(
         # display often like "[daily] logrotate"
         base = display.split("]")[-1].strip() if "]" in display else display
         base = base.split("/")[-1]
-        schedule = (data.get("schedule") or data.get("period") or "").lower()
         path_l = (path or key or "").lower()
         if base in _SYSTEM_CRON_BASENAMES or base.startswith("."):
             return {
@@ -1560,35 +1558,51 @@ def apps_list(
         # Per-app aggregates: resource count, warning count (possible / low
         # confidence associations), plus domains & ports from associated
         # resource data_json. Read-only.
-        agg = _rows(
-            q(
-                conn,
-                """
-                SELECT ap.id AS app_id,
-                       COUNT(a.id) AS res_count,
-                       SUM(CASE WHEN a.ownership = 'possible' OR a.confidence < 50
-                                THEN 1 ELSE 0 END) AS warn_count
-                FROM applications ap
-                LEFT JOIN associations a
-                       ON a.app_id = ap.id AND a.excluded = 0
-                GROUP BY ap.id
-                """,
+        #
+        # Both queries are scoped to the app ids actually being rendered. They
+        # used to run across every application and association ever recorded,
+        # so listing ~190 apps re-read and json.loads-ed the resource payloads
+        # of a further ~136 applications that no longer exist — and a `search=`
+        # filter narrowing the page to three rows did not narrow this at all.
+        app_ids = [a["id"] for a in apps if a.get("id") is not None]
+        if app_ids:
+            id_ph = ",".join("?" for _ in app_ids)
+            agg = _rows(
+                q(
+                    conn,
+                    f"""
+                    SELECT ap.id AS app_id,
+                           COUNT(a.id) AS res_count,
+                           SUM(CASE WHEN a.ownership = 'possible' OR a.confidence < 50
+                                    THEN 1 ELSE 0 END) AS warn_count
+                    FROM applications ap
+                    LEFT JOIN associations a
+                           ON a.app_id = ap.id AND a.excluded = 0
+                    WHERE ap.id IN ({id_ph})
+                    GROUP BY ap.id
+                    """,
+                    tuple(app_ids),
+                )
             )
-        )
-        agg_map = {r["app_id"]: r for r in agg}
-
-        detail = _rows(
-            q(
-                conn,
-                """
+            detail_sql = f"""
                 SELECT a.app_id AS app_id, r.type AS type, r.data_json AS data_json
                 FROM associations a
                 JOIN resources r ON r.id = a.resource_id
                 WHERE a.excluded = 0
+                  AND a.app_id IN ({id_ph})
                   AND r.type IN ('nginx_site', 'port', 'container', 'directory')
-                """,
-            )
-        )
+            """
+            detail_params: list[Any] = list(app_ids)
+            # Not scoped in ?show=removed: a removed app's resources carry a
+            # stale last_seen too, and filtering them out would blank the
+            # domains/ports on exactly the rows that view exists to show.
+            if latest is not None and not show_removed:
+                detail_sql += " AND r.last_seen = ?"
+                detail_params.append(int(latest))
+            detail = _rows(q(conn, detail_sql, tuple(detail_params)))
+        else:
+            agg, detail = [], []
+        agg_map = {r["app_id"]: r for r in agg}
     finally:
         conn.close()
 
@@ -1940,30 +1954,41 @@ def rescan_approve(
     if not _require_csrf(request, csrf_token):
         return _csrf_response()
 
+    # An unrecognised action used to fall through silently: nothing was
+    # updated, yet an audit record was written and the UI flashed success.
+    setters = {
+        "approve": "approved_by_user = 1, excluded = 0",
+        "exclude": "excluded = 1",
+        "mark-shared": "shared = 1",
+    }
+    if action not in setters:
+        return JSONResponse({"error": f"unknown action: {action}"}, status_code=400)
+
     conn = get_db()
     try:
-        if action == "approve":
-            conn.execute(
-                "UPDATE associations SET approved_by_user = 1, excluded = 0 WHERE id = ? AND app_id = (SELECT id FROM applications WHERE slug = ?)",
-                (association_id, slug),
-            )
-        elif action == "exclude":
-            conn.execute(
-                "UPDATE associations SET excluded = 1 WHERE id = ? AND app_id = (SELECT id FROM applications WHERE slug = ?)",
-                (association_id, slug),
-            )
-        elif action == "mark-shared":
-            conn.execute(
-                "UPDATE associations SET shared = 1 WHERE id = ? AND app_id = (SELECT id FROM applications WHERE slug = ?)",
-                (association_id, slug),
-            )
+        cur = conn.execute(
+            f"UPDATE associations SET {setters[action]} "
+            "WHERE id = ? AND app_id = (SELECT id FROM applications WHERE slug = ?)",
+            (association_id, slug),
+        )
+        changed = cur.rowcount
         conn.commit()
     finally:
         conn.close()
+
+    # rowcount 0 means the association does not exist or belongs to a different
+    # app. Say so rather than claiming a change that did not happen.
+    if not changed:
+        return RedirectResponse(
+            url=f"/apps/{slug}?error=Association+not+found+for+this+application",
+            status_code=303,
+        )
+
     auditlog.audit(user.id, f"association.{action}", f"{slug}#{association_id}", {})
     labels = {"approve": "approved", "exclude": "excluded", "mark-shared": "marked+shared"}
-    flash = labels.get(action, "updated")
-    return RedirectResponse(url=f"/apps/{slug}?flash=Association+{flash}", status_code=303)
+    return RedirectResponse(
+        url=f"/apps/{slug}?flash=Association+{labels[action]}", status_code=303
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -1986,6 +2011,8 @@ def plan_form(
                 JOIN associations a ON a.resource_id = r.id
                 JOIN applications ap ON ap.id = a.app_id
                 WHERE ap.slug = ? AND r.type = 'volume'
+                  AND (r.last_seen = (SELECT MAX(id) FROM scans WHERE status = 'done')
+                       OR NOT EXISTS (SELECT 1 FROM scans WHERE status = 'done'))
                 """,
                 (slug,),
             )
@@ -2125,7 +2152,9 @@ def jobs_list(
                 LEFT JOIN plans p ON p.id = j.plan_id
                 LEFT JOIN applications ap ON ap.id = p.app_id
                 ORDER BY j.id DESC
+                LIMIT ?
                 """,
+                (JOBS_PAGE_LIMIT,),
             )
         )
     finally:
@@ -2183,11 +2212,13 @@ def job_status(job_id: int, user: User = Depends(auth.require_user)) -> JSONResp
 # resources / orphans
 # ---------------------------------------------------------------------------
 
-@router.get("/resources", response_class=HTMLResponse)
+@router.get("/resources")
 def resources_index(
     request: Request, response: Response, user: User = Depends(auth.require_user)
-) -> HTMLResponse:
-    return RedirectResponse(url="/resources/container", status_code=307)
+) -> RedirectResponse:
+    # 303, not 307: 307 preserves the method, which is meaningless for a GET
+    # landing redirect and surprising if anything ever POSTs here.
+    return RedirectResponse(url="/resources/container", status_code=303)
 
 
 @router.get("/resources/{res_type}", response_class=HTMLResponse)
