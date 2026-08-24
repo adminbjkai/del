@@ -387,13 +387,23 @@ check for shared resources — exactly the mistakes DEL's lifecycle exists to
 prevent. Always go through DEL — see
 [Removing an Application](/guides/removing-an-application) for the full
 operator-facing walkthrough, or the [removal lifecycle](/reference/architecture#the-removal-lifecycle)
-for the underlying stage engine.
+for the underlying six-stage engine (`backup`, `quiesce`, `remove_runtime`,
+`remove_host`, `remove_files`, `validate`).
+
+Two things to set deliberately each time, because neither is the default:
+
+- **Choose a backup mode.** The plan builder defaults to *None*, which takes no
+  backup and leaves the automatic in-job rollback with nothing to restore from. Use
+  *Config* or *Full* for anything you might want back.
+- **Rescan first.** The plan builder scopes to the latest *completed* scan and
+  refuses outright if the app has no resources there, rather than emitting an empty
+  plan that would report success having removed nothing.
 
 ## Operating tools cheat-sheet
 
 | Tool | What it's for | Where |
 |---|---|---|
-| **DEL** | Cross-cutting inventory, connection map, correlated resource discovery, and the only sanctioned decommission path (dry-run → backup → live → validate) | https://del.bjk.ai |
+| **DEL** | Cross-cutting inventory, connection map, correlated resource discovery, and the only sanctioned decommission path (rescan → dry-run → live → validate) | https://del.bjk.ai |
 | **Komodo** | Docker Compose stack control plane — start/stop/update/logs for containerized apps | `/apps/komodo` |
 | **Cockpit** | Web UI for systemd services/logs on non-Docker apps — status, start/stop/restart, journal viewing | `https://cockpit.bjk.ai` (basic auth; socket itself is `127.0.0.1:9091`-only) |
 | **journalctl** | Raw log inspection for any systemd unit: `journalctl -u <name>.service -f` | CLI |

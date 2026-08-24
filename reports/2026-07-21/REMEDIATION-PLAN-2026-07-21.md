@@ -1,6 +1,6 @@
 # Remediation Plan — DEL Host Audit (2026-07-21)
 
-Companion to `AUDIT-REPORT.md`. Nothing in this plan has been executed — this audit was read-only throughout. Section A items are low-risk and mechanical enough to auto-apply once approved; Section B items involve a real decision (start vs. remove an app, or a change with side effects) and need the owner's call first.
+Companion to `AUDIT-2026-07-21.md` (same directory). Nothing in this plan has been executed — this audit was read-only throughout. Section A items are low-risk and mechanical enough to auto-apply once approved; Section B items involve a real decision (start vs. remove an app, or a change with side effects) and need the owner's call first.
 
 ---
 

@@ -30,12 +30,20 @@ via systemd, and journald logging.
 
 - **del-web.service** — the FastAPI app (this document's main subject), port 8075,
   bound to 127.0.0.1, fronted by Nginx at https://del.bjk.ai.
-- **del-helper.service** — the privileged root daemon on the unix socket.
+- **del-helper.service** — the privileged root daemon on the unix socket. It
+  executes `/usr/local/lib/del-helper/del_helper.py` with the policy at
+  `/etc/del/helper-policy.json` — root-owned deployed copies installed by
+  `scripts/install.sh`, *not* the repo working tree. `/apps/del` is writable by
+  the `bjkai` user that runs `del-web`, so running the helper from there would let
+  a compromised web tier rewrite the code root executes and the allowlist that
+  bounds it. The repo copies (`helper/*.py`, `config/helper-policy.json`) are the
+  source; redeploy them before restarting the unit after an edit.
 - **del-docs.service** — serves the Fern-built documentation site (this repo's
   `fern/` sources) on 127.0.0.1:8072/8073, fronted by Nginx at `/docs` (and its
   `/_next` static assets) **without** HTTP basic auth (open documentation). The
   app UI at `/` still requires DEL session login. Docs carry no privileged access
-  — they only serve static/rendered content.
+  — they only serve static/rendered content. `install.sh` does not install this
+  unit; see INSTALL.md.
 
 ## Process / privilege model
 
@@ -50,13 +58,23 @@ del-web (user bjkai, groups docker+adm)
   • Correlation engine + confidence scoring
   • Manifests, removal planner (dry-run), job orchestration, audit log
   ↓ JSON over unix socket /run/del/helper.sock (0660 root:bjkai)
-del-helper (root, Python, ~600 lines, no web framework)
-  • Fixed operation allowlist (see below)
+del-helper (root, Python stdlib only, ~1,100 lines across del_helper.py +
+            validation.py, no web framework; runs from /usr/local/lib/del-helper/)
+  • Fixed 22-operation allowlist (see below)
   • Validates every argument; canonicalizes paths (realpath, no symlink escape)
   • Refuses protected roots; refuses paths outside approved roots
-  • Every request logged to /apps/del/logs/helper-audit.log (append-only)
+  • Refuses protected units (del-*, sshd, nginx, docker, systemd-*, cron, …)
+  • Every request logged to /apps/del/logs/helper-audit.log (append-only), with
+    plan_id/step_id/job_id/requested_by when the caller supplies them
   • dry_run flag honored on every operation
 ```
+
+The helper reads `op`, `args` and `dry_run` and nothing else that affects its
+decisions. It has **no concept of a plan**: plan integrity is a web-side control
+(`planner.verify_plan`, an HMAC over the canonical steps JSON, checked before job
+creation and again before execution). What bounds a compromised `del-web` is the
+op allowlist plus the helper's independent argument validation — read every "must
+appear in the approved plan" note in the table below as a planner-side constraint.
 
 del-web never constructs shell strings from user input. Every privileged action is
 a typed operation name + validated structured arguments. del-helper executes via
@@ -69,30 +87,53 @@ subprocess arg-arrays (never shell=True).
 | ping | — | health |
 | list_listeners | — | read-only `ss -lntp` as root; used by `proc_src.py` to resolve listener ownership when the caller can't run `ss` itself |
 | compose_down | project, config_files[], remove_volumes?, remove_images_mode? | config files must exist & be under approved roots |
+
+`compose_down` tears the project down by config file and then sweeps any
+straggler by Docker label (`docker ps -aq --filter
+label=com.docker.compose.project=<project>`, then `docker rm -f`). That sweep is
+**host-wide**, so the planner never names a project after a generic layout
+directory: a compose file at `/apps/<app>/docker/` would otherwise yield the
+project name `docker` and force-remove every container on the host carrying
+that label. An explicitly declared compose project name wins; a generic
+basename falls back to the app slug.
+
 | container_stop / container_rm | container_id | id validated against docker inspect |
 | image_rm | image_id | refused if other containers reference it |
 | volume_rm | volume_name | refused unless plan approved w/ double confirmation flag |
 | network_rm | network_name | refuses bridge/host/none and networks with foreign containers |
-| systemd_stop / systemd_disable / systemd_rm_unit | unit | unit must be in the app's approved plan; rm restricted to /etc/systemd/system + daemon-reload |
-| cron_rm | file path or crontab line | /etc/cron.d files under plan only; user crontab edits via crontab -l diff |
+| systemd_stop / systemd_disable / systemd_rm_unit | unit | name must match `^[A-Za-z0-9@_.-]+\.(service\|timer)$` and must not match `protected_units`; rm restricted to /etc/systemd/system + daemon-reload |
+| cron_rm | path | **`/etc/cron.d` files only.** The op takes a single `path` argument, validated to resolve under the policy's `cron_d_dir`. It cannot edit a user crontab — there is no `crontab -l` diff and no way to remove a user crontab line through DEL |
 | nginx_rm_site | paths[] | only under /etc/nginx/sites-{enabled,available}; backup first; nginx -t; reload only on pass; restore on fail |
 | nginx_test | — | read-only `nginx -t`, never reloads; safe in dry_run and live |
 | nginx_test_reload | — | nginx -t, reload if ok |
-| path_delete | path | canonicalized; must be under approved roots (/apps, /data, /srv, /var/www, /home/bjkai, /etc/nginx/sites-{available,enabled}, /etc/systemd/system, /etc/cron.d) AND not a protected root AND listed in the approved plan; refuses mountpoints |
-| path_restore | backup_path, original_path | restores a prior backup_tar/file_backup copy back to original_path (`cp -a`); original_path must be absolute |
-| tmux_kill | session | exact name from plan |
+| path_delete | path | canonicalized; must resolve at least one component deep under an approved root (/apps, /data, /srv, /var/www, /home/bjkai, /etc/nginx/sites-{available,enabled}, /etc/systemd/system, /etc/cron.d), must not be a protected root or on `never_delete`; refuses mountpoints |
+| path_restore | backup_path, original_path | `cp -a` of a prior backup back to original_path. backup_path must be under /apps/del/backups and exist; original_path must resolve under a DEL-managed root, not protected/never-delete, and **must have the same basename as the backup** — a restore may only replace the file it was taken from. A protected unit cannot be recreated in /etc/systemd/system this way |
+| tmux_kill | session | exact session name |
 | process_term | pid, expected_exe | TERM then KILL after grace; pid+exe must still match |
-| backup_tar | src_path, dest | dest under /apps/del/backups only |
+| backup_tar | src_path, dest | src_path confined to DEL-managed roots (so root cannot be made to archive /etc/shadow or a TLS key); dest under /apps/del/backups only |
 | volume_backup | volume, dest | docker run --rm -v vol:/src:ro tar → /apps/del/backups |
-| file_backup | path, dest | timestamped copy before config edits |
+| file_backup | path, dest | timestamped copy before config edits; path confined to DEL-managed roots, dest under /apps/del/backups |
+
+"DEL-managed roots" = the approved deletion roots plus the three system config
+directories DEL is allowed to remove files from and therefore must be able to back
+up and restore: nginx sites, `/etc/systemd/system`, `/etc/cron.d`.
 
 Protected roots (never deletable, even if listed): /, /bin, /boot, /dev, /etc,
 /home, /lib, /lib64, /opt, /proc, /root, /run, /sbin, /srv, /sys, /tmp, /usr,
 /var, /apps, /data, and /apps/del itself (DEL is a protected application).
 
-Approval flow: del-web writes an approved plan (signed with an HMAC using a key
-readable only by root and the del user) into the DB and passes plan_id + step to
-the helper; the helper re-validates each argument against its own rules regardless.
+Protected units (never stopped, disabled or removed): `del-*.service`,
+`del-*.timer`, `ssh`/`sshd`, `nginx`, `docker`/`containerd`, `systemd-*`, `cron`,
+`dbus`, `network*`, `polkit`, `rsyslog`, `fail2ban`, `ufw` — the full glob list is
+`protected_units` in `helper-policy.json`. DEL's own units come first deliberately:
+stopping `del-helper` is the opening move in a helper-code-swap attack.
+
+Approval flow: `del-web` builds a plan, signs it with an HMAC over the canonical
+steps JSON, and stores it. `planner.verify_plan()` re-checks that signature before
+a job is created and again before it executes — **web-side**. The helper is sent
+`op`/`args`/`dry_run` (plus correlation ids it only logs) and re-validates every
+argument against its own policy independently. Neither layer depends on the other
+being uncompromised.
 
 ## Components (code layout)
 
@@ -102,8 +143,8 @@ the helper; the helper re-validates each argument against its own rules regardle
 │   ├── main.py            FastAPI app factory, routes mounting
 │   ├── config.py          settings (port, paths) from /apps/del/config/del.toml
 │   ├── db.py              sqlite connection, migration runner
-│   ├── migrations/        NNN_*.sql
-│   ├── auth.py            login, argon2/bcrypt hashing, sessions, CSRF, rate limit
+│   ├── migrations/        001_init.sql (schema), 002_indexes.sql (secondary indexes)
+│   ├── auth.py            login, argon2id hashing, sessions, CSRF, rate limit
 │   ├── models.py          typed dataclasses / pydantic models
 │   ├── discovery/
 │   │   ├── docker_src.py  containers/images/volumes/networks via docker socket
@@ -115,18 +156,28 @@ the helper; the helper re-validates each argument against its own rules regardle
 │   │   └── fs_src.py      project dirs, git repos, du
 │   ├── correlate.py       evidence-based association + confidence scoring
 │   ├── manifests.py       YAML manifests read/write/validate
-│   ├── planner.py         removal plan generation (dry-run), impact/risk report
-│   ├── jobs.py            staged job engine (analyze→preview→backup→quiesce→remove→validate→report), step records, resume
+│   ├── planner.py         removal plan generation (dry-run), impact/risk report, HMAC
+│   ├── jobs.py            staged job engine (backup→quiesce→remove_runtime→remove_host→remove_files→validate), step records, backup recording, in-job restore
 │   ├── helper_client.py   unix-socket client to del-helper
 │   ├── auditlog.py        append-only audit records
 │   └── web/               routes + Jinja2 templates + static/
-├── helper/del_helper.py   root daemon (stdlib only)
-├── config/del.toml
+├── helper/
+│   ├── del_helper.py      root daemon (stdlib only) — source; deployed to /usr/local/lib/del-helper/
+│   └── validation.py      pure argument/path validation, imported by the daemon
+├── config/                del.toml, the three .service units, nginx site, helper-policy.json
 ├── database/del.db
 ├── manifests/*.yaml
 ├── backups/
 ├── logs/
-├── scripts/ (install.sh, del-admin CLI: create-admin, change-password, rescan, backup db)
+├── docs/                  durable reference (this file, DISCOVERY, REMOVAL-LIFECYCLE, …)
+├── reports/<date>/        finished one-off audits and working notes
+├── fern/                  Fern docs sources served by del-docs.service
+├── scripts/
+│   ├── install.sh         idempotent installer (helper deploy, units, nginx, health)
+│   ├── del-admin          CLI: create-admin, change-password, migrate, rescan, backup-db
+│   ├── gen-registry.py    writes docs/PORT-REGISTRY.md from the latest scan (read-only)
+│   ├── gen-registry.sh    thin wrapper around gen-registry.py
+│   └── make-demo-app.sh   builds a disposable demo app for exercising removal
 └── tests/
 ```
 
@@ -144,6 +195,38 @@ the helper; the helper re-validates each argument against its own rules regardle
   — directory resources include `mtime`/`ctime`/`birthtime` ISO timestamps in data_json;
   containers include Docker `created`.
 
+- associations(app_id, resource_id, confidence, ownership, shared, data_loss_risk,
+  removal_eligible, recommended_action, evidence_json, source, approved_by_user, excluded)
+- plans(id, app_id, created, options_json, steps_json, status, hmac)
+- jobs(id, plan_id, mode dry_run|live, started, finished, status, user_id)
+- job_steps(id, job_id, seq, stage, operation, args_json, state, exit_code, output_sanitized, started, finished, reversible)
+- backups(id, job_id, kind, src, dest, sha256, size, created)
+  — one row per completed backup step of a **live** job, written by `jobs._record_backup`
+  before any deletion runs; this is what the in-job restore path reads. `kind` is the
+  operation name (`file_backup` / `volume_backup` / `backup_tar`), `src` is the path
+  (or volume) that was backed up and `dest` the archive. **`sha256` and `size` are
+  declared but never populated** — backups are plain copies, not content-addressed.
+- audit_log(id, ts, user_id, action, subject, details_json)  — no secrets ever.
+  Deliberately not indexed: nothing in the codebase reads it. It needs a retention
+  policy, not an index.
+- settings(key, value)
+
+### Indexes (`002_indexes.sql`)
+
+`001_init.sql` declared foreign keys but no indexes, and SQLite does not create
+them for foreign keys — so every page load rebuilt AUTOMATIC COVERING INDEXes over
+`associations` on the fly. Migration 002 adds 11 secondary indexes: four on
+`associations` (`resource_id`; `(app_id, excluded)`; `removal_eligible`; a partial
+index on `shared` where `shared = 1`), `resources(type, last_seen)`,
+`applications(last_seen)`, `job_steps(job_id, seq)`, `jobs(plan_id, status)`,
+`backups(job_id)`, `scans(status, id)` and `sessions(expires)`. Measured 2.4x
+across the 14 hot queries on a copy of the production DB, for about 4% growth.
+
+Two omissions are deliberate and were measured: no standalone
+`resources(last_seen)` (it makes the query planner flip a join and the whole set
+regresses; the composite covers it), and no `ANALYZE` (with `sqlite_stat1` present
+the dashboard's "uncertain" query picks a skip-scan and degrades ~10x).
+
 ### Display timezone (UI)
 
 All human-facing datetimes in the web UI are rendered in **America/New_York**
@@ -153,35 +236,65 @@ timezone suffix. Storage remains UTC (sqlite `datetime('now')`, Docker
 treated as UTC. Calendar day follows Eastern. Helpers: `format_dt`,
 `relative_dt`, `iso_sort` in `backend/del_app/web/routes.py`.
 
-### Live app gallery
+One exception, outside the UI: `del-admin backup-db` names its snapshot with
+`datetime.now()` — host local time, not UTC.
+
+### Live app gallery (`/view-apps`)
 
 `GET /view-apps` is an authenticated, read-only projection of the inventory. A
 domain is eligible only when it belongs to an application and an **enabled**
 Nginx resource from the latest completed scan. DEL verifies each candidate over
 HTTPS (DNS, certificate, proxy route, and answering upstream); responses below
 500 are shown, while connection/TLS failures and 5xx responses are omitted.
-Checks run concurrently with a two-minute in-process cache, and `?refresh=1`
-bypasses that cache. The gallery does not write to SQLite: categories, stars,
-hidden cards, size/density, view mode, and drag order are browser-local settings.
-- associations(app_id, resource_id, confidence, ownership, shared, data_loss_risk,
-  removal_eligible, recommended_action, evidence_json, source, approved_by_user, excluded)
-- plans(id, app_id, created, options_json, steps_json, status, hmac)
-- jobs(id, plan_id, mode dry_run|live, started, finished, status, user_id)
-- job_steps(id, job_id, seq, stage, operation, args_json, state, exit_code, output_sanitized, started, finished, reversible)
-- backups(id, job_id, kind, src, dest, sha256, size, created)
-- audit_log(id, ts, user_id, action, subject, details_json)  — no secrets ever
-- settings(key, value)
+Health results are cached in-process for five minutes and served
+**stale-while-revalidate**: whatever is cached renders immediately and a stale
+batch is re-probed on a background thread, coalesced so concurrent requests do not
+stack up refreshes. Only two cases block on the network — an explicit `?refresh=1`,
+and a domain with nothing cached at all (the first load after a restart, where
+blocking is the difference between a populated gallery and an empty one). The
+gallery does not write to SQLite: categories, stars, hidden cards, size/density,
+view mode, and drag order are browser-local settings.
+
+**Icons are proxied, never loaded cross-origin.** Cards point `<img>` at
+`GET /app-icon/{domain}`, which is itself session-authenticated. That route
+normalizes the hostname, requires it to be an enabled Nginx site in the latest
+scan (so it cannot be used as a general-purpose outbound fetcher), fetches
+`https://{domain}/favicon.ico` server-side with a 4s timeout, caps the body at
+256 KiB, checks the content type, and caches results in-process — 24h for a hit,
+1h for a miss. Anything that is not a 200 image, including a `401` with a
+`WWW-Authenticate` header, becomes an empty **204** and the card falls back to its
+initial letter.
+
+The reason is concrete: pointing the `<img>` straight at the third-party origin
+made the *browser* issue those requests, so every app behind HTTP basic auth
+answered `401 + WWW-Authenticate` and the browser opened a credential dialog on
+top of a page the operator was already authenticated to.
+
+### Other routes worth knowing
+
+- `GET /favicon.ico` — 301 to `/static/favicon.svg`. Browsers request it
+  unprompted; it used to 404 on every page load.
+- `/static/*` — the four assets (`app.css`, `app.js`,
+  `ag-grid-community.min.js`, `favicon.svg`) are served with `Cache-Control`;
+  the pinned 1.9 MB AG Grid bundle is `immutable`. They previously carried etag
+  and last-modified but no cache directive, costing a revalidation round trip per
+  asset per page load.
+- Unauthenticated routes are exactly `/login`, `/healthz`, `/favicon.ico` and
+  those four `/static/*` paths. Everything else, `/app-icon/{domain}` included,
+  depends on `auth.require_user`.
 
 ## Confidence scoring
 
 Levels: confirmed (95–100), high (80–94), probable (60–79), possible (30–59),
-unrelated (<30), manual (user-assigned). Each association stores evidence items
-{source, statement, weight}. Compose project label = confirmed. Nginx proxy_pass
-port → published container port = high. For host-network containers (no published
-port mapping to key off), `proc_src` traces a listening port's pid back to its
-owning container via `/proc/<pid>/cgroup`; a proxy_pass port matching that
-cgroup-resolved container's listener is also high confidence, with evidence
-naming the container and noting "(host network)". Networks are correlated the
+unrelated (<30), manual (`source = 'manual'`). Each association stores evidence
+items {source, statement, weight}. Compose project label = confirmed. Nginx
+proxy_pass port → published container port = high. For host-network containers (no
+published port mapping to key off), `proc_src` traces a listening port's pid back to
+its owning container by matching the socket inode in `/proc/<pid>/fd` — an exact
+match, with no uid-based fallback; if it cannot be resolved, "unresolved" is the
+answer. A proxy_pass port matching that cgroup-resolved container's listener is
+high confidence, with evidence naming the container and noting "(host network)".
+Networks are correlated the
 same way compose projects are seeded plus by attached-container name (not id, so
 a network survives container recreation without losing its owner mapping); a
 network attached to containers from more than one app is `shared` and preserved
@@ -192,10 +305,29 @@ config debris (`.conf`/`.bak`/disabled copies included) that plain port-matching
 would otherwise leave behind, and upgrades (rather than skips) a weaker
 port-match claim the app may already hold on that same file, so an app's own
 stale `sites-available` copy is always removal-eligible along with the rest of
-the app. Name similarity alone = possible, never
-auto-removable. Only confirmed/high/manual associations are eligible for removal;
-probable requires explicit user approval per-resource; possible is always blocked
-until manually confirmed.
+the app. Name similarity alone = possible, never auto-removable.
+
+**What actually becomes a plan step** (`planner._classify`): only `confirmed`,
+`high` and `manual` associations, and only when they are not excluded, not
+`removal_eligible = 'blocked'`, and not (shared and unapproved). Everything else is
+recorded as a preserved resource plus a warning. In particular:
+
+- `probable` is **never** a step. `_classify` returns "not a step, requires
+  per-resource approval" for every `probable` row unconditionally — it does not
+  consult `approved_by_user`. Approving a `probable` association therefore does not
+  make it removable; raise it with a manifest entry instead.
+- `approved_by_user` is read in exactly two places: to unblock a
+  `confirmed`/`high`/`manual` association that is flagged `shared`, and to approve
+  an individual named volume for `volume_rm`.
+- `possible` and `unrelated` are always preserved.
+
+Manifest entries are set to `level = "manual"` in memory by `correlate.py`, but
+`scanner.py` persists the literal string `"correlate"` into `associations.source`
+for every row it writes. Both `_level()` implementations (`planner.py`,
+`web/routes.py`) derive `manual` only from `source == 'manual'`, so a manifest
+association — confidence 100 — is displayed and classified as **`confirmed`**, not
+`manual`. It is fully removal-eligible either way; only the badge differs from what
+these docs used to promise.
 
 Applications are not only Docker/Compose — a purely systemd-managed service
 (no container at all) is seeded as its own first-class application (`kind
@@ -209,22 +341,59 @@ discovered and correlated instead of being invisible. See docs/DISCOVERY.md
 
 ## Removal job engine
 
-Plans are immutable once approved. A job executes plan steps in stage order; each
-step is recorded before execution (state=running) and after (done/failed). Any
-safety-validation failure halts the job before downstream deletions. Steps carry
-reversible=true/false; failures in the nginx/systemd stages trigger automatic
-restore from the timestamped backups taken in the backup stage. Jobs are resumable:
-a failed job can retry from the failed step after the operator fixes the cause.
-Live volume deletion requires: plan option enabled + per-volume checkbox + typed
-confirmation phrase at execution time (second confirmation).
+Plans are immutable once approved (any edit to `steps_json` fails the HMAC check).
+A job executes plan steps in stage order; each step is recorded before execution
+(state=running) and after (done/failed). Any failure halts the job before
+downstream deletions. Steps carry reversible=true/false.
+
+`planner.STAGE_ORDER` is exactly six values — `backup`, `quiesce`,
+`remove_runtime`, `remove_host`, `remove_files`, `validate` — and those are the
+only strings that ever appear in `job_steps.stage`. Analysis and preview happen at
+plan-build time, and the report is the job's terminal status plus its audit
+records; none of the three produce step rows.
+
+**Plan build refuses on an empty result.** `build_plan` scopes an app's
+associations to the latest scan with `status = 'done'`. If the app has
+associations but none in that scan, it raises `PlanError` telling the operator to
+re-scan, rather than emitting an empty plan that would execute "successfully"
+having removed nothing. That is exactly what used to happen when a plan was built
+while a scan was running.
+
+**Rollback.** Live backup steps write a `backups` row before any deletion. If a
+`nginx_rm_site`, `nginx_test_reload`, `systemd_disable` or `systemd_rm_unit` step
+fails, the engine restores this job's recorded backups newest-first via the
+helper's `path_restore` and audits the real per-backup outcome. Volume archives are
+skipped and reported as manual-restore — a `volume_backup` is a tar of contents,
+not a filesystem path. Independently of all this, `nginx_rm_site` restores its own
+files inside the helper if `nginx -t` fails after removal; that path never depended
+on the `backups` table and has always worked.
+
+**Resume exists in the engine but is not exposed.** `jobs.retry_job()` resets the
+first failed step and everything after it and re-executes. Nothing calls it —
+there is no `/jobs/{id}/retry` route, no UI button and no CLI subcommand. Resuming
+a failed job today means calling it from a Python shell.
+
+Live volume deletion requires: plan option enabled + per-volume checkbox (or a
+per-association approval) + typed confirmation phrase at execution time.
+
+**After a successful live job**, the engine runs a rescan so the UI reflects the
+new reality. A rescan failure is logged and audited as
+`post_removal_rescan_failed` rather than swallowed.
 
 ## Security summary
 
 - Bind 127.0.0.1 only; Nginx terminates TLS with the bjk.ai wildcard cert.
-- Session cookies: HttpOnly, Secure, SameSite=Lax; server-side session store; 12h expiry.
-- CSRF token on every mutating form/request; login rate limiting (5/min/IP, backoff).
-- Argon2id password hashing (fallback bcrypt); admin account created via CLI, no defaults.
-- CSP: default-src 'self'; no external assets. Security headers set in app + Nginx.
-- Secrets never logged; env values stripped at the discovery source layer.
-- Helper socket 0660 root:bjkai; operations allowlisted; args validated twice.
+- Session cookies: HttpOnly, Secure, SameSite=Lax; server-side session store; 12h
+  expiry; expired rows swept at login.
+- CSRF token on every mutating form/request; login rate limiting — a plain
+  5-per-60s in-memory sliding window per IP, no backoff.
+- Argon2id password hashing (`argon2.PasswordHasher`, the only hasher — no bcrypt
+  fallback); admin account created via CLI, no defaults.
+- CSP is sent by Nginx: `default-src 'self'` with `style-src` also allowing
+  `'unsafe-inline'` (remaining inline `style=""` attributes) and `img-src` also
+  allowing `data:`. HSTS carries `includeSubDomains`. No external asset origins.
+- Secrets never logged; env values stripped at the discovery source layer; the DB
+  and backups directory are not world-readable.
+- Helper socket 0660 root:bjkai; 22 allowlisted operations; args validated twice;
+  helper code and policy deployed root-owned outside `/apps/del`.
 - DEL itself flagged protected=1; planner refuses to plan its removal.

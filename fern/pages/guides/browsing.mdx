@@ -19,10 +19,27 @@ the application and its enabled Nginx domain are present in the latest completed
 scan **and** a live HTTPS check succeeds. DEL verifies DNS, TLS, the Nginx route,
 and that an upstream answers. HTTP responses below 500 count as online (including
 login challenges and apps whose root path returns 404); connection failures and
-5xx responses stay hidden. **Refresh health** bypasses the short two-minute cache.
+5xx responses stay hidden.
+
+Health results are cached for five minutes and the page renders from that cache
+immediately, re-checking stale domains in the background — so the gallery stays
+fast and the status you see may be up to a few minutes old. **Refresh health**
+(`?refresh=1`) forces a fresh check and waits for it.
 
 Each card shows the site's favicon when available, domain, live HTTP status,
-response time, and a link back to its DEL inventory detail. Use the toolbar to:
+response time, and a link back to its DEL inventory detail.
+
+<Callout intent="info">
+  **Icons are fetched by DEL, not by your browser.** Cards load them from DEL's own
+  `/app-icon/{domain}` route, which only accepts hostnames that are enabled Nginx
+  sites in the latest scan. If an app has no reachable icon — or sits behind HTTP
+  basic auth and answers `401` — DEL absorbs that and the card falls back to the
+  app's initial letter. Previously the browser requested those favicons directly,
+  so every basic-auth-protected app popped a credential dialog on top of the gallery
+  you were already logged into.
+</Callout>
+
+Use the toolbar to:
 
 - search names, domains, and categories;
 - filter by category or favorites;
@@ -109,8 +126,8 @@ server names, config path, upstream ports, and an **ssl** badge. Two columns are
 common to almost every type:
 
 - **Owner app(s)** — which application(s) DEL attributes the resource to, each a link
-  to that app. Resources DEL couldn't attribute show an `unassigned` badge (these are
-  the [orphans](/guides/orphans)).
+  to that app. Resources DEL couldn't attribute to a current, confident owner show an
+  `unassigned` badge (these are the [orphans](/guides/orphans)).
 - **Shared** — an amber **shared** badge marks a resource associated with **more than
   one** application. Shared resources are protected: removing one app's plan will
   never silently delete something another app still depends on.
@@ -156,22 +173,52 @@ instead of the row looking like a duplicate.
 
 The **Actions** on each resource row let you override DEL's automatic correlation:
 
-- **approve** — confirm a `probable` association so it becomes eligible for a plan.
+- **approve** — release a `shared` resource for removal by *this* app, or approve a
+  named volume for deletion.
 - **exclude** — drop a resource from this app's associations regardless of what
   correlation found.
 - **mark shared** — flag a resource as shared so it is preserved rather than removed.
 
-These are the controls you use before planning if DEL was unsure about something.
+These are the controls you use immediately before planning, with two limits worth
+knowing:
+
+<Callout intent="warning">
+  **approve does not promote a `probable` association.** The plan builder preserves
+  every `probable` row unconditionally. Approve is only for shared resources and
+  volumes — see [Understanding Confidence](/guides/confidence).
+
+  **None of the three survive a scan.** Each scan deletes and re-inserts an
+  application's associations, so these flags are wiped on the next rescan. Record
+  lasting corrections in the app's manifest (**Edit manifest**) instead.
+</Callout>
 
 ## The Jobs list
 
-**Jobs** lists every removal job DEL has run — both dry-runs and live runs — newest
-first. Each row links to the app, the plan it executed, and the job detail, and shows
-a **Mode** badge (grey `dry-run` or red `LIVE`) and a **Status** badge. It's the
-audit trail of everything DEL has changed on the host.
+**Jobs** lists removal jobs DEL has run — both dry-runs and live runs — newest
+first, capped at the most recent 200. Each row links to the app, the plan it
+executed, and the job detail, and shows a **Mode** badge (grey `dry-run` or red
+`LIVE`) and a **Status** badge. It's the audit trail of everything DEL has changed
+on the host; older jobs remain in the database and are still reachable by URL.
 
 <Frame caption="The Jobs list: every dry-run and live removal, with mode and status badges.">
   <img src="../../assets/13-jobs-list.png" alt="Jobs list" />
 </Frame>
+
+## Keyboard, screen readers, and printing
+
+The interface is usable without a mouse and legible on paper:
+
+- A **Skip to main content** link is the first thing Tab reaches on every page.
+- The **Glossary** sheet and the mobile nav drawer trap focus while open and return
+  it to whatever opened them on close.
+- Table headers carry `scope`, tables carry captions, and sortable columns announce
+  their state with `aria-sort`; filter inputs are labelled.
+- Copy buttons (for example, an app's slug) are reachable and activatable by
+  keyboard, not hover-only.
+- Button fills meet WCAG AA contrast.
+- `prefers-reduced-motion` is honoured — animations and transitions are suppressed
+  for anyone who has asked their system for that.
+- Print styles drop the navigation, glossary and skip link, so printing a page or
+  saving it as PDF produces the content rather than the chrome.
 
 Next: [Understanding Confidence](/guides/confidence).

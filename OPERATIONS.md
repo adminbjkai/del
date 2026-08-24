@@ -46,8 +46,11 @@ tail -f /apps/del/logs/helper-audit.log     # append-only, every helper request
 `del_app/auditlog.py`) and to `/apps/del/logs/`. `del-helper` additionally writes an
 independent, append-only `helper-audit.log` line for every request it receives,
 regardless of what `del-web` believes happened — the two logs are meant to be
-cross-checked. Secrets and environment variable values are never written to either
-log (see SECURITY.md).
+cross-checked. Each helper line carries `op`, `args`, `dry_run`, `ok`, `error` and,
+when the caller supplied them, `plan_id`, `step_id`, `job_id` and `requested_by`, so
+a root-level action can be traced to the DEL job, plan step and user that asked for
+it instead of being matched to `audit_log` by timestamp. Secrets and environment
+variable values are never written to either log (see SECURITY.md).
 
 ## Update procedure (no git in this deployment)
 
@@ -60,13 +63,26 @@ under `/apps/del/backend/del_app` (or `helper/del_helper.py`, or `config/`).
    cd /apps/del/backend && ../.venv/bin/python -m pytest ../tests/ -q
    ```
 3. If a migration was added, apply it: `./scripts/del-admin migrate`.
-4. Restart the affected unit(s):
+4. **If you changed `helper/` or `config/helper-policy.json`, redeploy them before
+   restarting.** `del-helper.service` runs the root-owned copy at
+   `/usr/local/lib/del-helper/` with policy at `/etc/del/helper-policy.json`, not
+   the repo working tree — a bare restart re-runs the old code:
    ```bash
-   sudo systemctl restart del-helper.service   # if helper/ or helper-policy.json changed
+   cd /apps/del && ./scripts/install.sh        # idempotent; re-installs both, restarts the helper
+   # or, by hand:
+   sudo install -o root -g root -m 0644 helper/del_helper.py /usr/local/lib/del-helper/del_helper.py
+   sudo install -o root -g root -m 0644 helper/validation.py /usr/local/lib/del-helper/validation.py
+   sudo install -o root -g root -m 0644 config/helper-policy.json /etc/del/helper-policy.json
+   ```
+5. Restart the affected unit(s):
+   ```bash
+   sudo systemctl restart del-helper.service   # after the redeploy in step 4
    sudo systemctl restart del-web.service      # if backend/del_app changed
    ```
-5. Confirm health: `curl -fsS http://127.0.0.1:8075/healthz`.
-6. If `config/nginx-del.bjk.ai.conf` changed, back it up, copy it over the installed
+6. Confirm health: `curl -fsS http://127.0.0.1:8075/healthz`, and
+   `journalctl -u del-web -n 20` — a broken import now makes `del-web` fail to
+   start rather than serving 404 for the whole UI with a green `/healthz`.
+7. If `config/nginx-del.bjk.ai.conf` changed, back it up, copy it over the installed
    site file, `sudo nginx -t`, then `sudo systemctl reload nginx` (never reload
    before `nginx -t` passes). Edit the `sites-available` copy only and leave the
    `sites-enabled` entry as a symlink to it — `nginx.conf`'s
@@ -81,6 +97,9 @@ under `/apps/del/backend/del_app` (or `helper/del_helper.py`, or `config/`).
 Docs content is the `.mdx` pages under `/apps/del/fern/pages/` (and navigation
 in `/apps/del/fern/docs.yml`), rendered by `del-docs.service`
 (`fern-api docs dev --port 8072 --backend-port 8073`).
+
+`install.sh` does not install `del-docs.service`; if `/docs` returns 502 the unit
+is simply not there yet — install it per INSTALL.md before troubleshooting further.
 
 1. Edit the relevant page(s) under `/apps/del/fern/pages/*.mdx` (or
    `fern/pages/guides/*.mdx`, `fern/pages/reference/*.mdx`).
@@ -141,13 +160,23 @@ it goes stale; there is no scheduled job that rebuilds it.
 /apps/del/scripts/del-admin backup-db
 ```
 Writes a consistent SQLite snapshot (via `sqlite3.Connection.backup`) to
-`/apps/del/backups/del-<UTC-timestamp>.db`. Run this before any manual DB surgery
-and on whatever cadence the host's general backup routine uses — `del.db` is a
-single file, so it fits into existing host backup jobs with no special handling.
+`/apps/del/backups/del-<timestamp>.db`. The timestamp is **host local time**
+(`datetime.now()`, format `YYYYMMDDTHHMMSS`), not UTC — so on this host it reads as
+Eastern. Run this before any manual DB surgery and on whatever cadence the host's
+general backup routine uses — `del.db` is a single file, so it fits into existing
+host backup jobs with no special handling.
 
 Per-removal-job backups (config files, volumes, tarred directories) are taken
-automatically by the job engine during the "backup" stage of every removal and also
-land under `/apps/del/backups/`, tracked in the `backups` table with `sha256`/`size`.
+automatically by the job engine during the `backup` stage of a removal and also land
+under `/apps/del/backups/`. A row is written to the `backups` table for each one —
+`job_id`, `kind` (`file_backup` / `volume_backup` / `backup_tar`), `src` and
+`dest` — and that is what the in-job rollback path reads. Two caveats worth knowing:
+
+- The `backups` table has `sha256` and `size` columns, but the job engine does not
+  populate them. Backups are **not** content-addressed or integrity-checked; they
+  are plain `cp -a` / `tar` copies. Verify by hand if that matters to you.
+- Rows are only written for **live** jobs. A dry run creates no backups (it changes
+  nothing), so it also records none.
 
 ## Restore
 

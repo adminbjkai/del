@@ -26,11 +26,17 @@ on the sign-in screen.
   </Step>
 </Steps>
 
-<Callout intent="warning">
-  If an initial password was generated for you at
-  `/apps/del/config/admin-initial-password.txt`, log in, change it immediately with
-  `del-admin change-password`, and delete that file. See the
-  [Security Model](/reference/security).
+<Callout intent="info">
+  Nothing writes your password to disk — `del-admin` reads it from a prompt or stdin
+  and stores only an Argon2id hash. (An earlier setup left a generated password at
+  `/apps/del/config/admin-initial-password.txt`; that file has been deleted and is
+  not recreated. If you find one on an older host, log in, run `del-admin
+  change-password`, and delete it.) See the [Security Model](/reference/security).
+</Callout>
+
+<Callout intent="info">
+  Login is rate-limited to 5 attempts per minute per IP. If you lock yourself out,
+  wait 60 seconds — there is no escalating backoff and no lasting lockout.
 </Callout>
 
 ## Finding your way around
@@ -40,13 +46,19 @@ The left sidebar is the same on every page:
 | Nav item | What it shows |
 |---|---|
 | **Dashboard** | Stat cards, recent scans, recent jobs, and the **Run scan now** button. |
+| **View Apps** | A homelab-style launcher gallery of the web apps this host currently serves, filtered to domains that pass a live HTTPS check. See [Browsing the Inventory](/guides/browsing). |
 | **Applications** | Every application DEL has correlated, with status, domains, ports, and warning counts. |
 | **Resources** | All discovered resources, organized into per-type tabs (containers, images, volumes, nginx sites, units, and so on). |
-| **Orphans** | Resources DEL could not tie to any application — review-only. |
+| **Orphans** | Resources with no current, confident owner — review-only. See [Orphan Review](/guides/orphans). |
 | **Jobs** | Every removal job (dry-run and live), with status and timing. |
 | **Settings** | Configuration, scan roots, protected apps, and a second **Run scan now** button. |
+| **Docs** | Opens this documentation site in a new tab. It is served openly, with no separate login — the app UI still needs your DEL session. |
 
 **Log out** lives at the bottom of the sidebar.
+
+The interface is keyboard-navigable: a **Skip to main content** link appears on
+first Tab, the glossary sheet and mobile nav drawer trap focus and return it when
+closed, and copy buttons are reachable without a mouse.
 
 The dashboard's stat cards are clickable shortcuts: **Applications** and
 **Running jobs** jump to those lists, **Shared resources** opens the volumes tab

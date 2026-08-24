@@ -53,9 +53,33 @@ job's own backups (below), not a DB restore.
 
 ## Undoing a specific removal job's changes
 
-Every job records its own backups (`backups` table, files under
-`/apps/del/backups/`) taken before that job's mutations, keyed by `job_id` with
-`sha256`/`size` for integrity. To manually reverse a job:
+A **live** job whose plan had a backup mode of Config or Full records a `backups`
+row per completed backup step (`job_id`, `kind`, `src`, `dest`) before it deletes
+anything, with the archives themselves under `/apps/del/backups/`. The `sha256` and
+`size` columns exist in the schema but are not populated — treat the archives as
+plain copies, not integrity-checked ones. A job planned with backup mode **None**
+recorded nothing, and there is nothing to reverse it with.
+
+### What rolls back automatically, and what does not
+
+- **Inside `nginx_rm_site`** — the helper copies each site file to
+  `/apps/del/backups/` first, removes them, runs `nginx -t`, and copies them back if
+  the test fails. Self-contained; does not depend on the `backups` table at all, and
+  has always worked.
+- **Job-level restore** — when an `nginx_rm_site`, `nginx_test_reload`,
+  `systemd_disable` or `systemd_rm_unit` step fails, the engine walks this job's
+  `backups` rows newest-first, calls the helper's `path_restore` for each, and
+  audits the real per-backup outcome as `job_restore_attempted`. Volume archives are
+  deliberately skipped and reported as manual-restore.
+
+<Callout intent="warning">
+  **If you are looking at a job from before 2026-08-24:** nothing ever wrote the
+  `backups` table, so the job-level restore iterated an empty set while still
+  recording `job_restore_attempted`. Those jobs were not rolled back, whatever the
+  audit log says.
+</Callout>
+
+To manually reverse a job:
 - **nginx site**: copy the timestamped `.bak.<ts>` config back over the removed
   site file, `sudo nginx -t`, `sudo systemctl reload nginx`. (The job engine does
   this automatically on an in-job failure; this is for reversing an already-`done`
@@ -88,10 +112,17 @@ Common causes and fixes:
 - **Permission denied connecting to the socket** — `del-web` runs as `bjkai`;
   confirm the socket is group `bjkai` and mode `0660`, and that `bjkai` has not
   been removed from the group.
-- **Helper rejects a valid-looking operation** — check
-  `/apps/del/config/helper-policy.json` for the approved/protected root lists and
-  `/apps/del/logs/helper-audit.log` for the exact rejection reason; the helper
-  logs every request including denials.
+- **Helper rejects a valid-looking operation** — check the **deployed** policy at
+  `/etc/del/helper-policy.json` (the repo copy at
+  `/apps/del/config/helper-policy.json` is the source, but the running daemon reads
+  the deployed one) for the approved/protected root lists, `protected_units` and the
+  never-delete list; then `/apps/del/logs/helper-audit.log` for the exact rejection
+  reason — the helper logs every request including denials.
+- **Helper is running stale code after an edit** — `del-helper.service` executes
+  `/usr/local/lib/del-helper/del_helper.py`, not `/apps/del/helper/del_helper.py`.
+  Re-run `/apps/del/scripts/install.sh` and then restart; a bare
+  `systemctl restart` re-runs the old deployed copy. Confirm with
+  `sudo diff /apps/del/helper/del_helper.py /usr/local/lib/del-helper/del_helper.py`.
 - **Helper down entirely** — `sudo systemctl start del-helper.service`; `del-web`
   itself keeps running (dashboard/browsing/plan-building still work), only actions
   that require the helper (plan execution, scans that need privileged reads — none

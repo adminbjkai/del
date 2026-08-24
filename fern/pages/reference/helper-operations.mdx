@@ -6,11 +6,28 @@ slug: reference/helper-operations
 
 Every privileged action DEL can take on the host is a **typed operation** sent as
 JSON over the unix socket `/run/del/helper.sock` (mode `0660`, owner `root:bjkai`)
-to `del-helper`, a ~600-line stdlib-only root daemon. The web app never runs shell
-as root and never constructs shell strings from user input. `del-helper` re-validates
-every argument against `helper-policy.json` — regardless of what the (HMAC-signed)
-plan claims — and executes exclusively via subprocess argument arrays
-(`shell=False`). Nothing outside this fixed list is possible.
+to `del-helper`, a stdlib-only root daemon of roughly 1,100 lines
+(`del_helper.py` ~740 plus `validation.py` ~400). The web app never runs shell as
+root and never constructs shell strings from user input. `del-helper` re-validates
+every argument against its policy and executes exclusively via subprocess argument
+arrays (`shell=False`). Nothing outside this fixed list of **22 operations** is
+possible.
+
+<Callout intent="info">
+  **The helper does not check the plan.** `handle_request` reads `op`, `args` and
+  `dry_run`. It also records `plan_id`, `step_id`, `job_id` and `requested_by` in
+  the audit line, but it cannot verify them — it never sees the `plans` table.
+  Plan integrity is enforced web-side by the HMAC check in `planner.verify_plan`.
+  So where a note below says a target "must be in the approved plan", that is a
+  constraint the *planner* applies when it builds the step, not something the
+  helper re-checks. What the helper enforces is this allowlist plus its own
+  argument validation.
+</Callout>
+
+The daemon runs from `/usr/local/lib/del-helper/del_helper.py` with its policy at
+`/etc/del/helper-policy.json` — root-owned copies deployed by `scripts/install.sh`,
+not the repo working tree, which the web user can write. See the
+[Security Model](/reference/security) for why.
 
 Every operation honors a `dry_run` flag (returns what *would* happen without changing
 anything) and is written to the append-only `/apps/del/logs/helper-audit.log` on
@@ -52,18 +69,26 @@ every request, success or refusal.
     foreign containers still attached.
   </Accordion>
   <Accordion title="systemd_stop — unit">
-    Stops a systemd unit. The unit must appear in the app's approved plan.
+    Stops a systemd unit. The name must match
+    `^[A-Za-z0-9@_.-]+\.(service|timer)$` and must not match `protected_units` (see
+    below), which is refused helper-side regardless of what the plan says.
   </Accordion>
   <Accordion title="systemd_disable — unit">
-    Disables a systemd unit. The unit must appear in the app's approved plan.
+    Disables a systemd unit. Same name validation and `protected_units` refusal as
+    `systemd_stop`.
   </Accordion>
   <Accordion title="systemd_rm_unit — unit">
-    Removes a unit file. Restricted to `/etc/systemd/system` and followed by a
-    `daemon-reload`.
+    Removes a unit file. Restricted to `/etc/systemd/system` (the resolved path must
+    stay inside it), refused for protected units, and followed by a
+    `daemon-reload`. An already-absent unit file is success, not an error.
   </Accordion>
-  <Accordion title="cron_rm — file path or crontab line">
-    Removes a cron entry. `/etc/cron.d` files only under the approved plan; user
-    crontab edits are applied via a `crontab -l` diff.
+  <Accordion title="cron_rm — path">
+    Removes a cron file. **`/etc/cron.d` only.** The operation takes a single
+    `path` argument, validated to resolve under the policy's `cron_d_dir`, and
+    `rm`s that file. It **cannot** edit a user crontab: there is no `crontab -l`
+    diff and no mechanism anywhere in DEL for removing an individual user-crontab
+    line. A cron entry discovered in a user crontab can be reported, but must be
+    removed by hand.
   </Accordion>
   <Accordion title="nginx_rm_site — paths[]">
     Removes nginx site files (only under `/etc/nginx/sites-{enabled,available}`).
@@ -78,31 +103,75 @@ every request, success or refusal.
   </Accordion>
   <Accordion title="path_delete — path">
     Deletes a file or directory. The path is canonicalized with `realpath` (no symlink
-    escape), must be under an approved deletion root **and not** a protected root,
-    must appear in the approved plan, and mountpoints are refused outright.
+    escape), must resolve at least one component deep under an approved deletion
+    root, must not be a protected root or on the `never_delete` list, and
+    mountpoints are refused outright. A last-line guard also refuses any path
+    shallower than two `/` separators.
   </Accordion>
   <Accordion title="path_restore — backup_path, original_path">
-    Restores a prior `backup_tar`/`file_backup` copy back to `original_path` (`cp -a`).
-    `original_path` must be absolute.
+    Restores a prior `backup_tar`/`file_backup` copy back to `original_path`
+    (`cp -a`). Confined on both ends: `backup_path` must exist under
+    `/apps/del/backups`, and `original_path` must resolve under a **DEL-managed
+    root** — the approved deletion roots plus nginx sites, `/etc/systemd/system`
+    and `/etc/cron.d` — and must not be protected or on `never_delete`.
+
+    The two basenames must also **match**: a restore may only replace the file it
+    was taken from. Without that rule a backup could be planted under an
+    attacker-chosen name in a sensitive managed root. `/etc/systemd/system` stays
+    restorable so unit removal can roll back, but a protected unit cannot be
+    recreated there.
   </Accordion>
   <Accordion title="tmux_kill — session">
-    Kills a tmux session by its exact name from the plan.
+    Kills a tmux session by its exact name.
   </Accordion>
   <Accordion title="process_term — pid, expected_exe">
-    Terminates a process (TERM, then KILL after a grace period). The pid **and** its
-    executable must still match what the plan expected.
+    Terminates a process (TERM, then KILL after a 10s grace period). The pid **and**
+    its executable must still match what the caller expected, re-verified
+    immediately before the SIGKILL as well. An already-absent pid is success.
   </Accordion>
   <Accordion title="backup_tar — src_path, dest">
-    Tars a path to a backup. `dest` must be under `/apps/del/backups` only.
+    Tars a path to a backup. `dest` must be under `/apps/del/backups`, and
+    `src_path` must be under a DEL-managed root — without that, the unprivileged
+    web tier could make the root helper copy any file on the host (`/etc/shadow`,
+    `/root/.ssh/`, a TLS private key) into the operator-readable backups directory.
   </Accordion>
   <Accordion title="volume_backup — volume, dest">
     Archives a volume's contents (`docker run --rm -v vol:/src:ro tar`) into
-    `/apps/del/backups`.
+    `/apps/del/backups`. Note the output is a tar of *contents*, not a filesystem
+    path, so `path_restore` cannot put it back — volume archives are restored by
+    hand.
   </Accordion>
   <Accordion title="file_backup — path, dest">
-    Makes a timestamped copy of a file before it is edited or removed.
+    Makes a timestamped copy of a file before it is edited or removed. Same source
+    confinement as `backup_tar`; `dest` under `/apps/del/backups`.
   </Accordion>
 </AccordionGroup>
+
+## Protected units
+
+Refused for `systemd_stop`, `systemd_disable` and `systemd_rm_unit`, and refused as
+a `path_restore` target inside `/etc/systemd/system`. Matched as case-insensitive
+globs from `protected_units` in the policy:
+
+`del-*.service`, `del-*.timer`, `ssh.service`, `sshd.service`, `ssh@*.service`,
+`nginx.service`, `docker.service`, `docker.socket`, `containerd.service`,
+`systemd-*.service`, `systemd-*.timer`, `cron.service`, `crond.service`,
+`dbus.service`, `dbus.socket`, `network*.service`, `polkit.service`,
+`rsyslog.service`, `fail2ban.service`, `ufw.service`.
+
+DEL's own units come first deliberately: `systemd_stop del-helper.service` is the
+opening move in an attack that swaps the helper's code. This is a *helper-side*
+control on purpose — the web tier's own guards run inside the process an attacker
+would already control.
+
+## Audit correlation
+
+Every request appends one JSON line to `/apps/del/logs/helper-audit.log` with `ts`,
+`op`, `args`, `dry_run`, `ok` and `error` — plus `plan_id`, `step_id`, `job_id` and
+`requested_by` when the caller supplies them. That makes a root-level destructive
+action attributable to the DEL job, plan step and user that requested it, rather
+than something you match against `audit_log` by timestamp. The helper logs these
+fields; it does not enforce anything on them.
 
 ## Protected roots
 
@@ -113,11 +182,30 @@ target that canonicalizes to one of them:
 `/root`, `/run`, `/sbin`, `/srv`, `/sys`, `/tmp`, `/usr`, `/var`, `/apps`, `/data`,
 and `/apps/del` itself.
 
-`path_delete` additionally requires the target to canonicalize under one of the
-**approved deletion roots** — `/apps`, `/data`, `/srv`, `/var/www`, `/home/bjkai`,
-`/etc/nginx/sites-{available,enabled}`, `/etc/systemd/system`, `/etc/cron.d` — *and*
-to appear in the specific approved plan.
+`path_delete` additionally requires the target to canonicalize at least one
+component deep under one of the **approved deletion roots** — `/apps`, `/data`,
+`/srv`, `/var/www`, `/home/bjkai`, `/etc/nginx/sites-{available,enabled}`,
+`/etc/systemd/system`, `/etc/cron.d` — and to be absent from the `never_delete`
+list (`/apps/del`, `~/.ssh`, `~/.gnupg`, `~/.aws`, `~/.config`, `~/.bashrc`,
+`~/.profile`).
 
 See the [Security Model](/reference/security) for the surrounding auth, HMAC, and
 threat-model detail, and the [Architecture reference](/reference/architecture) for
 how the helper fits into the overall privilege split.
+
+## `compose_down` and the label sweep
+
+`compose_down` tears a project down by config file, then sweeps any straggler by
+Docker label:
+
+```
+docker ps -aq --filter label=com.docker.compose.project=<project>
+docker rm -f <ids>
+```
+
+That sweep is **host-wide**, not scoped to the compose file. The planner
+therefore never names a project after a generic layout directory — a compose
+file at `/apps/<app>/docker/` would otherwise produce the project name `docker`
+and force-remove every container on the host carrying that label. An explicitly
+declared compose project name wins; a generic basename falls back to the app
+slug.

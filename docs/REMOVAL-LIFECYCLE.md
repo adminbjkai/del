@@ -1,54 +1,85 @@
 # DEL — Removal Lifecycle
 
-A removal job executes a previously-built, operator-approved `Plan` through nine
+A removal job executes a previously-built, operator-approved `Plan` through six
 ordered stages. Each stage's steps are recorded in `job_steps` (state
-`pending`→`running`→`done`/`failed`) before and after execution; **any
-safety-validation failure halts the job before any downstream deletion runs.**
+`pending`→`running`→`done`/`failed`) before and after execution; **any step failure
+halts the job before any downstream deletion runs.**
 
-## The 9 stages
+Two things bracket those six but are not stages: **analysis and preview** happen
+at plan-build time, and the **report** is the job's terminal status plus its
+audit-log records. Neither produces a `job_steps` row.
 
-1. **Analyze** — resolve the app's associations against current live state.
-   Nothing from scan time is assumed still true; the job re-checks reality before
-   acting.
-2. **Preview (dry-run by default)** — render the full plan: steps, warnings,
-   preserved/blocked resources, estimated reclaimed bytes, for operator review.
-   Nothing executes. A job's `mode` is `dry_run` unless the operator explicitly
-   chooses `live` at execution time (`POST /plans/{id}/execute`) — dry-run is the
-   default in both the UI and `helper_client.call()` (`dry_run: bool = True`).
-3. **Backup** — `file_backup`, `volume_backup`, `backup_tar` for every resource the
-   plan will touch, written to `/apps/del/backups`, before any mutation. Backups
-   are content-addressed (`sha256`, `size`) and tracked in the `backups` table
-   linked to the `job_id`.
-4. **Quiesce** — stop the running workload without deleting anything yet:
-   `container_stop`, `systemd_stop`, `tmux_kill`, `process_term`. A failure here is
-   trivially reversible (nothing has been removed).
-5. **Remove (runtime)** — `compose_down`, `container_rm`, `image_rm` (refused if
-   still referenced by another container), `volume_rm` (see volume gate below),
-   `network_rm` (refuses `bridge`/`host`/`none` and any network with foreign
-   containers still attached).
-6. **Remove (host integrations)** — `systemd_disable`/`systemd_rm_unit`,
-   `cron_rm`, `nginx_rm_site` (backs up first, runs `nginx -t`, reloads only on
-   pass, restores automatically on failure). Because correlation attaches an
-   app's stale/disabled `sites-available` config copies by exact `server_name`
-   match (docs/DISCOVERY.md), this step removes those alongside the live
-   `sites-enabled` file, so a completed removal leaves no nginx config debris
-   behind.
-7. **Remove (files)** — `path_delete` for project directories/bind data;
-   canonicalized (`realpath`) and re-checked against protected roots and the
-   specific approved plan on every call.
-8. **Validate** — post-removal checks confirm the targeted resources are actually
-   gone and nothing else broke (e.g. `nginx -t` still passes, no orphaned
-   dependents appeared). Implemented as `jobs.validate_removal()`.
-9. **Report** — final job status, reclaimed bytes, and a durable audit-log
-   record. Failed jobs are **resumable**: retrying re-enters at the failed step
-   rather than from the beginning, without re-running already-`done` steps.
+## Before the stages: building the plan
+
+`planner.build_plan()` resolves the app's associations against the latest scan
+whose status is `done`, decides which become steps, and renders the rest as
+warnings and preserved resources with an estimated reclaim figure. Nothing
+executes. A job's `mode` is `dry_run` unless the operator explicitly chooses `live`
+at execution time (`POST /plans/{id}/execute`) — dry-run is the default in both the
+UI and `helper_client.call()` (`dry_run: bool = True`).
+
+**Plan building refuses rather than producing an empty plan.** If the app has
+associations but none of them appear in the latest *completed* scan, `build_plan`
+raises `PlanError` asking the operator to re-scan. Previously the query used
+`MAX(id)` with no status filter, so while any scan was running the builder saw zero
+resources and emitted an empty plan that then executed "successfully" having
+removed nothing. Three live removals hit exactly that.
+
+## The six stages
+
+`planner.STAGE_ORDER` is exactly: `backup`, `quiesce`, `remove_runtime`,
+`remove_host`, `remove_files`, `validate`. Those six strings are the only values
+`job_steps.stage` ever holds.
+
+1. **`backup`** — `file_backup`, `volume_backup`, `backup_tar` for the resources
+   the plan will touch, written under `/apps/del/backups`, before any mutation.
+   Only runs when the plan's backup mode is *Config* or *Full*; the default is
+   *None*, which produces no backup steps at all. On a **live** job each completed
+   backup step also writes a `backups` row (`job_id`, `kind`, `src`, `dest`) — that
+   row is what the rollback path below reads. The `sha256`/`size` columns exist but
+   are not populated; these are plain copies, not content-addressed archives.
+2. **`quiesce`** — stop the running workload without deleting anything yet:
+   `systemd_stop` (timers before services), `tmux_kill`, `process_term`,
+   `container_stop`. A failure here is trivially reversible; nothing has been
+   removed.
+3. **`remove_runtime`** — `compose_down` (or `container_rm` when there is no
+   compose project), `network_rm` (skipping `bridge`/`host`/`none` and shared
+   networks), `volume_rm` (see the volume gate below), `image_rm` (refused if still
+   referenced by another container).
+4. **`remove_host`** — `systemd_disable`/`systemd_rm_unit`, `cron_rm`,
+   `nginx_rm_site` then `nginx_test_reload`. Every nginx path for the app goes into
+   one `nginx_rm_site` step, ordered `sites-enabled` first so removing a
+   `sites-available` target never leaves a dangling symlink that fails `nginx -t`.
+   Because correlation attaches an app's stale/disabled `sites-available` copies by
+   exact `server_name` match (docs/DISCOVERY.md), this stage removes those
+   alongside the live file, so a completed removal leaves no nginx config debris.
+5. **`remove_files`** — `path_delete` for project directories and bind-mount data;
+   canonicalized (`realpath`) and re-checked by the helper against the protected
+   roots, the never-delete list, and the approved deletion roots on every call.
+   Paths nested inside another path already being deleted are dropped, so the
+   child step cannot fail with "path does not exist" after its parent went first.
+6. **`validate`** — one `validate_removal` step running post-removal checks:
+   container/volume/network absent, unit inactive, `nginx -t` still passes.
+   Implemented as `jobs.validate_removal()`, as direct read-only subprocess checks
+   independent of the helper. In a dry run the checks still run but their failures
+   are reported as informational, since nothing was actually removed.
+
+Afterwards, a successful **live** job triggers a rescan so the UI reflects the new
+state immediately; a rescan failure is audited as `post_removal_rescan_failed`
+rather than silently leaving a stale inventory behind.
 
 ## Safety gates
 
-- **HMAC plan integrity** — an approved plan is signed with an HMAC (key readable
-  only by root and the `bjkai` user) when written to the `plans` table. The helper
-  does not rely on the signature alone; it independently re-validates every
-  argument against `helper-policy.json` regardless of what the plan claims.
+- **HMAC plan integrity** — a plan is signed with an HMAC over the canonical JSON
+  of its steps (key `/apps/del/config/secret.key`, mode `0600`) when written to the
+  `plans` table, and `planner.verify_plan()` recomputes and compares it before a job
+  is created and again before it runs. **This check is web-side only.** The helper
+  has no concept of a plan — it is sent an op, args and a `dry_run` flag, records
+  `plan_id`/`step_id`/`job_id`/`requested_by` in its audit line without acting on
+  them, and independently re-validates every argument against
+  `/etc/del/helper-policy.json`. The two controls are independent, not layered:
+  tampering with `steps_json` is caught by the HMAC; an argument the helper
+  disallows is refused whether or not a plan vouches for it.
 - **Volume double-confirmation** — live volume deletion requires three
   independent things to all be true: the plan option `remove_named_volumes`
   enabled, the specific volume individually checked by the operator, **and** a
@@ -61,25 +92,54 @@ safety-validation failure halts the job before any downstream deletion runs.**
   `/run`, `/sbin`, `/srv`, `/sys`, `/tmp`, `/usr`, `/var`, `/apps`, `/data`, and
   `/apps/del` itself. Enforced independently by the helper on every `path_delete`
   call, not just at plan-build time.
-- **Halt-on-failure + automatic rollback** — any safety-validation failure halts
-  the job before further deletions in that run. Nginx and systemd removal steps
-  specifically restore automatically from their stage-3 backup if a later step in
-  the same job fails (e.g. `nginx -t` fails after a site removal) — this is a
-  built-in job-engine behavior, not a manual runbook step.
-- **Resumable jobs** — a failed job can be retried from the failed step once the
-  underlying cause is fixed, without re-running completed steps, so an operator
-  never has to restart a partially-successful removal from scratch.
+- **Protected units** — the helper refuses to stop, disable or remove DEL's own
+  `del-*` units, `sshd`, `nginx`, `docker`, `systemd-*`, `cron` and the rest of
+  `protected_units` in the policy, whatever a plan says.
+- **Halt-on-failure + rollback** — any step failure halts the job before further
+  deletions in that run. Two distinct restore mechanisms exist, and it is worth
+  knowing which is which:
+  - *Inside `nginx_rm_site`*: the helper backs up each site file, removes them,
+    runs `nginx -t`, and copies them straight back if the test fails. Entirely
+    self-contained, no database involvement — this one has always worked.
+  - *Job-level*: when an `nginx_rm_site`, `nginx_test_reload`, `systemd_disable`
+    or `systemd_rm_unit` step fails, the engine reads this job's `backups` rows
+    newest-first and calls `path_restore` for each, then audits the real
+    per-backup outcome. Volume archives are skipped and reported as
+    manual-restore, because a `volume_backup` is a tar of contents rather than a
+    filesystem path. **This path only has anything to restore if the plan's
+    backup mode was Config or Full and the job ran live.** Before 2026-08-24
+    nothing wrote the `backups` table at all, so it silently iterated an empty set
+    while still auditing that a restore had been attempted.
+- **Resume is engine-only and not exposed.** `jobs.retry_job()` resets the first
+  failed step and everything after it and re-executes from there without re-running
+  completed steps — but nothing calls it. There is no `/jobs/{id}/retry` route, no
+  button in the UI and no `del-admin` subcommand. In practice, recovering a failed
+  job today means fixing the cause and either invoking `retry_job` from a Python
+  shell or building a fresh plan.
 - **Confidence gating (inherited from discovery/correlation)** — only
-  `confirmed`/`high`/`manual` associations are eligible for automatic inclusion in
-  a plan; `probable` requires explicit per-resource approval; `possible` is always
-  blocked and rendered as a warning/preserved entry rather than a step. See
-  docs/DISCOVERY.md.
+  `confirmed`/`high`/`manual` associations become steps, and only when not excluded
+  and not shared-and-unapproved. `probable` is **always** preserved with a warning,
+  regardless of per-resource approval — raise it with a manifest entry to make it
+  removable. `possible` is always blocked. See docs/DISCOVERY.md.
+- **Per-resource approvals are not durable.** `approve`, `exclude` and
+  `mark-shared` write to an association row, and the next scan deletes and
+  re-inserts that row. Set them immediately before building the plan, or record the
+  correction in the app's manifest instead.
 
-See also `docs/server-audit.md §16` for the original design writeup of this
-lifecycle and `§17` for the backup/recovery strategy it depends on.
+The original design writeup of this lifecycle is `docs/server-audit.md` §16, with
+the backup/recovery strategy in §17 — that file is gitignored and present on the
+deployment host only.
 
 ## Robust compose teardown (2026-07-20)
-Stage 5 `compose_down` is resilient to broken project state, so removals no
+Backup destinations are unique per *source* file, not per basename:
+`{backups_dir}/{slug}/{resource_type}/{flattened-parent-dir}/{filename}`. Two
+config files sharing a name (`server/compose.yaml` and
+`server/config/compose.yaml`) therefore get separate destinations. The filename
+itself is preserved because `path_restore` requires a restore to keep the
+backup's basename — that is what makes the restore target unambiguous.
+
+The `remove_runtime` stage's `compose_down` is resilient to broken project state,
+so removals no
 longer get stuck on: (a) an uppercase project name (Docker Compose forces
 lowercase — the helper lowercases before calling compose); (b) a missing or
 unparseable compose file (falls back to a label-based teardown that removes

@@ -57,7 +57,9 @@ that can't be skipped by a preset.
   **What DEL never auto-removes, even on a "remove everything" plan:**
   - **Shared resources** — anything used by more than one app is *preserved* unless
     you explicitly approve it for this app (it would break the other app otherwise).
-  - **`possible`-confidence resources** — weak matches are blocked, not deleted.
+  - **`probable`- and `possible`-confidence resources** — both are preserved, and
+    the *approve* button does not change that for `probable`. Only a manifest entry
+    does.
   - **`.env` and `.git`** inside a project directory — preserved and listed under
     *Preserved* / *Manual follow-up* so you can review secrets and history before
     deleting them by hand.
@@ -90,21 +92,29 @@ manual-follow-up list for you to finish by hand.
     </Frame>
   </Step>
 
-  <Step title="Approve anything DEL held back">
-    `confirmed` and `high` resources are included automatically. Anything `probable`
-    is held back until you **approve** it, and `shared` resources stay preserved
-    unless you explicitly approve them for this app. Use the **Actions** on each row —
-    *approve*, *exclude*, or *mark shared* — to get the association set exactly right.
+  <Step title="Approve any shared resource you do want removed">
+    `confirmed` and `high` resources are included automatically. A resource flagged
+    `shared` stays preserved unless you explicitly **approve** it for this app —
+    that is what the *approve* action is for. Use the **Actions** on each row —
+    *approve*, *exclude*, or *mark shared* — to get the association set right.
 
     <Frame caption="Step 2 — approve, exclude, or mark-shared each association from the Actions column.">
       <img src="../../assets/05-volume-approval.png" alt="Approve/exclude/mark-shared actions" />
     </Frame>
 
+    <Callout intent="warning">
+      **Approving a `probable` association does nothing.** The plan builder preserves
+      every `probable` row unconditionally — it never checks approval for them. If
+      the app owns something DEL only rated `probable` and you want it gone, add it
+      to the app's manifest (**Edit manifest** on the detail page) and rescan; that
+      records it at confidence 100. See
+      [Understanding Confidence](/guides/confidence).
+    </Callout>
+
     <Callout intent="info">
-      Not sure what a badge means? See
-      [Understanding Confidence](/guides/confidence). Only `confirmed`/`high`/`manual`
-      (and approved `probable`) associations become removal steps; `possible` and
-      unapproved `shared` resources are always preserved.
+      Do this immediately before building the plan. Every scan deletes and re-inserts
+      an application's associations, so *approve* / *exclude* / *mark shared* are
+      wiped by the next rescan. Manifest edits persist; these do not.
     </Callout>
   </Step>
 
@@ -139,8 +149,9 @@ manual-follow-up list for you to finish by hand.
 
     - **Warnings** (amber box) — resources DEL is deliberately *not* removing and
       why, e.g. `/apps/deldemo/.git: blocked: not safely removable`.
-    - **Steps**, grouped by stage (backup → quiesce → remove_runtime → remove_host →
-      remove_files → validate). Each step shows its operation, a plain-English
+    - **Steps**, grouped by the six stages (backup → quiesce → remove_runtime →
+      remove_host → remove_files → validate) — those are all the stages there are.
+      Each step shows its operation, a plain-English
       description, a **Danger** badge (`safe` / `warning` / `data_loss`), and whether
       it's **reversible**. Data-loss rows are tinted red.
     - **Preserved (not removed)** — everything intentionally kept, such as `.env` and
@@ -230,17 +241,28 @@ to run one yourself. Because of that, the UI updates immediately:
 DEL is built to fail safe. If any step fails, the job **halts before running further
 deletions in that run** — it never barrels ahead.
 
-- **Automatic rollback** — nginx and systemd removal steps restore themselves from
-  the backup taken in the *backup* stage if a later step in the same job fails (for
-  example, if `nginx -t` fails after a site removal). This is built into the job
-  engine, not a manual step.
-- **Resume / retry** — a failed job is **resumable**: fix the underlying cause, then
-  retry and the job re-enters at the failed step without re-running the steps that
-  already succeeded.
+- **`nginx_rm_site` rolls itself back.** The helper backs up each site file, removes
+  them, runs `nginx -t`, and copies them straight back if the test fails. This is
+  self-contained inside the operation and does not depend on anything else.
+- **Job-level rollback of nginx/systemd steps** — if an `nginx_rm_site`,
+  `nginx_test_reload`, `systemd_disable` or `systemd_rm_unit` step fails, the engine
+  restores this job's recorded backups newest-first and reports the real per-backup
+  outcome in the audit log. **This only has anything to restore if you set the
+  plan's backup mode to Config or Full**, which is not the default. Volume archives
+  are skipped — a volume backup is a tar of contents, not a filesystem path, so you
+  restore those by hand.
 - **Manual rollback of a finished job** — to reverse a job that already completed, use
   its backups (config files, tarred directories, and volume archives under
   `/apps/del/backups/`). The full procedure is in
   [Backups & Restore](/guides/backups) and [Recovery](/guides/recovery).
+
+<Callout intent="warning">
+  **There is no retry button.** The engine has a `retry_job()` function that resets
+  the failed step and everything after it and re-runs from there, but nothing in the
+  UI, the HTTP API or the `del-admin` CLI calls it — there is no `/jobs/{id}/retry`
+  route. In practice you fix the cause, rescan, and build a fresh plan — which will
+  no longer contain steps for whatever the failed job already removed.
+</Callout>
 
 <Callout intent="info">
   A restore of DEL's own database never undoes a real removal — those changes were
@@ -250,9 +272,15 @@ deletions in that run** — it never barrels ahead.
 
 ## Why this is safe
 
-The removal engine layers several independent safeguards: dry-run by default,
-per-stage backups before any mutation, HMAC-signed plans that the privileged helper
-still re-validates argument-by-argument, a fixed operation allowlist, protected roots
-that can never be deleted, the typed volume-deletion phrase, and halt-on-failure with
-automatic rollback. For the full stage-by-stage engine detail and the privilege
-split behind it, see the [Architecture reference](/reference/architecture).
+The removal engine layers several independent safeguards: dry-run by default;
+backups before any mutation when you ask for them; HMAC-signed plans, verified
+web-side before a job is created and again before it runs; a fixed 22-operation
+allowlist enforced by a root daemon that re-validates every argument on its own
+terms and has no knowledge of your plan; protected roots and protected units that
+can never be touched; the typed volume-deletion phrase; and halt-on-failure. The
+plan builder also refuses outright if the app has no resources in the latest
+completed scan, rather than producing an empty plan that would "succeed" having
+removed nothing.
+
+For the full stage-by-stage engine detail and the privilege split behind it, see the
+[Architecture reference](/reference/architecture).
