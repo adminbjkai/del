@@ -22,7 +22,7 @@ import sqlite3
 
 from del_app.auth import get_secret_key
 from del_app.config import get_settings
-from del_app.db import get_db, q, x
+from del_app.db import get_db, latest_done_scan_id, q, x
 from del_app.models import Plan, PlanStep
 
 STAGE_ORDER = [
@@ -93,23 +93,36 @@ def _is_protected_root(path: str) -> bool:
     return real in PROTECTED_ROOTS
 
 
+# The helper reads its policy from the ROOT-OWNED deployed copy. The planner
+# mirrors that policy so it never proposes a path the helper would refuse, so
+# it must read the same file — reading the repo copy meant a hand-edit to one
+# could silently desynchronise the planner from the allowlist actually being
+# enforced. The repo path stays as a fallback for a dev checkout with no
+# deployed helper.
+_POLICY_PATHS = ("/etc/del/helper-policy.json", "/apps/del/config/helper-policy.json")
+
+
+def _helper_policy() -> dict:
+    for path in _POLICY_PATHS:
+        try:
+            with open(path) as f:
+                return json.load(f)
+        except Exception:
+            continue
+    return {}
+
+
 def _approved_deletion_roots() -> list[str]:
     """Mirror the helper policy's approved deletion roots so the planner never
     proposes a path the helper would (correctly) refuse — e.g. host system
     bind mounts like /var/run/docker.sock, /etc/localtime, /proc."""
-    try:
-        with open("/apps/del/config/helper-policy.json") as f:
-            return json.load(f).get("approved_deletion_roots", []) or []
-    except Exception:
-        return ["/apps", "/data", "/srv", "/var/www", "/home/bjkai"]
+    return _helper_policy().get("approved_deletion_roots") or [
+        "/apps", "/data", "/srv", "/var/www", "/home/bjkai",
+    ]
 
 
 def _never_delete_roots() -> list[str]:
-    try:
-        with open("/apps/del/config/helper-policy.json") as f:
-            return json.load(f).get("never_delete", []) or []
-    except Exception:
-        return ["/apps/del"]
+    return _helper_policy().get("never_delete") or ["/apps/del"]
 
 
 def _scan_root_app_dir(path: str | None) -> str | None:
@@ -245,6 +258,34 @@ def _classify(row: sqlite3.Row) -> tuple[str, bool, str | None]:
     return level, False, "confidence too low for automatic removal"
 
 
+def _compose_project_name(row, data: dict, app_slug: str) -> str:
+    """Project name for a compose_down step.
+
+    `compose_down` tears the project down by config file and then sweeps any
+    straggler by Docker label (`docker ps -aq --filter
+    label=com.docker.compose.project=<project>` followed by `docker rm -f`).
+    That sweep is host-wide, so the name must never be a generic directory
+    basename: a compose file at /apps/<app>/docker/ used to yield the project
+    name "docker", which would force-remove every container on the host
+    labelled with that project — other apps included. Prefer an explicitly
+    declared name, then the directory basename, and fall back to the app slug
+    when the basename is only a layout role. The config-file teardown still
+    handles the real project correctly either way.
+    """
+    from del_app.correlate import _GENERIC_DIR_BASENAMES, _slugify
+
+    declared = data.get("project") or data.get("declared_name")
+    if declared:
+        return str(declared)
+    path = row["resource_path"]
+    if path and str(path).startswith("/"):
+        base = os.path.basename(str(path).rstrip("/"))
+        if base and _slugify(base) not in _GENERIC_DIR_BASENAMES:
+            return base
+        return app_slug
+    return row["resource_key"]
+
+
 def build_plan(app_slug: str, options: dict) -> Plan:
     """Build a removal plan for app_slug. Raises PlanError for protected
     apps or if the app cannot be found."""
@@ -255,6 +296,8 @@ def build_plan(app_slug: str, options: dict) -> Plan:
         if not app_rows:
             raise PlanError(f"no such application: {app_slug}")
         app = app_rows[0]
+        # Single source of truth for scan scoping (see db.latest_done_scan_id).
+        latest_scan = latest_done_scan_id(conn)
 
         if bool(app["protected"]) or app_slug in settings.protected_apps:
             raise PlanError(f"application '{app_slug}' is protected; refusing to plan removal")
@@ -268,18 +311,26 @@ def build_plan(app_slug: str, options: dict) -> Plan:
             FROM associations a
             JOIN resources r ON r.id = a.resource_id
             WHERE a.app_id = ?
-              AND (r.last_seen = (SELECT MAX(id) FROM scans WHERE status = 'done')
-                   OR NOT EXISTS (SELECT 1 FROM scans WHERE status = 'done'))
+              AND (r.last_seen = ? OR ? IS NULL)
             """,
-            (app["id"],),
+            (app["id"], latest_scan, latest_scan),
         )
-        if not assoc_rows and q(conn, "SELECT 1 FROM associations WHERE app_id = ? LIMIT 1", (app["id"],)):
-            # The app has associations but none in the latest completed scan.
-            # Refuse rather than emit a plan that would "succeed" having
-            # removed nothing (this is what a mid-scan build used to do).
+        if not assoc_rows:
+            # No current resources at all — whether the app has stale
+            # associations from an earlier scan or none ever. Either way the
+            # only plan we could build is a lone validate step, which executes
+            # as "success" having removed nothing. Refuse instead.
+            had_any = bool(q(
+                conn, "SELECT 1 FROM associations WHERE app_id = ? LIMIT 1", (app["id"],)
+            ))
+            detail = (
+                "its resources were last seen in an earlier scan"
+                if had_any
+                else "no resources have ever been associated with it"
+            )
             raise PlanError(
-                f"application '{app_slug}' has no resources in the latest completed scan; "
-                "re-scan before planning a removal"
+                f"application '{app_slug}' has no resources in the latest completed "
+                f"scan ({detail}); re-scan before planning a removal"
             )
     finally:
         conn.close()
@@ -340,7 +391,24 @@ def build_plan(app_slug: str, options: dict) -> Plan:
                 if pth in backed_up:
                     continue
                 backed_up.add(pth)
-                dest = f"{backups_dir}/{app_slug}/{row['resource_type']}/{os.path.basename(pth)}"
+                # The destination must be unique per SOURCE, not per basename.
+                # Keying only on basename made two different files with the
+                # same name (e.g. /apps/x/server/compose.yaml and
+                # /apps/x/server/config/compose.yaml, or several
+                # docker-compose.yml under one app) share one destination:
+                # `cp -a` silently overwrote, both paths were recorded in the
+                # backups table pointing at that single file, and a rollback
+                # then wrote the survivor's contents back over BOTH originals.
+                # Measured across the live inventory: 190 colliding
+                # destinations, 21 of them with genuinely different content.
+                # The parent directory is flattened into a sub-directory so the
+                # basename still matches the original — path_restore requires
+                # that, and it is what makes the restore target unambiguous.
+                parent = os.path.dirname(pth).strip("/").replace("/", "_") or "root"
+                dest = (
+                    f"{backups_dir}/{app_slug}/{row['resource_type']}/"
+                    f"{parent}/{os.path.basename(pth)}"
+                )
                 steps.append(PlanStep(
                     seq=seq.next(), stage="backup", operation="file_backup",
                     args={"path": pth, "dest": dest},
@@ -439,10 +507,7 @@ def build_plan(app_slug: str, options: dict) -> Plan:
             steps.append(PlanStep(
                 seq=seq.next(), stage="remove_runtime", operation="compose_down",
                 args={
-                    "project": (data.get("project") or data.get("declared_name")
-                                or (os.path.basename(row["resource_path"].rstrip("/"))
-                                    if row["resource_path"] and row["resource_path"].startswith("/")
-                                    else row["resource_key"])),
+                    "project": _compose_project_name(row, data, app_slug),
                     "config_files": data.get("config_files", []),
                     "remove_volumes": False,
                     "remove_images_mode": remove_images if remove_images == "exclusive" else "none",

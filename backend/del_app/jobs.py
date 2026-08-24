@@ -1,13 +1,19 @@
 """Staged removal job engine: executes a persisted, HMAC-verified Plan one
 step at a time in stage order, recording a job_steps row before and after
-each step, halting on unsafe failure, and supporting resume via retry_job.
+each step, and halting on unsafe failure.
+
+`retry_job` implements resume-from-failure but is NOT exposed: there is no
+route and no CLI entry point for it, so it is reachable only from a Python
+shell or the test-suite.
 
 See docs/ARCHITECTURE.md "Removal job engine" and docs/INTERFACES.md jobs.py.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import logging
+import os
 import re
 import subprocess
 import threading
@@ -178,11 +184,27 @@ def _record_backup(conn, job_id: int, operation: str, args: dict) -> None:
     if not dest:
         return
     src = args.get(_BACKUP_SRC_ARG.get(operation, "path"))
+    # sha256 + size are declared by the schema and let a restore be verified
+    # (and a truncated or empty archive be spotted) rather than trusted.
+    sha256: str | None = None
+    size: int | None = None
+    try:
+        size = os.path.getsize(dest)
+        digest = hashlib.sha256()
+        with open(dest, "rb") as fh:
+            for chunk in iter(lambda: fh.read(1024 * 1024), b""):
+                digest.update(chunk)
+        sha256 = digest.hexdigest()
+    except OSError:
+        # The backup file should exist by now, but a missing/unreadable one
+        # must not abort the job — record the row without the checksum.
+        logger.warning("job %s: could not checksum backup %s", job_id, dest)
     try:
         x(
             conn,
-            "INSERT INTO backups (job_id, kind, src, dest) VALUES (?, ?, ?, ?)",
-            (job_id, operation, src, dest),
+            "INSERT INTO backups (job_id, kind, src, dest, sha256, size) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            (job_id, operation, src, dest, sha256, size),
         )
     except Exception:
         logger.exception("job %s: failed to record backup row for %s", job_id, operation)

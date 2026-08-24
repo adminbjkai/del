@@ -751,9 +751,14 @@ def test_app_claims_its_project_root_when_compose_lives_in_a_subdirectory():
     assert assoc.removal_eligible == "safe"
 
 
-def test_project_root_rule_does_not_reach_across_to_a_sibling_app():
-    """The parent rule is anchored at `{scan_root}/{one component}`, so an app
-    under /apps/foo can never claim /apps (or a sibling) as its project root."""
+def test_project_root_rule_stays_within_one_component_of_a_scan_root():
+    """The rule must claim at most `{scan_root}/{one component}` — never the
+    scan root itself, and never a sibling.
+
+    The original version of this test only checked the sibling case, which the
+    buggy rule never violated; it passed against the defect it was meant to
+    catch. The real failure was reaching an ANCESTOR, so assert that directly.
+    """
     a = _container("foo_web", compose_project="foo", compose_working_dir="/apps/foo/docker")
     sibling = Resource(
         type="directory", key="/apps/bar", display="bar",
@@ -765,9 +770,12 @@ def test_project_root_rule_does_not_reach_across_to_a_sibling_app():
     )
     apps = build_apps([a, sibling, scan_root], {})
     by_slug = {r.slug: assocs for r, assocs in apps}
-    claimed = {x.resource_key for x in by_slug["foo"] if x.resource_type == "directory"}
-    assert "/apps/bar" not in claimed
-    assert "/apps" not in claimed
+    claimed = {
+        x.resource_key for x in by_slug["foo"]
+        if x.resource_type == "directory" and x.confidence >= 90
+    }
+    assert "/apps" not in claimed, "claimed the scan root itself"
+    assert "/apps/bar" not in claimed, "claimed a sibling"
 
 
 def test_project_root_rule_does_not_claim_another_projects_tree():

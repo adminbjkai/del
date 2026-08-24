@@ -377,7 +377,18 @@ def build_apps(
             if matched_slug is None and (slug in running_project_slugs or slug in apps):
                 matched_slug = slug if slug in apps else None
             if matched_slug is None:
-                app = apps.setdefault(slug, _AppBuilder(slug, cp.display, "compose_stopped"))
+                # Name the app after the slug we resolved, not the raw
+                # directory basename. When the slug was anchored to the
+                # project directory above, `cp.display` is still the generic
+                # role name, which is how eight apps ended up displayed as
+                # "docker" / "deploy" / "cli" in the UI — one of them the
+                # 180 GB /apps/agyinstall archive.
+                display_name = (
+                    cp.display
+                    if _slugify(cp.display) == slug
+                    else slug
+                )
+                app = apps.setdefault(slug, _AppBuilder(slug, display_name, "compose_stopped"))
                 app.dir_paths.add(working_dir) if working_dir else None
                 matched_slug = slug
         app = apps[matched_slug]

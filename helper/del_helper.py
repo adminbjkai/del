@@ -38,7 +38,11 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import validation as V  # noqa: E402
 
 DEFAULT_SOCKET = "/run/del/helper.sock"
-DEFAULT_POLICY = "/apps/del/config/helper-policy.json"
+# Root-owned deployed copy. NOT /apps/del/config/... — that path is writable
+# by the unprivileged web user, so defaulting to it would let a compromised
+# web tier hand this root daemon its own allowlist if the unit ever started
+# without an explicit policy argument.
+DEFAULT_POLICY = "/etc/del/helper-policy.json"
 DEFAULT_AUDIT_LOG = "/apps/del/logs/helper-audit.log"
 MAX_REQUEST_BYTES = 1024 * 1024
 DEFAULT_CMD_TIMEOUT = 300

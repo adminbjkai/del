@@ -283,7 +283,12 @@ def test_process_without_exe_is_preserved_not_dropped(settings_env):
 
 def test_persist_and_verify_plan_roundtrip(settings_env):
     conn = get_db()
-    _insert_app(conn, "app7", kind="standalone")
+    app_id = _insert_app(conn, "app7", kind="standalone")
+    # A real app has at least one current resource; build_plan now refuses an
+    # app with none rather than emitting a validate-only plan that would
+    # execute as "success" having removed nothing.
+    rid = _insert_resource(conn, "container", "app7_web")
+    _insert_assoc(conn, app_id, rid, 100)
     conn.close()
 
     plan = planner.build_plan("app7", {})
@@ -296,7 +301,9 @@ def test_persist_and_verify_plan_roundtrip(settings_env):
 
 def test_tampered_plan_fails_hmac_verification(settings_env):
     conn = get_db()
-    _insert_app(conn, "app8", kind="standalone")
+    app_id = _insert_app(conn, "app8", kind="standalone")
+    rid = _insert_resource(conn, "container", "app8_web")
+    _insert_assoc(conn, app_id, rid, 100)
     conn.close()
 
     plan = planner.build_plan("app8", {})
@@ -689,3 +696,93 @@ def test_restore_reports_failure_instead_of_claiming_success(
     detail = next(kw or a[3] for a, kw in audits if a[1] == "job_restore_attempted")
     assert detail["backups_found"] == 1
     assert detail["restored"] == 0, "a failed restore must not be recorded as restored"
+
+
+# ---------------------------------------------------------------------------
+# Backup destination uniqueness (2026-08-24, found by independent verification)
+#
+# Making rollback real also made it capable of restoring the WRONG file:
+# destinations were keyed on basename only, so two different config files with
+# the same name collided, `cp -a` silently overwrote, both source paths were
+# recorded against that one destination, and a rollback wrote the survivor's
+# contents back over BOTH originals. 21 real collisions with differing content
+# existed in the live inventory.
+# ---------------------------------------------------------------------------
+
+def test_same_basename_in_different_directories_gets_distinct_backup_dests(
+    settings_env, tmp_path
+):
+    # Real files: the backup stage only emits a step for a path that exists.
+    a_dir = tmp_path / "server"
+    b_dir = tmp_path / "server" / "config"
+    b_dir.mkdir(parents=True)
+    a_file = a_dir / "compose.yaml"
+    b_file = b_dir / "compose.yaml"
+    a_file.write_text("services: {a: {}}\n")
+    b_file.write_text("services: {b: {}}\n")
+
+    conn = get_db()
+    app_id = _insert_app(conn, "collide", kind="compose")
+    for key, cfg in (("compose-a", a_file), ("compose-b", b_file)):
+        rid = _insert_resource(conn, "compose_project", key, path=str(cfg),
+                               data={"config_files": [str(cfg)]})
+        _insert_assoc(conn, app_id, rid, 95)
+    conn.close()
+
+    plan = planner.build_plan("collide", {"backup": "config"})
+    backups = [s for s in plan.steps if s.operation == "file_backup"]
+    dests = [s.args["dest"] for s in backups]
+    assert len(dests) == 2, f"expected two backup steps, got {dests}"
+    assert len(set(dests)) == 2, (
+        f"backup destinations collide, so a rollback would restore one file "
+        f"over both originals: {dests}"
+    )
+    # path_restore requires the basename to match the original it replaces.
+    for step in backups:
+        assert os.path.basename(step.args["dest"]) == os.path.basename(step.args["path"])
+
+
+def test_compose_down_never_targets_a_generic_project_label(settings_env):
+    """compose_down sweeps stragglers by Docker label across the WHOLE host, so
+    a project name of "docker" would force-remove every container on the box
+    labelled com.docker.compose.project=docker — other apps included."""
+    conn = get_db()
+    app_id = _insert_app(conn, "myapp", kind="compose")
+    rid = _insert_resource(
+        conn, "compose_project", "myapp-compose",
+        path="/apps/myapp/docker",
+        data={"config_files": ["/apps/myapp/docker/docker-compose.yml"]},
+    )
+    _insert_assoc(conn, app_id, rid, 95)
+    conn.close()
+
+    plan = planner.build_plan("myapp", {})
+    projects = [s.args["project"] for s in plan.steps if s.operation == "compose_down"]
+    assert projects, "no compose_down step was generated"
+    assert "docker" not in projects, f"generic label sweep target: {projects}"
+    assert projects == ["myapp"], projects
+
+
+def test_declared_compose_project_name_is_still_preferred(settings_env):
+    conn = get_db()
+    app_id = _insert_app(conn, "declared", kind="compose")
+    rid = _insert_resource(
+        conn, "compose_project", "declared-compose",
+        path="/apps/declared/docker",
+        data={"declared_name": "realproject",
+              "config_files": ["/apps/declared/docker/compose.yml"]},
+    )
+    _insert_assoc(conn, app_id, rid, 95)
+    conn.close()
+    plan = planner.build_plan("declared", {})
+    projects = [s.args["project"] for s in plan.steps if s.operation == "compose_down"]
+    assert projects == ["realproject"], projects
+
+
+def test_build_plan_refuses_an_app_with_no_associations_at_all(settings_env):
+    """Previously produced a lone validate step that executed as 'success'."""
+    conn = get_db()
+    _insert_app(conn, "empty-app", kind="standalone")
+    conn.close()
+    with pytest.raises(planner.PlanError, match="no resources in the latest completed scan"):
+        planner.build_plan("empty-app", {})
