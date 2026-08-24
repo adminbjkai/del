@@ -959,3 +959,133 @@ def test_job_status_json_shape(authed_client, monkeypatch):
     assert body == canned
     assert body["status"] == "running"
     assert len(body["steps"]) == 2
+
+
+# ---------------------------------------------------------------------------
+# App-icon proxy (2026-08-24)
+#
+# The gallery used to point <img> straight at https://{domain}/favicon.ico.
+# Any app behind HTTP basic auth answered 401 + WWW-Authenticate, and the
+# browser opened a credential dialog on top of a page the operator was
+# already authenticated to. Icons are now fetched server-side.
+# ---------------------------------------------------------------------------
+
+def _seed_enabled_site(domain: str) -> None:
+    import json
+
+    from del_app.db import get_db, x
+
+    conn = get_db()
+    try:
+        scan_id = x(conn, "INSERT INTO scans (status) VALUES ('done')")
+        x(
+            conn,
+            "INSERT INTO resources (type, key, display, state, data_json, first_seen, last_seen) "
+            "VALUES ('nginx_site',?,?,'enabled',?,?,?)",
+            (f"site-{domain}", domain,
+             json.dumps({"enabled": True, "server_names": [domain]}), scan_id, scan_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def test_app_icon_absorbs_upstream_basic_auth_challenge(
+    authed_client, settings_env, monkeypatch
+):
+    """A 401 upstream must become an empty 204 — never a challenge the
+    browser can turn into a credential prompt."""
+    _seed_enabled_site("protected.bjk.ai")
+
+    import urllib.error
+
+    def raise_401(request, timeout=None):
+        raise urllib.error.HTTPError(
+            request.full_url, 401, "Unauthorized",
+            {"WWW-Authenticate": 'Basic realm="WebNotepad++"'}, None,
+        )
+
+    monkeypatch.setattr(routes.urllib.request, "urlopen", raise_401)
+    routes._ICON_CACHE.clear()
+
+    resp = authed_client.get("/app-icon/protected.bjk.ai")
+    assert resp.status_code == 204
+    assert resp.content == b""
+    assert "WWW-Authenticate" not in {k.title() for k in resp.headers}
+    assert "www-authenticate" not in {k.lower() for k in resp.headers}
+
+
+def test_app_icon_refuses_domains_not_in_the_current_inventory(
+    authed_client, settings_env, monkeypatch
+):
+    """The proxy must not become a general-purpose outbound fetcher."""
+    _seed_enabled_site("known.bjk.ai")
+    called = []
+    monkeypatch.setattr(
+        routes, "_cached_icon", lambda d: called.append(d) or (b"x", "image/png")
+    )
+
+    for hostile in ("evil.example.com", "169.254.169.254", "localhost", "*.bjk.ai"):
+        assert authed_client.get(f"/app-icon/{hostile}").status_code == 404
+    assert called == [], f"a non-inventory domain was fetched: {called}"
+
+
+def test_app_icon_serves_a_real_favicon_with_cache_headers(
+    authed_client, settings_env, monkeypatch
+):
+    _seed_enabled_site("good.bjk.ai")
+    monkeypatch.setattr(routes, "_cached_icon", lambda d: (b"\x89PNG-body", "image/png"))
+
+    resp = authed_client.get("/app-icon/good.bjk.ai")
+    assert resp.status_code == 200
+    assert resp.content == b"\x89PNG-body"
+    assert resp.headers["content-type"].startswith("image/png")
+    assert "max-age" in resp.headers.get("cache-control", "")
+
+
+def test_app_icon_requires_authentication(anon_client, settings_env):
+    """Unauthenticated callers get the login redirect, not an outbound fetch."""
+    assert anon_client.get("/app-icon/anything.bjk.ai", follow_redirects=False).status_code == 303
+
+
+def test_gallery_markup_points_icons_at_the_proxy(
+    authed_client, settings_env, monkeypatch
+):
+    import json
+
+    from del_app.db import get_db, x
+
+    conn = get_db()
+    try:
+        scan_id = x(conn, "INSERT INTO scans (status) VALUES ('done')")
+        app_id = x(
+            conn,
+            "INSERT INTO applications (slug, name, status, kind, first_seen, last_seen) "
+            "VALUES (?,?,?,?,?,?)",
+            ("iconapp", "Icon App", "running", "compose", scan_id, scan_id),
+        )
+        rid = x(
+            conn,
+            "INSERT INTO resources (type, key, display, state, data_json, first_seen, last_seen) "
+            "VALUES ('nginx_site',?,?,'enabled',?,?,?)",
+            ("icon-site", "iconapp.bjk.ai",
+             json.dumps({"enabled": True, "server_names": ["iconapp.bjk.ai"]}), scan_id, scan_id),
+        )
+        x(
+            conn,
+            "INSERT INTO associations (app_id, resource_id, confidence, ownership, shared) "
+            "VALUES (?,?,90,'exclusive',0)",
+            (app_id, rid),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    monkeypatch.setattr(routes, "_probe_domains", lambda domains, force=False: {
+        "iconapp.bjk.ai": {"healthy": True, "status": 200, "latency_ms": 12,
+                           "checked_at": "2026-08-24T00:00:00+00:00"},
+    })
+    resp = authed_client.get("/view-apps")
+    assert resp.status_code == 200
+    assert "/app-icon/iconapp.bjk.ai" in resp.text
+    assert "https://iconapp.bjk.ai/favicon.ico" not in resp.text

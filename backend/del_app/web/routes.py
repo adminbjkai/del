@@ -1088,6 +1088,79 @@ def _probe_domains(domains: list[str], *, force: bool = False) -> dict[str, dict
     return results
 
 
+# Favicons are fetched server-side and re-served from DEL's own origin.
+# Loading them straight from the third-party domain (<img src="https://x/favicon.ico">)
+# makes the BROWSER perform the request, so any app sitting behind HTTP basic
+# auth answers 401 + WWW-Authenticate and the browser opens a credential
+# dialog on top of the gallery — several times over, for a page the operator
+# is already authenticated to. Proxying means DEL absorbs the 401 and simply
+# serves nothing, letting the card fall back to its initial letter.
+_ICON_CACHE: dict[str, dict[str, Any]] = {}
+_ICON_LOCK = threading.Lock()
+_ICON_TTL = 86400          # a favicon changes about never
+_ICON_NEGATIVE_TTL = 3600  # retry failures sooner than successes
+_ICON_TIMEOUT = 4.0
+_ICON_MAX_BYTES = 262144
+_ICON_CACHE_MAX = 512
+_ICON_ALLOWED_TYPES = (
+    "image/x-icon", "image/vnd.microsoft.icon", "image/png", "image/gif",
+    "image/jpeg", "image/svg+xml", "image/webp", "image/bmp",
+)
+
+
+def _fetch_icon(domain: str) -> tuple[bytes, str] | None:
+    """Fetch one favicon. Returns (body, content_type) or None.
+
+    Never raises, and never propagates an auth challenge: a 401/403 is simply
+    "no icon". Size-capped so a hostile or misconfigured endpoint cannot feed
+    DEL an unbounded body.
+    """
+    request = urllib.request.Request(
+        f"https://{domain}/favicon.ico",
+        headers={"User-Agent": "DEL-App-Gallery/1.0", "Accept": "image/*"},
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=_ICON_TIMEOUT) as response:
+            if int(response.getcode()) != 200:
+                return None
+            ctype = (response.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+            if ctype and not ctype.startswith("image/"):
+                return None
+            body = response.read(_ICON_MAX_BYTES + 1)
+            if not body or len(body) > _ICON_MAX_BYTES:
+                return None
+            if ctype not in _ICON_ALLOWED_TYPES:
+                ctype = "image/x-icon"
+            return body, ctype
+    except Exception:
+        # HTTPError (401/403/404), TLS failure, DNS failure, timeout — all
+        # mean the same thing here: show the fallback initial.
+        return None
+
+
+def _cached_icon(domain: str) -> tuple[bytes, str] | None:
+    now = time.monotonic()
+    with _ICON_LOCK:
+        entry = _ICON_CACHE.get(domain)
+        if entry and now < entry["expires"]:
+            return entry["value"]
+
+    value = _fetch_icon(domain)
+
+    with _ICON_LOCK:
+        if len(_ICON_CACHE) >= _ICON_CACHE_MAX:
+            for key in [k for k, v in _ICON_CACHE.items() if v["expires"] <= now]:
+                del _ICON_CACHE[key]
+            if len(_ICON_CACHE) >= _ICON_CACHE_MAX:
+                _ICON_CACHE.clear()
+        _ICON_CACHE[domain] = {
+            "value": value,
+            "expires": now + (_ICON_TTL if value else _ICON_NEGATIVE_TTL),
+        }
+    return value
+
+
 def _gallery_owner_score(app: dict, domain: str, confidence: Any) -> tuple[int, int, int]:
     """Rank competing correlations for a domain deterministically."""
     slug = str(app.get("slug") or "").lower()
@@ -1543,7 +1616,10 @@ def view_apps(
                 "name": display_name,
                 "domain": domain,
                 "url": f"https://{domain}",
-                "icon_url": f"https://{domain}/favicon.ico",
+                # Served through DEL, never straight from the third-party
+                # origin — see _fetch_icon for why (basic-auth credential
+                # prompts firing on top of the gallery).
+                "icon_url": f"/app-icon/{domain}",
                 "initial": str(display_name).strip()[:1].upper() or "?",
                 "category": _gallery_category(
                     str(app.get("slug") or ""), str(display_name), domain
@@ -1582,6 +1658,61 @@ def view_apps(
         latest_scan=latest,
         checked_at=checked_at,
         user=user,
+    )
+
+
+@router.get("/app-icon/{domain}")
+def app_icon(
+    domain: str,
+    user: User = Depends(auth.require_user),
+) -> Response:
+    """Serve a gallery app's favicon from DEL's own origin.
+
+    Fetching these in the browser makes every basic-auth-protected app answer
+    401 + WWW-Authenticate, which opens a credential dialog over the gallery.
+    Proxying absorbs that: a protected app simply has no icon and the card
+    shows its initial instead.
+
+    The domain must be a syntactically valid hostname AND currently present as
+    an enabled Nginx site in the latest scan, so this cannot be turned into a
+    general-purpose outbound fetcher.
+    """
+    normalized = _valid_gallery_domain(domain)
+    if not normalized:
+        return Response(status_code=404)
+
+    conn = get_db()
+    try:
+        latest = _latest_scan_id(conn)
+        known = False
+        if latest is not None:
+            for row in _rows(q(
+                conn,
+                "SELECT data_json FROM resources WHERE type = 'nginx_site' AND last_seen = ?",
+                (latest,),
+            )):
+                data = _json_or(row.get("data_json"), {})
+                if not data.get("enabled", False):
+                    continue
+                if any(_valid_gallery_domain(sn) == normalized
+                       for sn in data.get("server_names", []) or []):
+                    known = True
+                    break
+    finally:
+        conn.close()
+    if not known:
+        return Response(status_code=404)
+
+    icon = _cached_icon(normalized)
+    if icon is None:
+        # 204 rather than 404: the card's fallback initial is the intended
+        # result, and this keeps the browser from logging a console error.
+        return Response(status_code=204, headers={"Cache-Control": "public, max-age=3600"})
+    body, content_type = icon
+    return Response(
+        content=body,
+        media_type=content_type,
+        headers={"Cache-Control": "public, max-age=86400"},
     )
 
 
@@ -2176,23 +2307,60 @@ def manifest_edit_submit(
 # static assets (no auth: needed by /login too; CSP 'self', no CDN)
 # ---------------------------------------------------------------------------
 
+# FileResponse already sets etag + last-modified, so a repeat visit gets a 304.
+# Without Cache-Control the browser still pays a revalidation round trip for
+# every asset on every page — including the 1.9 MB AG Grid bundle. These are
+# revalidated rather than blindly cached (`must-revalidate` on a short max-age)
+# so a deploy is picked up promptly without an asset-versioning scheme.
+_STATIC_CACHE = "public, max-age=300, must-revalidate"
+_IMMUTABLE_CACHE = "public, max-age=31536000, immutable"
+
+
 @router.get("/static/app.css")
 def static_css() -> FileResponse:
-    return FileResponse(STATIC_DIR / "app.css", media_type="text/css")
+    return FileResponse(
+        STATIC_DIR / "app.css", media_type="text/css",
+        headers={"Cache-Control": _STATIC_CACHE},
+    )
 
 
 @router.get("/static/app.js")
 def static_js() -> FileResponse:
-    return FileResponse(STATIC_DIR / "app.js", media_type="application/javascript")
+    return FileResponse(
+        STATIC_DIR / "app.js", media_type="application/javascript",
+        headers={"Cache-Control": _STATIC_CACHE},
+    )
 
 
 @router.get("/static/ag-grid-community.min.js")
 def static_ag_grid() -> FileResponse:
-    """Vendored AG Grid Community (CSP 'self' only — no CDN)."""
+    """Vendored AG Grid Community (CSP 'self' only — no CDN).
+
+    Pinned third-party bundle: safe to cache immutably, and at 1.9 MB it is by
+    far the most expensive asset to revalidate.
+    """
     return FileResponse(
         STATIC_DIR / "ag-grid-community.min.js",
         media_type="application/javascript",
+        headers={"Cache-Control": _IMMUTABLE_CACHE},
     )
+
+
+@router.get("/static/favicon.svg")
+def static_favicon() -> FileResponse:
+    return FileResponse(
+        STATIC_DIR / "favicon.svg", media_type="image/svg+xml",
+        headers={"Cache-Control": _STATIC_CACHE},
+    )
+
+
+@router.get("/favicon.ico")
+def favicon_ico() -> Response:
+    """Browsers request /favicon.ico unprompted; answer it instead of 404ing.
+
+    Redirects to the SVG rather than shipping a second binary asset.
+    """
+    return RedirectResponse(url="/static/favicon.svg", status_code=301)
 
 
 # ---------------------------------------------------------------------------
