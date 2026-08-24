@@ -548,9 +548,20 @@ def build_apps(
                     evidence=[Evidence(source="fs_src", statement="directory matches compose working_dir / bind mount source", weight=95)],
                 )
                 matched_directory_keys.add(d.key)
-            elif dpath and any(
-                dp and _project_dir_for(dp) == dpath and dp.rstrip("/") != dpath
-                for dp in app.dir_paths
+            elif (
+                dpath
+                # The parent must be THIS app's project root, not just any
+                # enclosing directory. Without the name check, an app with a
+                # clone inside another project's tree (/apps/agyinstall/banban)
+                # would claim that unrelated project's root (/apps/agyinstall)
+                # — which then marks it shared and blocks the real owner's
+                # removal. Comparing slugs also makes the match case-insensitive,
+                # so /apps/2FAuth resolves to app "2fauth".
+                and _slugify(dpath.rsplit("/", 1)[-1]) == slug
+                and any(
+                    dp and _project_dir_for(dp) == dpath and dp.rstrip("/") != dpath
+                    for dp in app.dir_paths
+                )
             ):
                 # The app's compose file / working dir lives in a SUB-directory
                 # (/apps/karakeep/docker), so its own project root was never

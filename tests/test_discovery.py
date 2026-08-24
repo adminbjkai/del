@@ -768,3 +768,37 @@ def test_project_root_rule_does_not_reach_across_to_a_sibling_app():
     claimed = {x.resource_key for x in by_slug["foo"] if x.resource_type == "directory"}
     assert "/apps/bar" not in claimed
     assert "/apps" not in claimed
+
+
+def test_project_root_rule_does_not_claim_another_projects_tree():
+    """An app with a clone inside someone else's tree must not claim that
+    tree's root.
+
+    Regression found in production: `banban` had a copy at
+    /apps/agyinstall/banban, and the parent-directory rule then gave it
+    /apps/agyinstall at confidence 92 — marking an unrelated project's root
+    as shared and blocking its real owner from being removed cleanly.
+    """
+    banban = _container("banban", compose_project="banban",
+                        compose_working_dir="/apps/banban/docker")
+    clone = Resource(
+        type="compose_project", key="/apps/agyinstall/banban/compose.yml",
+        display="banban", path="/apps/agyinstall/banban/compose.yml", state="present",
+        data={"working_dir": "/apps/agyinstall/banban", "declared_name": None, "images": []},
+    )
+    foreign_root = Resource(
+        type="directory", key="/apps/agyinstall", display="agyinstall",
+        path="/apps/agyinstall", state="present", data={},
+    )
+    own_root = Resource(
+        type="directory", key="/apps/banban", display="banban",
+        path="/apps/banban", state="present", data={},
+    )
+    apps = build_apps([banban, clone, foreign_root, own_root], {})
+    by_slug = {r.slug: assocs for r, assocs in apps}
+    claimed = {
+        a.resource_key for a in by_slug["banban"]
+        if a.resource_type == "directory" and a.confidence >= 90
+    }
+    assert "/apps/agyinstall" not in claimed, "claimed an unrelated project's root"
+    assert "/apps/banban" in claimed, "should still claim its own project root"
