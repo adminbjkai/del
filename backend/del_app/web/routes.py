@@ -9,9 +9,15 @@ monkeypatched fakes) even before those lanes land.
 from __future__ import annotations
 
 import json
+import re
 import secrets
 import subprocess
+import threading
 import time
+import urllib.error
+import urllib.request
+from concurrent.futures import ThreadPoolExecutor, as_completed
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
 
@@ -28,7 +34,8 @@ from fastapi.templating import Jinja2Templates
 from del_app import auditlog, auth
 from del_app.auth import User
 from del_app.config import get_settings
-from del_app.db import get_db, q
+from del_app.correlate import _DOCKER_BUILTIN_NETWORKS
+from del_app.db import get_db, latest_done_scan_id, q
 
 # Lazy/defensive imports of sibling lanes' modules. Accessed as
 # `<name>.<func>` at call time so tests can monkeypatch these module
@@ -65,6 +72,10 @@ router = APIRouter()
 # Jinja globals registered after helpers are defined (see bottom of module).
 
 # DB resource types are SINGULAR. Ordered for the Resources tab bar.
+# The jobs page rendered every job ever run. Cap it; the table is already
+# client-side paginated, and older jobs stay reachable by direct URL.
+JOBS_PAGE_LIMIT = 200
+
 ALL_RESOURCE_TYPES = [
     "container", "image", "volume", "network", "compose_project",
     "nginx_site", "systemd_unit", "systemd_timer", "cron_entry",
@@ -72,27 +83,80 @@ ALL_RESOURCE_TYPES = [
     "bind_mount", "tmux_session",
 ]
 
-# Per-type explanation of why a resource with no app association shows up
-# on the Orphans page (used as a group-level explainer and, where a type has
-# no more specific per-row reason, the per-row reason too).
+# Per-type default explanation for *actionable* orphan candidates.
 ORPHAN_REASONS = {
-    "container": "not part of any known application (no compose project, no matching evidence)",
-    "image": "not used by any container",
-    "volume": "attached to no container",
-    "network": "not attached to any known application's container(s)",
-    "nginx_site": "config file present but not enabled/serving",
-    "compose_project": "no running containers or matching directory found for this project",
-    "systemd_unit": "WorkingDirectory/ExecStart does not match any known application path",
-    "systemd_timer": "does not activate a unit belonging to any known application",
-    "cron_entry": "command does not reference any known application path",
-    "directory": "no running app matches",
-    "git_repo": "no running app matches",
-    "env_file": "no running app matches",
-    "bind_mount": "not attached to any known application's container",
-    "process": "not matched to any known application",
-    "port": "not matched to any known application",
-    "tmux_session": "not matched to any known application",
+    "container": "container has no app association (no compose project / path evidence)",
+    "image": "image not used by any container and not declared by a known compose file",
+    "volume": "named volume attached to no container — possible leftover data",
+    "network": "user network not attached to any known app's containers",
+    "nginx_site": "enabled site not attributed to any app (or parked/disabled config)",
+    "compose_project": "compose project with no running containers / weak directory match",
+    "systemd_unit": "custom unit under /etc/systemd/system not correlated to an app",
+    "systemd_timer": "custom timer not correlated to any known app unit",
+    "cron_entry": "app-related cron line not correlated to a known project path",
+    "directory": "project directory under a scan root not claimed by any app",
+    "git_repo": "git repo under a scan root not claimed by any app",
+    "env_file": ".env under a scan root not claimed by any app",
+    "bind_mount": "bind mount not attributed to any known app container",
+    "process": "host process under a scan root not matched to an app",
+    "port": "listener not matched to a correlated app (may still be a known unit)",
+    "tmux_session": "tmux session not matched to any known application",
 }
+
+# Docker built-in networks — never "orphans"; they always exist. Imported from
+# correlate so the classifier and the correlation engine cannot disagree.
+
+# OS cron.daily/etc. basenames that are not app leftovers.
+_SYSTEM_CRON_BASENAMES = frozenset({
+    ".placeholder", "0anacron", "apport", "apt-compat", "cracklib-runtime",
+    "dpkg", "logrotate", "man-db", "sysstat", "update-notifier-common",
+    "bsdmainutils", "popularity-contest", "mlocate", "plocate", "locate",
+    "google-chrome", "google-chrome-stable",
+})
+
+# Unit/timer basenames that are distro or vendor infrastructure, not app
+# leftovers. Applied to BOTH units and timers: snapd writes its generated
+# units into /etc/systemd/system, which is exactly the "custom" location the
+# classifier uses to decide something is app-owned, so every snap unit showed
+# up as an actionable orphan.
+_SYSTEM_UNIT_MARKERS = (
+    "anacron", "apport", "apt-", "dpkg-", "e2scrub", "fstrim", "fwupd",
+    "logrotate", "man-db", "motd-", "systemd-", "ua-", "update-notifier",
+    "phpsessionclean", "certbot", "snap.", "snapd", "avahi", "ollama",
+    "pm2-", "docker-", "pmcd", "pmlogger", "nxserver", "cups", "bluetooth",
+    "packagekit", "unattended-upgrade", "networkd", "resolvconf",
+)
+
+# Retained name for the timer-only call sites / any external reference.
+_SYSTEM_TIMER_MARKERS = _SYSTEM_UNIT_MARKERS
+
+# Listener ports that are almost always OS / infra, not abandoned apps.
+_SYSTEM_PORTS = frozenset({
+    22, 25, 53, 67, 68, 111, 123, 137, 138, 139, 445, 631, 2049, 5353, 5355,
+})
+
+# Process name prefixes that are host infrastructure. MUST be lowercase: the
+# classifier lowercases the process name before matching, so mixed-case
+# entries here (previously "NetworkManager", "Xorg", "Xvfb") could never match
+# and those processes were reported as actionable orphans.
+_SYSTEM_PROCESS_MARKERS = (
+    "sshd", "systemd", "smbd", "nmbd", "dockerd", "containerd", "cron",
+    "rsyslog", "dbus", "networkmanager", "nginx", "tailscaled", "udevd",
+    "multipathd", "irqbalance", "polkit", "accounts-daemon", "avahi",
+    "postgres", "postmaster", "mysqld", "redis-server", "mongod", "beam.smp",
+    "gnome-", "xorg", "xvfb", "pipewire", "pulseaudio", "cupsd",
+    "ollama", "pmcd", "pmlogger", "nxserver", "snapd", "packagekit",
+)
+
+# Interactive / IDE / agent noise often has cwd under /apps but is not an
+# abandoned app service. Also lowercase-only, for the same reason.
+_INTERACTIVE_PROCESS_MARKERS = (
+    "bash", "zsh", "fish", "sh", "tmux", "screen", "claude", "code",
+    "cursor", "nvim", "vim", "emacs", "less", "tail", "htop", "top",
+    "node", "npm", "npx", "pnpm", "yarn", "bun", "deno",
+    "python", "python3", "uv", "uvx", "ruby", "java",
+    "grok", "codex", "gemini", "mainthread", "adb", "qemu",
+)
 
 
 def _normalize_image_ref(ref: str | None) -> str:
@@ -128,24 +192,325 @@ def _compose_declared_images(conn) -> dict[str, str]:
     return mapping
 
 
-def _orphan_reason(res_type: str, data: dict, compose_images: dict[str, str] | None = None) -> str:
-    """Per-row reason a resource is an orphan candidate. Falls back to the
-    type-level explainer when there's nothing more specific to say."""
+def classify_orphan_candidate(
+    res_type: str,
+    key: str,
+    display: str,
+    path: str | None,
+    data: dict | None,
+    compose_images: dict[str, str] | None = None,
+) -> dict:
+    """Classify an unassociated resource for the Orphans page.
+
+    Returns dict:
+      bucket: 'actionable' | 'system' | 'expected'
+      reason: precise human explanation
+      label: short badge text (Actionable / System / Expected)
+
+    *actionable* — real cleanup / review candidates (default Orphans view).
+    *system* — OS/vendor infrastructure that is not an abandoned app.
+    *expected* — known non-orphan situations (docker builtins, parked configs,
+      images still declared by a compose file that isn't running).
+    """
+    data = data or {}
+    key = key or ""
+    display = display or key
+    path = path or data.get("fragment_path") or data.get("file") or ""
+
+    # ----- Docker networks -----
+    if res_type == "network":
+        name = (display or key).strip()
+        if name in _DOCKER_BUILTIN_NETWORKS or data.get("driver") in ("null", "host"):
+            return {
+                "bucket": "system",
+                "label": "System",
+                "reason": f"Docker built-in network '{name}' — always present, not an app leftover",
+            }
+        return {
+            "bucket": "actionable",
+            "label": "Actionable",
+            "reason": "user-defined network with no containers from a known app attached",
+        }
+
+    # ----- systemd units / timers -----
+    if res_type in ("systemd_unit", "systemd_timer"):
+        is_custom = bool(data.get("is_custom"))
+        frag = (data.get("fragment_path") or path or "").strip()
+        under_vendor = frag.startswith(("/lib/systemd/", "/usr/lib/systemd/", "/lib/systemd", "/usr/lib/systemd"))
+        under_custom = frag.startswith(("/etc/systemd/system", "/home/", "/usr/local/lib/systemd"))
+        name_l = (display or key).lower()
+        if any(m in name_l for m in _SYSTEM_UNIT_MARKERS):
+            kind = "timer" if res_type == "systemd_timer" else "unit"
+            return {
+                "bucket": "system",
+                "label": "System",
+                "reason": (
+                    f"distro/vendor {kind} (apt, logrotate, snap, ollama, …) — "
+                    "host infrastructure, not an app orphan"
+                ),
+            }
+        if under_vendor or (not is_custom and not under_custom):
+            return {
+                "bucket": "system",
+                "label": "System",
+                "reason": "vendor/OS unit (not under /etc/systemd/system) — host infrastructure, not abandoned app",
+            }
+        # Custom unit still unassociated → real candidate
+        return {
+            "bucket": "actionable",
+            "label": "Actionable",
+            "reason": (
+                "custom unit not correlated to an app (WorkingDirectory/ExecStart path mismatch)"
+                if res_type == "systemd_unit"
+                else "custom timer not correlated to a known app unit"
+            ),
+        }
+
+    # ----- cron -----
+    if res_type == "cron_entry":
+        # display often like "[daily] logrotate"
+        base = display.split("]")[-1].strip() if "]" in display else display
+        base = base.split("/")[-1]
+        path_l = (path or key or "").lower()
+        if base in _SYSTEM_CRON_BASENAMES or base.startswith("."):
+            return {
+                "bucket": "system",
+                "label": "System",
+                "reason": f"OS package cron job '{base}' — expected host maintenance, not an app leftover",
+            }
+        if "/etc/cron." in path_l and base in _SYSTEM_CRON_BASENAMES:
+            return {
+                "bucket": "system",
+                "label": "System",
+                "reason": "system cron.d/cron.daily entry from a distro package",
+            }
+        # Heuristic: if command text doesn't mention scan roots, often system
+        cmd = (data.get("command") or data.get("cmd") or key or "").lower()
+        if any(root in cmd for root in ("/apps/", "/data/apps/", "/srv/", "/var/www/")):
+            return {
+                "bucket": "actionable",
+                "label": "Actionable",
+                "reason": "cron command references a project path but no app claimed it",
+            }
+        if path_l.startswith("/etc/cron") and not any(
+            root in cmd for root in ("/apps/", "/home/", "/srv/", "/var/www/")
+        ):
+            return {
+                "bucket": "system",
+                "label": "System",
+                "reason": "system crontab entry with no app project path — host maintenance",
+            }
+        return {
+            "bucket": "actionable",
+            "label": "Actionable",
+            "reason": ORPHAN_REASONS["cron_entry"],
+        }
+
+    # ----- ports -----
+    if res_type == "port":
+        try:
+            port_num = int(data.get("port") if data.get("port") is not None else -1)
+        except (TypeError, ValueError):
+            port_num = -1
+        proc = (data.get("process") or data.get("comm") or "").lower()
+        unit = (data.get("systemd_unit") or "").lower()
+        if port_num in _SYSTEM_PORTS or port_num in (5432, 3306, 6379, 27017, 11211):
+            return {
+                "bucket": "system",
+                "label": "System",
+                "reason": f"well-known host/infra port {port_num} ({proc or 'unknown process'}) — not an abandoned app",
+            }
+        if any(proc.startswith(m) or m in proc for m in _SYSTEM_PROCESS_MARKERS):
+            return {
+                "bucket": "system",
+                "label": "System",
+                "reason": f"listener owned by system process '{data.get('process') or proc}' — not an app leftover",
+            }
+        if unit and unit.endswith(".service"):
+            # Distro DB / infra units
+            if any(
+                unit.startswith(p) or p in unit
+                for p in (
+                    "ssh", "smbd", "nmbd", "cron", "nginx", "docker", "containerd",
+                    "systemd", "postgres", "mysql", "mariadb", "redis", "fail2ban",
+                    "ufw", "unattended", "ollama", "pmcd", "pmlogger", "nxserver",
+                    "pm2-", "snap.", "avahi", "cups",
+                )
+            ):
+                return {
+                    "bucket": "system",
+                    "label": "System",
+                    "reason": f"port owned by system/infra unit {data.get('systemd_unit')}",
+                }
+            return {
+                "bucket": "actionable",
+                "label": "Actionable",
+                "reason": (
+                    f"listener on port {port_num} via {data.get('systemd_unit') or proc or 'unknown'} "
+                    "— unit/process not correlated to any DEL application"
+                ),
+            }
+        return {
+            "bucket": "actionable",
+            "label": "Actionable",
+            "reason": f"listening port {port_num if port_num >= 0 else display} not matched to any known app",
+        }
+
+    # ----- processes -----
+    if res_type == "process":
+        comm = (data.get("comm") or data.get("name") or display or "").lower()
+        # Strip " (pid N)" style display for matching
+        comm_base = comm.split("(")[0].strip()
+        if any(comm_base.startswith(m) or m in comm_base for m in _SYSTEM_PROCESS_MARKERS):
+            return {
+                "bucket": "system",
+                "label": "System",
+                "reason": f"system/infra process '{display}' — not an abandoned app",
+            }
+        if any(comm_base.startswith(m) or m in comm_base for m in _INTERACTIVE_PROCESS_MARKERS):
+            return {
+                "bucket": "system",
+                "label": "System",
+                "reason": f"interactive/shell/IDE process '{display}' — not an abandoned app service",
+            }
+        cwd = (data.get("cwd") or path or "").rstrip("/")
+        # Require a *project* path (at least /apps/<name>), not bare /apps.
+        projectish = False
+        for root in ("/apps/", "/data/apps/", "/srv/", "/var/www/", "/opt/"):
+            if cwd.startswith(root) and len(cwd) > len(root):
+                projectish = True
+                break
+        if projectish:
+            return {
+                "bucket": "actionable",
+                "label": "Actionable",
+                "reason": f"process under project path {cwd} not correlated to an app",
+            }
+        return {
+            "bucket": "system",
+            "label": "System",
+            "reason": "host process outside a specific app project path — noise, not an app orphan",
+        }
+
+    # ----- nginx -----
     if res_type == "nginx_site":
         if not data.get("enabled", False):
-            return "config file not enabled (stale copy/backup)" if data.get("stale_copy") else "config file present but not enabled/serving"
-        return "enabled site not attributed to any app"
+            return {
+                "bucket": "expected",
+                "label": "Expected",
+                "reason": (
+                    "sites-available copy not enabled — parked/stale config, not a live orphan site"
+                    if data.get("stale_copy")
+                    else "config present but not enabled (not serving) — review if leftover"
+                ),
+            }
+        # A catch-all / default vhost has no server_name (or only `_`) and no
+        # upstream: it exists to reject unknown Host headers, not to serve an
+        # app, so it is never a leftover.
+        names = [n for n in (data.get("server_names") or []) if n and n != "_"]
+        if not names or not (data.get("upstreams") or []):
+            return {
+                "bucket": "system",
+                "label": "System",
+                "reason": (
+                    "default/catch-all vhost (no server_name or no upstream) — "
+                    "rejects unknown hosts, not an app site"
+                ),
+            }
+        return {
+            "bucket": "actionable",
+            "label": "Actionable",
+            "reason": "enabled nginx site with no correlated application — possible leftover or untracked app",
+        }
+
+    # ----- images -----
     if res_type == "image":
         if data.get("dangling"):
-            return "dangling (untagged) image, unused"
-        repo_tag = _normalize_image_ref(data.get("repo_tag"))
+            return {
+                "bucket": "actionable",
+                "label": "Actionable",
+                "reason": "dangling (untagged) image unused by any container — reclaim candidate",
+            }
+        repo_tag = _normalize_image_ref(data.get("repo_tag") or display)
         project = (compose_images or {}).get(repo_tag)
         if project:
-            return f"unused, but referenced by compose project {project} (not currently running)"
-        return "not used by any container"
+            return {
+                "bucket": "expected",
+                "label": "Expected",
+                "reason": (
+                    f"unused by running containers, but still declared in compose project "
+                    f"'{project}' — keep if you may start that app again"
+                ),
+            }
+        using = data.get("containers_using") or []
+        if using:
+            return {
+                "bucket": "expected",
+                "label": "Expected",
+                "reason": "image is referenced by container(s) but those containers lack an app association",
+            }
+        return {
+            "bucket": "actionable",
+            "label": "Actionable",
+            "reason": "image not used by any container and not declared by any known compose file",
+        }
+
+    # ----- volumes -----
     if res_type == "volume":
-        return "attached to no container"
-    return ORPHAN_REASONS.get(res_type, "no matching application found")
+        using = data.get("containers_using") or []
+        if using:
+            return {
+                "bucket": "expected",
+                "label": "Expected",
+                "reason": "volume still attached to container(s) that lack an app association",
+            }
+        return {
+            "bucket": "actionable",
+            "label": "Actionable",
+            "reason": "named volume with zero containers — possible leftover data volume",
+        }
+
+    # ----- filesystem project artifacts -----
+    if res_type in ("directory", "git_repo", "env_file", "compose_project"):
+        return {
+            "bucket": "actionable",
+            "label": "Actionable",
+            "reason": ORPHAN_REASONS.get(
+                res_type,
+                "on-disk project artifact not claimed by any application",
+            ),
+        }
+
+    if res_type == "bind_mount":
+        return {
+            "bucket": "actionable",
+            "label": "Actionable",
+            "reason": ORPHAN_REASONS["bind_mount"],
+        }
+
+    if res_type == "container":
+        return {
+            "bucket": "actionable",
+            "label": "Actionable",
+            "reason": ORPHAN_REASONS["container"],
+        }
+
+    if res_type == "tmux_session":
+        return {
+            "bucket": "actionable",
+            "label": "Actionable",
+            "reason": ORPHAN_REASONS["tmux_session"],
+        }
+
+    return {
+        "bucket": "actionable",
+        "label": "Actionable",
+        "reason": ORPHAN_REASONS.get(res_type, "no matching application found"),
+    }
+
+
+def _is_actionable_orphan(classification: dict) -> bool:
+    return classification.get("bucket") == "actionable"
 
 
 RESOURCE_TYPE_LABELS = {
@@ -240,22 +605,187 @@ def _level(confidence: Any, source: str | None) -> str:
     return "unrelated"
 
 
+# Display timezone for every human-facing datetime in the UI.
+# Storage remains UTC (sqlite datetime('now'), Docker Created Z, fs_src ISO-Z).
+_DISPLAY_TZ_NAME = "America/New_York"
+
+
+def _display_tz():
+    from zoneinfo import ZoneInfo
+
+    return ZoneInfo(_DISPLAY_TZ_NAME)
+
+
+def _parse_dt(value: Any):
+    """Parse ISO / sqlite / docker datetime into a timezone-aware UTC datetime.
+
+    Naive values (sqlite `datetime('now')`, space-separated timestamps) are
+    treated as UTC — that matches how DEL writes scan/job rows. Aware values
+    (Docker `Created`, fs_src `…Z`) are converted to UTC.
+    Returns None if unparseable.
+    """
+    from datetime import datetime, timezone
+
+    if value is None:
+        return None
+    s = str(value).strip()
+    if not s:
+        return None
+    # Docker Created often ends with fractional seconds + Z / offset.
+    s = s.replace("Z", "+00:00")
+    dt = None
+    try:
+        dt = datetime.fromisoformat(s)
+    except ValueError:
+        # Truncate fractional seconds for "2026-05-13T11:31:00.840175564+00:00"
+        # style strings whose fractional part is too long for fromisoformat.
+        core = s
+        if "." in core:
+            head, rest = core.split(".", 1)
+            frac = ""
+            tz = ""
+            for i, ch in enumerate(rest):
+                if ch.isdigit():
+                    frac += ch
+                else:
+                    tz = rest[i:]
+                    break
+            frac = (frac + "000000")[:6]
+            try:
+                dt = datetime.fromisoformat(f"{head}.{frac}{tz}")
+            except ValueError:
+                try:
+                    dt = datetime.strptime(s[:19].replace("T", " "), "%Y-%m-%d %H:%M:%S")
+                except ValueError:
+                    return None
+        else:
+            try:
+                dt = datetime.strptime(s[:19].replace("T", " "), "%Y-%m-%d %H:%M:%S")
+            except ValueError:
+                return None
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        # sqlite datetime('now') is UTC.
+        dt = dt.replace(tzinfo=timezone.utc)
+    else:
+        dt = dt.astimezone(timezone.utc)
+    return dt
+
+
+def _to_eastern(value: Any):
+    """Timezone-aware America/New_York datetime, or None."""
+    dt = _parse_dt(value)
+    if dt is None:
+        return None
+    return dt.astimezone(_display_tz())
+
+
+def _format_dt(value: Any, *, date_only: bool = False) -> str:
+    """Format a datetime for UI display in Eastern (New York).
+
+    Compact style (no timezone suffix — values are always Eastern):
+      full:      ``05-13-26 7:31 AM``   (MM-DD-YY H:MM AM/PM)
+      date_only: ``05-13-26``
+    Returns ``—`` if unparseable. Calendar day follows Eastern, not UTC.
+    """
+    local = _to_eastern(value)
+    if local is None:
+        return "—"
+    # %-I is glibc (Linux) — hour without leading zero.
+    if date_only:
+        return local.strftime("%m-%d-%y")
+    return local.strftime("%m-%d-%y %-I:%M %p")
+
+
+def _relative_dt(value: Any) -> str:
+    """Short relative age string ('3d ago', '2h ago'), or '' if unparseable."""
+    from datetime import datetime, timezone
+
+    dt = _parse_dt(value)
+    if dt is None:
+        return ""
+    secs = (datetime.now(timezone.utc) - dt).total_seconds()
+    if secs < 0:
+        return "just now"
+    if secs < 60:
+        return "just now"
+    if secs < 3600:
+        return f"{int(secs // 60)}m ago"
+    if secs < 86400:
+        return f"{int(secs // 3600)}h ago"
+    if secs < 86400 * 45:
+        return f"{int(secs // 86400)}d ago"
+    if secs < 86400 * 365:
+        return f"{int(secs // (86400 * 30))}mo ago"
+    return f"{int(secs // (86400 * 365))}y ago"
+
+
+def _iso_sort_key(value: Any) -> str:
+    """UTC ISO string for data-sort-value (stable chronological sort)."""
+    dt = _parse_dt(value)
+    if dt is None:
+        return ""
+    return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _earliest_iso(*values: Any) -> str | None:
+    """Return the earliest parseable timestamp as ISO-UTC, or None."""
+    best_dt = None
+    for v in values:
+        dt = _parse_dt(v)
+        if dt is None:
+            continue
+        if best_dt is None or dt < best_dt:
+            best_dt = dt
+    if best_dt is None:
+        return None
+    return best_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+
+
+def _installed_at_from_resources(resource_rows: list[dict]) -> str | None:
+    """Best-effort install time from associated containers/directories.
+
+    Preference order of *signals* (earliest wins across all of them):
+      - container `created` (Docker Created)
+      - directory birthtime / ctime / mtime (filesystem)
+    Returns ISO-UTC string or None when no signal is available.
+    """
+    candidates: list[Any] = []
+    for r in resource_rows:
+        rtype = r.get("type") or r.get("resource_type")
+        data = r.get("data") if isinstance(r.get("data"), dict) else None
+        if data is None:
+            data = _json_or(r.get("data_json") or r.get("resource_data_json"), {})
+        if rtype == "container":
+            if data.get("created"):
+                candidates.append(data["created"])
+        elif rtype == "directory":
+            for key in ("birthtime", "ctime", "mtime"):
+                if data.get(key):
+                    candidates.append(data[key])
+                    break  # one directory contributes its best single signal
+    return _earliest_iso(*candidates)
+
+
+def _scan_started_map(conn) -> dict[int, str]:
+    """scan_id -> started timestamp (sqlite datetime string)."""
+    rows = _rows(q(conn, "SELECT id, started FROM scans"))
+    out: dict[int, str] = {}
+    for r in rows:
+        sid = r.get("id")
+        started = r.get("started")
+        if sid is not None and started:
+            out[int(sid)] = str(started)
+    return out
+
+
 def _duration(started: Any, finished: Any) -> str:
     """Human duration between two ISO/sqlite datetime strings, or '—'."""
-    from datetime import datetime
-
-    if not started or not finished:
+    s = _parse_dt(started)
+    f = _parse_dt(finished)
+    if s is None or f is None:
         return "—"
-    fmt = "%Y-%m-%d %H:%M:%S"
-    try:
-        s = datetime.fromisoformat(str(started).replace(" ", "T").split(".")[0])
-        f = datetime.fromisoformat(str(finished).replace(" ", "T").split(".")[0])
-    except ValueError:
-        try:
-            s = datetime.strptime(str(started)[:19], fmt)
-            f = datetime.strptime(str(finished)[:19], fmt)
-        except ValueError:
-            return "—"
     secs = (f - s).total_seconds()
     if secs < 0:
         return "—"
@@ -312,17 +842,69 @@ def _parse_docker_size(text: str) -> int:
     return 0
 
 
-_RECLAIMABLE_CACHE: dict[str, Any] = {"ts": 0.0, "value": 0}
+_RECLAIMABLE_CACHE: dict[str, Any] = {"ts": 0.0, "value": 0, "refreshing": False}
 _RECLAIMABLE_TTL = 300  # 5 minutes
+_RECLAIMABLE_LOCK = threading.Lock()
+
+# A gallery request may need to verify dozens of Nginx endpoints. Keep those
+# network checks off the request thread pool and cache the result briefly so
+# normal navigation never turns into a thundering herd of HTTPS requests.
+_APP_PROBE_CACHE: dict[str, dict[str, Any]] = {}
+_APP_PROBE_LOCK = threading.Lock()
+_PROBE_REFRESHING: set[str] = set()  # coalesces concurrent background refreshes
+_APP_PROBE_TTL = 300
+_APP_PROBE_TIMEOUT = 3.0
+
+_CATEGORY_ORDER = [
+    "Favorites",
+    "AI & Automation",
+    "Media & Streaming",
+    "Notes & Knowledge",
+    "Productivity",
+    "Files & Data",
+    "Developer Tools",
+    "Infrastructure",
+    "Security & Identity",
+    "Business & Finance",
+    "Utilities",
+    "Other",
+]
+
+# Ordered: the FIRST category with a keyword hit wins, so put the more
+# specific/greedy categories ahead of the generic ones. Keywords prefixed with
+# "=" must match a whole word (see _gallery_category) — used for short or
+# substring-prone tokens like "ai", "tv" and "vault", which otherwise pull in
+# "streamvault-iptv", "nativetv", etc.
+_CATEGORY_KEYWORDS = [
+    ("Media & Streaming", ("flix", "media", "jelly", "stream", "iptv", "=tv", "cine",
+                           "video", "immich", "photo", "ente", "plex", "emby", "music")),
+    ("Security & Identity", ("auth", "=vault", "vaultwarden", "passbolt", "bitwarden",
+                             "identity", "login", "sso", "keycloak")),
+    ("Notes & Knowledge", ("note", "memo", "docmost", "karakeep", "bookmark", "wiki",
+                           "papra", "knowledge", "hearth", "affine", "warden", "obsidian",
+                           "outline", "docnow")),
+    ("Business & Finance", ("expense", "wallos", "monize", "invoice", "finance", "nocodb",
+                            "=crm", "twenty", "billing", "budget")),
+    ("Files & Data", ("file", "share", "stash", "sheet", "database", "libredb", "byte",
+                      "openbook", "drive", "upload")),
+    ("AI & Automation", ("=ai", "ocr", "agent", "glean", "gongyu", "deep", "poco",
+                         "claude", "glm", "llm", "gpt", "chat")),
+    ("Productivity", ("kan", "board", "task", "plan", "focal", "calendar", "slash",
+                      "banban", "lastboard", "todo")),
+    ("Infrastructure", ("portainer", "dock", "komodo", "netdata", "beszel", "monitor",
+                        "speed", "hivedock", "appwrite", "cron", "schedule", "uptime",
+                        "status", "dashboard", "homepage", "=home", "portracker")),
+    ("Developer Tools", ("code", "dev", "git", "gist", "query", "api", "draw",
+                         "excalidraw", "tldraw", "prettier", "json", "termix", "repo",
+                         "deploy")),
+    ("Utilities", ("convert", "pdf", "tools", "txt", "b64", "short", "calc", "simple",
+                   "tiny", "qr", "paste")),
+]
 
 
-def _reclaimable_bytes() -> int:
-    """Sum of docker's reported reclaimable bytes (images + build cache +
-    volumes) from `docker system df --format '{{json .}}'`, read-only and
-    cached in-process for 5 minutes so the dashboard stays fast."""
-    now = time.monotonic()
-    if now - _RECLAIMABLE_CACHE["ts"] < _RECLAIMABLE_TTL:
-        return _RECLAIMABLE_CACHE["value"]
+def _compute_reclaimable_bytes() -> int:
+    """Blocking read of docker's reclaimable bytes (images + build cache +
+    volumes) via `docker system df`. Called only off the request thread."""
     total = 0
     try:
         proc = subprocess.run(
@@ -341,17 +923,362 @@ def _reclaimable_bytes() -> int:
                 total += _parse_docker_size(obj.get("Reclaimable", ""))
     except Exception:
         pass
-    _RECLAIMABLE_CACHE["ts"] = now
-    _RECLAIMABLE_CACHE["value"] = total
     return total
 
 
+def _refresh_reclaimable_async() -> None:
+    def _worker() -> None:
+        value = _compute_reclaimable_bytes()
+        with _RECLAIMABLE_LOCK:
+            _RECLAIMABLE_CACHE["value"] = value
+            _RECLAIMABLE_CACHE["ts"] = time.monotonic()
+            _RECLAIMABLE_CACHE["refreshing"] = False
+    threading.Thread(target=_worker, daemon=True).start()
+
+
+def _reclaimable_bytes() -> int:
+    """Docker's reported reclaimable bytes, cached in-process for 5 minutes.
+
+    Stale-while-revalidate: the dashboard request NEVER blocks on docker. It
+    returns the last cached value immediately and, when that value is stale,
+    kicks off a single background refresh. Blocking here (a `docker system df`
+    that can take seconds, worst right after a removal when docker is busy with
+    the post-removal rescan) was the cause of slow / multi-click dashboard
+    loads. First load after a restart shows 0 until the async refresh lands."""
+    now = time.monotonic()
+    with _RECLAIMABLE_LOCK:
+        value = _RECLAIMABLE_CACHE["value"]
+        stale = (now - _RECLAIMABLE_CACHE["ts"]) >= _RECLAIMABLE_TTL
+        trigger = stale and not _RECLAIMABLE_CACHE["refreshing"]
+        if trigger:
+            _RECLAIMABLE_CACHE["refreshing"] = True
+    if trigger:
+        _refresh_reclaimable_async()
+    return value
+
+
+# An association only counts as "this resource has an owner" when it points at
+# an application that still exists in the latest scan AND carries at least
+# `probable` confidence. Without the first condition, a resource left behind by
+# an app that was removed scans ago stays permanently hidden from Orphans —
+# which is precisely the leftover the page exists to surface. Without the
+# second, a sub-60 name-similarity guess (Step 11's difflib fallback) is enough
+# to hide a resource while still being too weak to make it removable anywhere:
+# a dead zone where the resource is neither actionable nor cleanable.
+_ORPHAN_MIN_OWNING_CONFIDENCE = 60
+
+
+def _orphan_query(latest: int | None) -> tuple[str, tuple]:
+    """SQL + params for 'resources with no current, confident owner'."""
+    sql = """
+        SELECT r.* FROM resources r
+        WHERE NOT EXISTS (
+            SELECT 1 FROM associations a
+            JOIN applications ap ON ap.id = a.app_id
+            WHERE a.resource_id = r.id
+              AND a.excluded = 0
+              AND a.confidence >= ?
+    """
+    params: list[Any] = [_ORPHAN_MIN_OWNING_CONFIDENCE]
+    if latest is not None:
+        sql += " AND ap.last_seen = ?"
+        params.append(latest)
+    sql += " )"
+    if latest is not None:
+        sql += " AND r.last_seen = ?"
+        params.append(latest)
+    sql += " ORDER BY r.type, r.display"
+    return sql, tuple(params)
+
+
+# The dashboard needs one integer — the actionable-orphan count — but deriving
+# it means fetching every unassociated resource and classifying it in Python.
+# The inputs only change when a scan completes, so memoise on the scan id.
+_ORPHAN_COUNT_CACHE: dict[str, Any] = {"scan": None, "count": 0}
+_ORPHAN_COUNT_LOCK = threading.Lock()
+
+
+def _actionable_orphan_count(conn, latest: int | None) -> int:
+    with _ORPHAN_COUNT_LOCK:
+        if _ORPHAN_COUNT_CACHE["scan"] == latest:
+            return _ORPHAN_COUNT_CACHE["count"]
+
+    sql, params = _orphan_query(latest)
+    rows = _rows(q(conn, sql, params))
+    compose_images = _compose_declared_images(conn)
+    count = 0
+    for r in rows:
+        cls = classify_orphan_candidate(
+            r.get("type") or "",
+            r.get("key") or "",
+            r.get("display") or "",
+            r.get("path"),
+            _json_or(r.get("data_json"), {}),
+            compose_images,
+        )
+        if _is_actionable_orphan(cls):
+            count += 1
+
+    with _ORPHAN_COUNT_LOCK:
+        _ORPHAN_COUNT_CACHE["scan"] = latest
+        _ORPHAN_COUNT_CACHE["count"] = count
+    return count
+
+
 def _latest_scan_id(conn) -> int | None:
-    rows = q(conn, "SELECT MAX(id) AS m FROM scans")
-    if rows:
-        r = dict(rows[0]) if hasattr(rows[0], "keys") else rows[0]
-        return r.get("m")
-    return None
+    """Latest *completed* scan id. Thin wrapper over db.latest_done_scan_id so
+    tests can monkeypatch it on this module; both call sites share one
+    definition of "latest scan" (see db.latest_done_scan_id for why the
+    status filter matters)."""
+    return latest_done_scan_id(conn)
+
+
+def _valid_gallery_domain(value: Any) -> str | None:
+    """Return a normalized DNS hostname suitable for the app gallery.
+
+    Nginx may contain wildcard/default server names or literal IPs. The gallery
+    is intentionally for human-facing HTTPS domains, so those entries stay out.
+    """
+    host = str(value or "").strip().lower().rstrip(".")
+    if not host or "*" in host or host == "_" or len(host) > 253:
+        return None
+    if re.fullmatch(r"\d{1,3}(?:\.\d{1,3}){3}", host):
+        return None
+    labels = host.split(".")
+    if len(labels) < 2:
+        return None
+    if any(
+        not label
+        or len(label) > 63
+        or not re.fullmatch(r"[a-z0-9](?:[a-z0-9-]*[a-z0-9])?", label)
+        for label in labels
+    ):
+        return None
+    return host
+
+
+def _gallery_category(slug: str, name: str, domain: str) -> str:
+    """Bucket a gallery app. First matching category in _CATEGORY_KEYWORDS wins.
+
+    A keyword written as ``"=word"`` must match on word boundaries; a plain
+    keyword matches anywhere. Only the first domain label is considered, and
+    the public suffix is dropped, so every `*.bjk.ai` endpoint does not land
+    in AI & Automation on the strength of the TLD.
+    """
+    haystack = " ".join((slug, name, domain.split(".", 1)[0])).lower()
+    for category, keywords in _CATEGORY_KEYWORDS:
+        for keyword in keywords:
+            if keyword.startswith("="):
+                word = keyword[1:]
+                if re.search(rf"(?:^|[-_ ]){re.escape(word)}(?:$|[-_ ])", haystack):
+                    return category
+            elif keyword in haystack:
+                return category
+    return "Other"
+
+
+def _probe_domain(domain: str) -> dict[str, Any]:
+    """Verify an HTTPS endpoint without downloading its response body.
+
+    Any HTTP response below 500 proves that DNS, TLS, Nginx routing, and an
+    answering upstream are in place. Auth challenges and root-level 404s still
+    count as live; 5xx responses do not count as correctly working.
+    """
+    started = time.monotonic()
+    status: int | None = None
+    error = ""
+    request = urllib.request.Request(
+        f"https://{domain}/",
+        headers={"User-Agent": "DEL-App-Gallery/1.0", "Accept": "text/html,*/*;q=0.8"},
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=_APP_PROBE_TIMEOUT) as response:
+            status = int(response.getcode())
+    except urllib.error.HTTPError as exc:
+        status = int(exc.code)
+    except Exception as exc:
+        error = type(exc).__name__
+    latency_ms = max(1, round((time.monotonic() - started) * 1000))
+    return {
+        "healthy": status is not None and 100 <= status < 500,
+        "status": status,
+        "latency_ms": latency_ms,
+        "error": error,
+        "checked_at": datetime.now(timezone.utc).isoformat(),
+    }
+
+
+def _run_probes(pending: list[str]) -> dict[str, dict[str, Any]]:
+    """Probe a batch concurrently and write the results into the cache."""
+    results: dict[str, dict[str, Any]] = {}
+    if not pending:
+        return results
+    with ThreadPoolExecutor(max_workers=min(16, len(pending))) as pool:
+        futures = {pool.submit(_probe_domain, domain): domain for domain in pending}
+        for future in as_completed(futures):
+            domain = futures[future]
+            try:
+                result = future.result()
+            except Exception as exc:  # defensive: one probe must not break the page
+                result = {
+                    "healthy": False,
+                    "status": None,
+                    "latency_ms": 0,
+                    "error": type(exc).__name__,
+                    "checked_at": datetime.now(timezone.utc).isoformat(),
+                }
+            results[domain] = result
+            with _APP_PROBE_LOCK:
+                _APP_PROBE_CACHE[domain] = {
+                    "cached_at": time.monotonic(),
+                    "result": dict(result),
+                }
+    return results
+
+
+def _refresh_probes_async(pending: list[str]) -> None:
+    """Refresh stale probes off the request thread, one batch at a time."""
+    def _worker() -> None:
+        try:
+            _run_probes(pending)
+        finally:
+            with _APP_PROBE_LOCK:
+                _PROBE_REFRESHING.clear()
+    threading.Thread(target=_worker, daemon=True).start()
+
+
+def _probe_domains(domains: list[str], *, force: bool = False) -> dict[str, dict[str, Any]]:
+    """Health for the gallery's domains, stale-while-revalidate.
+
+    Probing ~125 domains takes seconds even 16-way (each has a 3 s timeout),
+    and with a 120 s TTL a browsing operator paid that cost every two minutes.
+    So: serve whatever is cached immediately and refresh in the background,
+    the same pattern `_reclaimable_bytes` already uses for `docker system df`.
+
+    Only two cases block: an explicit `?refresh=1`, and the very first load
+    after a restart, where there is nothing cached to show and an empty
+    gallery would be worse than a slow one.
+    """
+    unique = sorted(set(domains))
+    now = time.monotonic()
+    results: dict[str, dict[str, Any]] = {}
+    stale: list[str] = []
+    uncached: list[str] = []
+
+    with _APP_PROBE_LOCK:
+        for domain in unique:
+            cached = _APP_PROBE_CACHE.get(domain)
+            if cached is None:
+                uncached.append(domain)
+                continue
+            results[domain] = dict(cached["result"])
+            if now - float(cached.get("cached_at", 0)) >= _APP_PROBE_TTL:
+                stale.append(domain)
+
+    if force:
+        results.update(_run_probes(unique))
+        return results
+
+    # Nothing cached for these yet — block, or the gallery renders empty.
+    if uncached:
+        results.update(_run_probes(uncached))
+
+    if stale:
+        with _APP_PROBE_LOCK:
+            already = bool(_PROBE_REFRESHING)
+            if not already:
+                _PROBE_REFRESHING.add("1")
+        if not already:
+            _refresh_probes_async(stale)
+
+    return results
+
+
+# Favicons are fetched server-side and re-served from DEL's own origin.
+# Loading them straight from the third-party domain (<img src="https://x/favicon.ico">)
+# makes the BROWSER perform the request, so any app sitting behind HTTP basic
+# auth answers 401 + WWW-Authenticate and the browser opens a credential
+# dialog on top of the gallery — several times over, for a page the operator
+# is already authenticated to. Proxying means DEL absorbs the 401 and simply
+# serves nothing, letting the card fall back to its initial letter.
+_ICON_CACHE: dict[str, dict[str, Any]] = {}
+_ICON_LOCK = threading.Lock()
+_ICON_TTL = 86400          # a favicon changes about never
+_ICON_NEGATIVE_TTL = 3600  # retry failures sooner than successes
+_ICON_TIMEOUT = 4.0
+_ICON_MAX_BYTES = 262144
+_ICON_CACHE_MAX = 512
+_ICON_ALLOWED_TYPES = (
+    "image/x-icon", "image/vnd.microsoft.icon", "image/png", "image/gif",
+    "image/jpeg", "image/svg+xml", "image/webp", "image/bmp",
+)
+
+
+def _fetch_icon(domain: str) -> tuple[bytes, str] | None:
+    """Fetch one favicon. Returns (body, content_type) or None.
+
+    Never raises, and never propagates an auth challenge: a 401/403 is simply
+    "no icon". Size-capped so a hostile or misconfigured endpoint cannot feed
+    DEL an unbounded body.
+    """
+    request = urllib.request.Request(
+        f"https://{domain}/favicon.ico",
+        headers={"User-Agent": "DEL-App-Gallery/1.0", "Accept": "image/*"},
+        method="GET",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=_ICON_TIMEOUT) as response:
+            if int(response.getcode()) != 200:
+                return None
+            ctype = (response.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+            if ctype and not ctype.startswith("image/"):
+                return None
+            body = response.read(_ICON_MAX_BYTES + 1)
+            if not body or len(body) > _ICON_MAX_BYTES:
+                return None
+            if ctype not in _ICON_ALLOWED_TYPES:
+                ctype = "image/x-icon"
+            return body, ctype
+    except Exception:
+        # HTTPError (401/403/404), TLS failure, DNS failure, timeout — all
+        # mean the same thing here: show the fallback initial.
+        return None
+
+
+def _cached_icon(domain: str) -> tuple[bytes, str] | None:
+    now = time.monotonic()
+    with _ICON_LOCK:
+        entry = _ICON_CACHE.get(domain)
+        if entry and now < entry["expires"]:
+            return entry["value"]
+
+    value = _fetch_icon(domain)
+
+    with _ICON_LOCK:
+        if len(_ICON_CACHE) >= _ICON_CACHE_MAX:
+            for key in [k for k, v in _ICON_CACHE.items() if v["expires"] <= now]:
+                del _ICON_CACHE[key]
+            if len(_ICON_CACHE) >= _ICON_CACHE_MAX:
+                _ICON_CACHE.clear()
+        _ICON_CACHE[domain] = {
+            "value": value,
+            "expires": now + (_ICON_TTL if value else _ICON_NEGATIVE_TTL),
+        }
+    return value
+
+
+def _gallery_owner_score(app: dict, domain: str, confidence: Any) -> tuple[int, int, int]:
+    """Rank competing correlations for a domain deterministically."""
+    slug = str(app.get("slug") or "").lower()
+    labels = domain.split(".")
+    try:
+        base = int(confidence or 0)
+    except (TypeError, ValueError):
+        base = 0
+    exact = int(bool(slug and labels and labels[0] == slug))
+    label_hit = int(bool(slug and slug in labels))
+    return (exact, label_hit, base)
 
 
 def _type_counts(conn, latest_scan: int | None) -> list[dict]:
@@ -425,8 +1352,12 @@ def _render(name: str, request: Request, response: Response, **extra) -> HTMLRes
     ctx.update(extra)
     rendered = templates.TemplateResponse(request, name, ctx)
     if seed is not None:
+        # Same cookie name as the real session, so it needs the same flags —
+        # notably `secure`, which this pre-login anti-forgery seed was missing
+        # while auth.login_session set it correctly.
         rendered.set_cookie(
-            auth.SESSION_COOKIE_NAME, auth.sign_token(seed), httponly=True, samesite="lax"
+            auth.SESSION_COOKIE_NAME, auth.sign_token(seed),
+            httponly=True, secure=True, samesite="lax",
         )
     return rendered
 
@@ -511,29 +1442,44 @@ def dashboard(
         running_jobs = _rows(
             q(conn, "SELECT * FROM jobs WHERE status = 'running'")
         )
+        # COUNT(*) rather than materialising rows just to call len(). The
+        # EXISTS form is deliberate: the equivalent JOIN becomes plan-unstable
+        # once sqlite_stat1 exists (it flips to a skip-scan and degrades ~10x).
         uncertain_sql = """
-                SELECT a.* FROM associations a
-                JOIN resources r ON r.id = a.resource_id
+                SELECT COUNT(*) AS n FROM associations a
                 WHERE a.removal_eligible = 'uncertain'
+                  AND EXISTS (SELECT 1 FROM resources r
+                              WHERE r.id = a.resource_id
                 """
-        uncertain_params: tuple = ()
+        uncertain_params: list[Any] = []
         if latest is not None:
             uncertain_sql += " AND r.last_seen = ?"
-            uncertain_params = (latest,)
-        uncertain = _rows(q(conn, uncertain_sql, uncertain_params))
-        shared_count = len(
-            _rows(q(conn, "SELECT DISTINCT resource_id FROM associations WHERE shared = 1"))
-        )
-        orphan_sql = """
-                SELECT r.* FROM resources r
-                LEFT JOIN associations a ON a.resource_id = r.id
-                WHERE a.id IS NULL
+            uncertain_params.append(latest)
+        uncertain_sql += """)
+                  AND EXISTS (SELECT 1 FROM applications ap
+                              WHERE ap.id = a.app_id
                 """
-        orphan_params: tuple = ()
         if latest is not None:
-            orphan_sql += " AND r.last_seen = ?"
-            orphan_params = (latest,)
-        orphan_candidates = _rows(q(conn, orphan_sql, orphan_params))
+            uncertain_sql += " AND ap.last_seen = ?"
+            uncertain_params.append(latest)
+        uncertain_sql += ")"
+        uncertain_count = _rows(q(conn, uncertain_sql, tuple(uncertain_params)))[0]["n"]
+
+        # Scope shared resources the same way. Counting across all scan history
+        # made this the one stat card that disagreed with the page it links to.
+        shared_sql = """
+                SELECT COUNT(DISTINCT a.resource_id) AS n FROM associations a
+                JOIN resources r ON r.id = a.resource_id
+                JOIN applications ap ON ap.id = a.app_id
+                WHERE a.shared = 1 AND a.excluded = 0
+                """
+        shared_params: tuple = ()
+        if latest is not None:
+            shared_sql += " AND r.last_seen = ? AND ap.last_seen = ?"
+            shared_params = (latest, latest)
+        shared_count = _rows(q(conn, shared_sql, shared_params))[0]["n"]
+
+        orphan_actionable = _actionable_orphan_count(conn, latest)
         recent_scans = _rows(
             q(conn, "SELECT * FROM scans ORDER BY id DESC LIMIT 5")
         )
@@ -542,12 +1488,22 @@ def dashboard(
     finally:
         conn.close()
 
+    # Last completed scan summary for the dashboard header strip.
+    last_scan = None
+    if recent_scans:
+        for s in recent_scans:
+            if s.get("status") == "done":
+                last_scan = s
+                break
+        if last_scan is None:
+            last_scan = recent_scans[0]
+
     stats = {
         "apps": len(apps),
         "running": len(running_jobs),
-        "orphan_candidates": len(orphan_candidates),
+        "orphan_candidates": orphan_actionable,
         "shared_resources": shared_count,
-        "uncertain_mappings": len(uncertain),
+        "uncertain_mappings": uncertain_count,
         "disk_usage_bytes": disk_usage_bytes,
         "reclaimable_bytes": _reclaimable_bytes(),
     }
@@ -558,6 +1514,11 @@ def dashboard(
         stats=stats,
         recent_scans=recent_scans,
         recent_jobs=recent_jobs,
+        last_scan=last_scan,
+        last_scan_age=_relative_dt(last_scan.get("finished") or last_scan.get("started")) if last_scan else "",
+        last_scan_duration=_duration(
+            last_scan.get("started"), last_scan.get("finished")
+        ) if last_scan else "—",
         user=user,
     )
 
@@ -574,13 +1535,16 @@ def apps_list(
     search: str = "",
     status: str = "",
 ) -> HTMLResponse:
+    show_removed = request.query_params.get("show") == "removed"
     conn = get_db()
     try:
         latest = _latest_scan_id(conn)
+        scan_times = _scan_started_map(conn)
         sql = "SELECT * FROM applications WHERE 1=1"
-        if request.query_params.get("show") != "removed" and latest:
-            sql += f" AND last_seen = {int(latest)}"
         params: list[Any] = []
+        if not show_removed and latest is not None:
+            sql += " AND last_seen = ?"
+            params.append(int(latest))
         if search:
             sql += " AND (name LIKE ? OR slug LIKE ?)"
             like = f"%{search}%"
@@ -594,39 +1558,57 @@ def apps_list(
         # Per-app aggregates: resource count, warning count (possible / low
         # confidence associations), plus domains & ports from associated
         # resource data_json. Read-only.
-        agg = _rows(
-            q(
-                conn,
-                """
-                SELECT ap.id AS app_id,
-                       COUNT(a.id) AS res_count,
-                       SUM(CASE WHEN a.ownership = 'possible' OR a.confidence < 50
-                                THEN 1 ELSE 0 END) AS warn_count
-                FROM applications ap
-                LEFT JOIN associations a
-                       ON a.app_id = ap.id AND a.excluded = 0
-                GROUP BY ap.id
-                """,
+        #
+        # Both queries are scoped to the app ids actually being rendered. They
+        # used to run across every application and association ever recorded,
+        # so listing ~190 apps re-read and json.loads-ed the resource payloads
+        # of a further ~136 applications that no longer exist — and a `search=`
+        # filter narrowing the page to three rows did not narrow this at all.
+        app_ids = [a["id"] for a in apps if a.get("id") is not None]
+        if app_ids:
+            id_ph = ",".join("?" for _ in app_ids)
+            agg = _rows(
+                q(
+                    conn,
+                    f"""
+                    SELECT ap.id AS app_id,
+                           COUNT(a.id) AS res_count,
+                           SUM(CASE WHEN a.ownership = 'possible' OR a.confidence < 50
+                                    THEN 1 ELSE 0 END) AS warn_count
+                    FROM applications ap
+                    LEFT JOIN associations a
+                           ON a.app_id = ap.id AND a.excluded = 0
+                    WHERE ap.id IN ({id_ph})
+                    GROUP BY ap.id
+                    """,
+                    tuple(app_ids),
+                )
             )
-        )
-        agg_map = {r["app_id"]: r for r in agg}
-
-        detail = _rows(
-            q(
-                conn,
-                """
+            detail_sql = f"""
                 SELECT a.app_id AS app_id, r.type AS type, r.data_json AS data_json
                 FROM associations a
                 JOIN resources r ON r.id = a.resource_id
-                WHERE a.excluded = 0 AND r.type IN ('nginx_site', 'port', 'container')
-                """,
-            )
-        )
+                WHERE a.excluded = 0
+                  AND a.app_id IN ({id_ph})
+                  AND r.type IN ('nginx_site', 'port', 'container', 'directory')
+            """
+            detail_params: list[Any] = list(app_ids)
+            # Not scoped in ?show=removed: a removed app's resources carry a
+            # stale last_seen too, and filtering them out would blank the
+            # domains/ports on exactly the rows that view exists to show.
+            if latest is not None and not show_removed:
+                detail_sql += " AND r.last_seen = ?"
+                detail_params.append(int(latest))
+            detail = _rows(q(conn, detail_sql, tuple(detail_params)))
+        else:
+            agg, detail = [], []
+        agg_map = {r["app_id"]: r for r in agg}
     finally:
         conn.close()
 
     domains: dict[int, set] = {}
     ports: dict[int, set] = {}
+    install_signals: dict[int, list[dict]] = {}
     for d in detail:
         data = _json_or(d.get("data_json"), {})
         aid = d["app_id"]
@@ -644,6 +1626,13 @@ def apps_list(
         elif d["type"] == "container":
             for p in data.get("published_ports", []) or []:
                 ports.setdefault(aid, set()).add(str(p))
+            install_signals.setdefault(aid, []).append(
+                {"type": "container", "data_json": d.get("data_json")}
+            )
+        elif d["type"] == "directory":
+            install_signals.setdefault(aid, []).append(
+                {"type": "directory", "data_json": d.get("data_json")}
+            )
 
     for app in apps:
         aid = app.get("id")
@@ -653,8 +1642,204 @@ def apps_list(
         app["domains"] = sorted(domains.get(aid, set()))
         app["ports"] = sorted(ports.get(aid, set()), key=lambda x: (len(x), x))
 
+        first_seen_id = app.get("first_seen")
+        last_seen_id = app.get("last_seen")
+        first_seen_at = scan_times.get(int(first_seen_id)) if first_seen_id is not None else None
+        last_seen_at = scan_times.get(int(last_seen_id)) if last_seen_id is not None else None
+        installed = _installed_at_from_resources(install_signals.get(aid, []))
+        # Prefer host signals; fall back to when DEL first discovered the app.
+        app["installed_at"] = installed or first_seen_at
+        app["first_seen_at"] = first_seen_at
+        app["last_seen_at"] = last_seen_at
+        app["is_removed"] = bool(
+            latest is not None
+            and last_seen_id is not None
+            and int(last_seen_id) < int(latest)
+        )
+
     return _render(
-        "apps.html", request, response, apps=apps, search=search, status=status
+        "apps.html",
+        request,
+        response,
+        apps=apps,
+        search=search,
+        status=status,
+        show_removed=show_removed,
+        latest_scan=latest,
+    )
+
+
+@router.get("/view-apps", response_class=HTMLResponse)
+def view_apps(
+    request: Request,
+    response: Response,
+    user: User = Depends(auth.require_user),
+) -> HTMLResponse:
+    """Homelab-style launcher for verified, currently serving web apps.
+
+    Inventory remains authoritative: candidates must belong to an app and an
+    enabled Nginx site in the latest completed scan. A short cached HTTPS probe
+    then removes stale, broken, or otherwise unreachable endpoints.
+    """
+    conn = get_db()
+    try:
+        latest = _latest_scan_id(conn)
+        rows: list[dict] = []
+        if latest is not None:
+            rows = _rows(
+                q(
+                    conn,
+                    """
+                    SELECT ap.id AS app_id, ap.slug, ap.name, ap.status, ap.kind,
+                           ap.protected, a.confidence, r.data_json
+                    FROM applications ap
+                    JOIN associations a ON a.app_id = ap.id AND a.excluded = 0
+                    JOIN resources r ON r.id = a.resource_id
+                    WHERE ap.last_seen = ? AND r.last_seen = ?
+                      AND r.type = 'nginx_site'
+                    """,
+                    (latest, latest),
+                )
+            )
+    finally:
+        conn.close()
+
+    candidates: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        data = _json_or(row.get("data_json"), {})
+        if not data.get("enabled", False):
+            continue
+        for raw_domain in data.get("server_names", []) or []:
+            domain = _valid_gallery_domain(raw_domain)
+            if not domain:
+                continue
+            candidate = dict(row)
+            candidate["owner_score"] = _gallery_owner_score(candidate, domain, row.get("confidence"))
+            candidates.setdefault(domain, []).append(candidate)
+
+    owners: dict[str, dict[str, Any]] = {}
+    for domain, possible in candidates.items():
+        owners[domain] = max(
+            possible,
+            key=lambda item: (item["owner_score"], str(item.get("slug") or "")),
+        )
+
+    force = request.query_params.get("refresh") == "1"
+    probes = _probe_domains(list(owners), force=force)
+    apps: list[dict[str, Any]] = []
+    for domain, app in owners.items():
+        health = probes.get(domain, {})
+        if not health.get("healthy"):
+            continue
+        score = app.get("owner_score") or (0, 0, 0)
+        inferred_name = domain.split(".", 1)[0].replace("-", " ").replace("_", " ").title()
+        display_name = app.get("name") or app.get("slug") or inferred_name
+        if not score[0] and not score[1]:
+            display_name = inferred_name
+        apps.append(
+            {
+                "id": f"{app.get('slug')}::{domain}",
+                "slug": app.get("slug"),
+                "name": display_name,
+                "domain": domain,
+                "url": f"https://{domain}",
+                # Served through DEL, never straight from the third-party
+                # origin — see _fetch_icon for why (basic-auth credential
+                # prompts firing on top of the gallery).
+                "icon_url": f"/app-icon/{domain}",
+                "initial": str(display_name).strip()[:1].upper() or "?",
+                "category": _gallery_category(
+                    str(app.get("slug") or ""), str(display_name), domain
+                ),
+                "status": app.get("status") or "unknown",
+                "kind": app.get("kind") or "unknown",
+                "protected": bool(app.get("protected")),
+                "http_status": health.get("status"),
+                "latency_ms": health.get("latency_ms"),
+                "checked_at": health.get("checked_at"),
+            }
+        )
+
+    category_rank = {name: i for i, name in enumerate(_CATEGORY_ORDER)}
+    apps.sort(
+        key=lambda app: (
+            category_rank.get(app["category"], len(category_rank)),
+            str(app["name"]).lower(),
+            app["domain"],
+        )
+    )
+    categories = [
+        category
+        for category in _CATEGORY_ORDER
+        if category != "Favorites" and any(app["category"] == category for app in apps)
+    ]
+    checked_at = max((app.get("checked_at") or "" for app in apps), default="")
+    return _render(
+        "view_apps.html",
+        request,
+        response,
+        apps=apps,
+        categories=categories,
+        candidate_count=len(owners),
+        excluded_count=max(0, len(owners) - len(apps)),
+        latest_scan=latest,
+        checked_at=checked_at,
+        user=user,
+    )
+
+
+@router.get("/app-icon/{domain}")
+def app_icon(
+    domain: str,
+    user: User = Depends(auth.require_user),
+) -> Response:
+    """Serve a gallery app's favicon from DEL's own origin.
+
+    Fetching these in the browser makes every basic-auth-protected app answer
+    401 + WWW-Authenticate, which opens a credential dialog over the gallery.
+    Proxying absorbs that: a protected app simply has no icon and the card
+    shows its initial instead.
+
+    The domain must be a syntactically valid hostname AND currently present as
+    an enabled Nginx site in the latest scan, so this cannot be turned into a
+    general-purpose outbound fetcher.
+    """
+    normalized = _valid_gallery_domain(domain)
+    if not normalized:
+        return Response(status_code=404)
+
+    conn = get_db()
+    try:
+        latest = _latest_scan_id(conn)
+        known = False
+        if latest is not None:
+            for row in _rows(q(
+                conn,
+                "SELECT data_json FROM resources WHERE type = 'nginx_site' AND last_seen = ?",
+                (latest,),
+            )):
+                data = _json_or(row.get("data_json"), {})
+                if not data.get("enabled", False):
+                    continue
+                if any(_valid_gallery_domain(sn) == normalized
+                       for sn in data.get("server_names", []) or []):
+                    known = True
+                    break
+    finally:
+        conn.close()
+    if not known:
+        return Response(status_code=404)
+
+    icon = _cached_icon(normalized)
+    if icon is None:
+        # 204 rather than 404: the card's fallback initial is the intended
+        # result, and this keeps the browser from logging a console error.
+        return Response(status_code=204, headers={"Cache-Control": "public, max-age=3600"})
+    body, content_type = icon
+    return Response(
+        content=body,
+        media_type=content_type,
+        headers={"Cache-Control": "public, max-age=86400"},
     )
 
 
@@ -666,10 +1851,20 @@ def app_detail(
     try:
         rows = q(conn, "SELECT * FROM applications WHERE slug = ?", (slug,))
         latest_scan = _latest_scan_id(conn)
+        scan_times = _scan_started_map(conn)
         app = _rows(rows)[0] if rows else {"slug": slug, "name": slug}
         # Only show associations to resources still present as of the latest
         # scan; otherwise a resource removed in an earlier scan (stale
         # last_seen) would keep showing up here forever.
+        # For a removed app (last_seen < latest), fall back to that app's own
+        # last_seen scan so history pages still list its final resources.
+        assoc_scan = latest_scan
+        if (
+            app.get("last_seen") is not None
+            and latest_scan is not None
+            and int(app["last_seen"]) < int(latest_scan)
+        ):
+            assoc_scan = int(app["last_seen"])
         assoc_sql = """
                 SELECT a.*, r.type as resource_type, r.key as resource_key,
                        r.display as resource_display, r.path as resource_path,
@@ -679,9 +1874,9 @@ def app_detail(
                 WHERE a.app_id = (SELECT id FROM applications WHERE slug = ?)
                 """
         assoc_params: tuple = (slug,)
-        if latest_scan is not None:
+        if assoc_scan is not None:
             assoc_sql += " AND r.last_seen = ?"
-            assoc_params = (slug, latest_scan)
+            assoc_params = (slug, assoc_scan)
         assoc_rows = _rows(q(conn, assoc_sql, assoc_params))
     finally:
         conn.close()
@@ -713,6 +1908,27 @@ def app_detail(
             domains.update(data.get("server_names") or [])
     app["domains"] = sorted(domains)
 
+    # Human dates: resolve scan IDs → scan.started; install time from resources.
+    first_seen_id = app.get("first_seen")
+    last_seen_id = app.get("last_seen")
+    app["first_seen_at"] = (
+        scan_times.get(int(first_seen_id)) if first_seen_id is not None else None
+    )
+    app["last_seen_at"] = (
+        scan_times.get(int(last_seen_id)) if last_seen_id is not None else None
+    )
+    install_rows = [
+        {
+            "type": a.get("resource_type"),
+            "data_json": a.get("resource_data_json"),
+        }
+        for a in assoc_rows
+        if a.get("resource_type") in ("container", "directory")
+    ]
+    app["installed_at"] = (
+        _installed_at_from_resources(install_rows) or app.get("first_seen_at")
+    )
+
     return _render(
         "app_detail.html",
         request,
@@ -738,30 +1954,41 @@ def rescan_approve(
     if not _require_csrf(request, csrf_token):
         return _csrf_response()
 
+    # An unrecognised action used to fall through silently: nothing was
+    # updated, yet an audit record was written and the UI flashed success.
+    setters = {
+        "approve": "approved_by_user = 1, excluded = 0",
+        "exclude": "excluded = 1",
+        "mark-shared": "shared = 1",
+    }
+    if action not in setters:
+        return JSONResponse({"error": f"unknown action: {action}"}, status_code=400)
+
     conn = get_db()
     try:
-        if action == "approve":
-            conn.execute(
-                "UPDATE associations SET approved_by_user = 1, excluded = 0 WHERE id = ? AND app_id = (SELECT id FROM applications WHERE slug = ?)",
-                (association_id, slug),
-            )
-        elif action == "exclude":
-            conn.execute(
-                "UPDATE associations SET excluded = 1 WHERE id = ? AND app_id = (SELECT id FROM applications WHERE slug = ?)",
-                (association_id, slug),
-            )
-        elif action == "mark-shared":
-            conn.execute(
-                "UPDATE associations SET shared = 1 WHERE id = ? AND app_id = (SELECT id FROM applications WHERE slug = ?)",
-                (association_id, slug),
-            )
+        cur = conn.execute(
+            f"UPDATE associations SET {setters[action]} "
+            "WHERE id = ? AND app_id = (SELECT id FROM applications WHERE slug = ?)",
+            (association_id, slug),
+        )
+        changed = cur.rowcount
         conn.commit()
     finally:
         conn.close()
+
+    # rowcount 0 means the association does not exist or belongs to a different
+    # app. Say so rather than claiming a change that did not happen.
+    if not changed:
+        return RedirectResponse(
+            url=f"/apps/{slug}?error=Association+not+found+for+this+application",
+            status_code=303,
+        )
+
     auditlog.audit(user.id, f"association.{action}", f"{slug}#{association_id}", {})
     labels = {"approve": "approved", "exclude": "excluded", "mark-shared": "marked+shared"}
-    flash = labels.get(action, "updated")
-    return RedirectResponse(url=f"/apps/{slug}?flash=Association+{flash}", status_code=303)
+    return RedirectResponse(
+        url=f"/apps/{slug}?flash=Association+{labels[action]}", status_code=303
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -784,6 +2011,8 @@ def plan_form(
                 JOIN associations a ON a.resource_id = r.id
                 JOIN applications ap ON ap.id = a.app_id
                 WHERE ap.slug = ? AND r.type = 'volume'
+                  AND (r.last_seen = (SELECT MAX(id) FROM scans WHERE status = 'done')
+                       OR NOT EXISTS (SELECT 1 FROM scans WHERE status = 'done'))
                 """,
                 (slug,),
             )
@@ -891,7 +2120,8 @@ def plan_execute(
         return JSONResponse({"error": "plan not found or failed integrity check"}, status_code=404)
 
     has_volume_deletion = any(step.operation == "volume_rm" for step in plan.steps)
-    if mode == "live" and has_volume_deletion and confirm_phrase != "DELETE VOLUMES":
+    required_phrase = getattr(jobs, "CONFIRM_VOLUMES_PHRASE", "y")
+    if mode == "live" and has_volume_deletion and confirm_phrase != required_phrase:
         return JSONResponse(
             {"error": "typed confirmation phrase required for live volume deletion"},
             status_code=400,
@@ -922,7 +2152,9 @@ def jobs_list(
                 LEFT JOIN plans p ON p.id = j.plan_id
                 LEFT JOIN applications ap ON ap.id = p.app_id
                 ORDER BY j.id DESC
+                LIMIT ?
                 """,
+                (JOBS_PAGE_LIMIT,),
             )
         )
     finally:
@@ -980,11 +2212,13 @@ def job_status(job_id: int, user: User = Depends(auth.require_user)) -> JSONResp
 # resources / orphans
 # ---------------------------------------------------------------------------
 
-@router.get("/resources", response_class=HTMLResponse)
+@router.get("/resources")
 def resources_index(
     request: Request, response: Response, user: User = Depends(auth.require_user)
-) -> HTMLResponse:
-    return RedirectResponse(url="/resources/container", status_code=307)
+) -> RedirectResponse:
+    # 303, not 307: 307 preserves the method, which is meaningless for a GET
+    # landing redirect and surprising if anything ever POSTs here.
+    return RedirectResponse(url="/resources/container", status_code=303)
 
 
 @router.get("/resources/{res_type}", response_class=HTMLResponse)
@@ -1036,28 +2270,46 @@ def resources_view(
 def orphans_view(
     request: Request, response: Response, user: User = Depends(auth.require_user)
 ) -> HTMLResponse:
+    """Orphan candidates: unassociated resources, classified for precision.
+
+    Default view = *actionable* only (real review/cleanup candidates).
+    Pass ?show=all to include System (OS/infra) and Expected (parked/compose-
+    still-declared) rows, each clearly labeled so they are not mistaken for
+    abandoned apps.
+    """
+    show_all = request.query_params.get("show") == "all"
     conn = get_db()
     try:
         latest = _latest_scan_id(conn)
-        sql = """
-            SELECT r.* FROM resources r
-            LEFT JOIN associations a ON a.resource_id = r.id
-            WHERE a.id IS NULL
-        """
-        params: tuple = ()
-        if latest is not None:
-            sql += " AND r.last_seen = ?"
-            params = (latest,)
-        sql += " ORDER BY r.type, r.display"
+        sql, params = _orphan_query(latest)
         rows = _rows(q(conn, sql, params))
         compose_images = _compose_declared_images(conn)
     finally:
         conn.close()
+
+    classified: list[dict] = []
+    counts = {"actionable": 0, "system": 0, "expected": 0}
     for r in rows:
-        r["data"] = _json_or(r.get("data_json"), {})
-        r["reason"] = _orphan_reason(r["type"], r["data"], compose_images)
+        data = _json_or(r.get("data_json"), {})
+        cls = classify_orphan_candidate(
+            r.get("type") or "",
+            r.get("key") or "",
+            r.get("display") or "",
+            r.get("path"),
+            data,
+            compose_images,
+        )
+        counts[cls["bucket"]] = counts.get(cls["bucket"], 0) + 1
+        r = dict(r)
+        r["data"] = data
+        r["reason"] = cls["reason"]
+        r["bucket"] = cls["bucket"]
+        r["bucket_label"] = cls["label"]
+        if show_all or cls["bucket"] == "actionable":
+            classified.append(r)
+
     groups: dict[str, list] = {}
-    for r in rows:
+    for r in classified:
         groups.setdefault(r["type"], []).append(r)
     grouped = [
         {
@@ -1070,7 +2322,14 @@ def orphans_view(
         if t in groups
     ]
     return _render(
-        "orphans.html", request, response, grouped=grouped, total=len(rows)
+        "orphans.html",
+        request,
+        response,
+        grouped=grouped,
+        total=len(classified),
+        show_all=show_all,
+        counts=counts,
+        unfiltered_total=len(rows),
     )
 
 
@@ -1086,9 +2345,15 @@ def trigger_scan(
         return _csrf_response()
     if scanner is None:  # pragma: no cover
         return RedirectResponse(url="/settings?error=Scanner+unavailable", status_code=303)
-    scan_id = scanner.run_scan()
+    try:
+        scan_id = scanner.run_scan()
+    except Exception as exc:
+        # ScanInProgressError or unexpected failure — surface cleanly.
+        msg = "Scan+already+in+progress" if "already in progress" in str(exc).lower() else "Scan+failed"
+        auditlog.audit(user.id, "scan.error", "scanner", {"error": str(exc)[:200]})
+        return RedirectResponse(url=f"/settings?error={msg}", status_code=303)
     auditlog.audit(user.id, "scan.run", "scanner", {"scan_id": scan_id})
-    return RedirectResponse(url=f"/settings?flash=Scan+{scan_id}+started", status_code=303)
+    return RedirectResponse(url=f"/settings?flash=Scan+{scan_id}+complete", status_code=303)
 
 
 # ---------------------------------------------------------------------------
@@ -1186,14 +2451,60 @@ def manifest_edit_submit(
 # static assets (no auth: needed by /login too; CSP 'self', no CDN)
 # ---------------------------------------------------------------------------
 
+# FileResponse already sets etag + last-modified, so a repeat visit gets a 304.
+# Without Cache-Control the browser still pays a revalidation round trip for
+# every asset on every page — including the 1.9 MB AG Grid bundle. These are
+# revalidated rather than blindly cached (`must-revalidate` on a short max-age)
+# so a deploy is picked up promptly without an asset-versioning scheme.
+_STATIC_CACHE = "public, max-age=300, must-revalidate"
+_IMMUTABLE_CACHE = "public, max-age=31536000, immutable"
+
+
 @router.get("/static/app.css")
 def static_css() -> FileResponse:
-    return FileResponse(STATIC_DIR / "app.css", media_type="text/css")
+    return FileResponse(
+        STATIC_DIR / "app.css", media_type="text/css",
+        headers={"Cache-Control": _STATIC_CACHE},
+    )
 
 
 @router.get("/static/app.js")
 def static_js() -> FileResponse:
-    return FileResponse(STATIC_DIR / "app.js", media_type="application/javascript")
+    return FileResponse(
+        STATIC_DIR / "app.js", media_type="application/javascript",
+        headers={"Cache-Control": _STATIC_CACHE},
+    )
+
+
+@router.get("/static/ag-grid-community.min.js")
+def static_ag_grid() -> FileResponse:
+    """Vendored AG Grid Community (CSP 'self' only — no CDN).
+
+    Pinned third-party bundle: safe to cache immutably, and at 1.9 MB it is by
+    far the most expensive asset to revalidate.
+    """
+    return FileResponse(
+        STATIC_DIR / "ag-grid-community.min.js",
+        media_type="application/javascript",
+        headers={"Cache-Control": _IMMUTABLE_CACHE},
+    )
+
+
+@router.get("/static/favicon.svg")
+def static_favicon() -> FileResponse:
+    return FileResponse(
+        STATIC_DIR / "favicon.svg", media_type="image/svg+xml",
+        headers={"Cache-Control": _STATIC_CACHE},
+    )
+
+
+@router.get("/favicon.ico")
+def favicon_ico() -> Response:
+    """Browsers request /favicon.ico unprompted; answer it instead of 404ing.
+
+    Redirects to the SVG rather than shipping a second binary asset.
+    """
+    return RedirectResponse(url="/static/favicon.svg", status_code=301)
 
 
 # ---------------------------------------------------------------------------
@@ -1202,4 +2513,7 @@ def static_js() -> FileResponse:
 templates.env.globals["human_size"] = _human_size
 templates.env.globals["level_of"] = _level
 templates.env.globals["duration"] = _duration
+templates.env.globals["format_dt"] = _format_dt
+templates.env.globals["relative_dt"] = _relative_dt
+templates.env.globals["iso_sort"] = _iso_sort_key
 templates.env.globals["resource_labels"] = RESOURCE_TYPE_LABELS

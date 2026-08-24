@@ -1,7 +1,9 @@
 {% extends "base.html" %}
 {% block title %}Job #{{ job.get('id') }}{% endblock %}
 {% block content %}
-<h1>Job #{{ job.get('id') }}</h1>
+<div class="page-header">
+  <h1>Job #{{ job.get('id') }}</h1>
+</div>
 <p class="muted">
   {% if job.get('app_slug') %}app: <a href="/apps/{{ job.get('app_slug') }}">{{ job.get('app_name') or job.get('app_slug') }}</a> · {% endif %}
   plan: <a href="/plans/{{ job.get('plan_id') }}">#{{ job.get('plan_id') }}</a> ·
@@ -17,8 +19,10 @@
 {% for stage in stages %}
 <section class="panel">
   <h2>{{ stage.stage }} <span class="count-pill">{{ stage.steps | length }}</span></h2>
-  <table class="table job-steps">
-    <thead><tr><th>#</th><th>Operation</th><th>State</th><th>Exit</th><th>Duration</th><th>Output</th></tr></thead>
+  <div class="table-scroll">
+  <table class="table job-steps" data-stage="{{ stage.stage }}">
+    <caption class="sr-only">Steps in the {{ stage.stage }} stage.</caption>
+    <thead><tr><th scope="col">#</th><th scope="col">Operation</th><th scope="col">State</th><th scope="col">Exit</th><th scope="col">Duration</th><th scope="col">Output</th></tr></thead>
     <tbody>
       {% for s in stage.steps %}
       <tr data-step-seq="{{ s.get('seq') }}">
@@ -36,12 +40,16 @@
       {% endfor %}
     </tbody>
   </table>
+  </div>
 </section>
 {% else %}
+<div class="table-scroll">
 <table class="table" id="job-steps" data-job-id="{{ job.get('id') }}">
-  <thead><tr><th>#</th><th>Stage</th><th>Operation</th><th>State</th></tr></thead>
+  <caption class="sr-only">Steps recorded for this job.</caption>
+  <thead><tr><th scope="col">#</th><th scope="col">Stage</th><th scope="col">Operation</th><th scope="col">State</th></tr></thead>
   <tbody><tr><td colspan="4" class="muted">No steps recorded yet.</td></tr></tbody>
 </table>
+</div>
 {% endfor %}
 </div>
 {% endblock %}

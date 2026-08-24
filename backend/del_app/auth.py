@@ -128,6 +128,11 @@ def login_session(resp: Response, user_id: int, ip: str | None = None) -> str:
             "INSERT INTO sessions (token_hash, user_id, expires, ip) VALUES (?, ?, ?, ?)",
             (token_hash, user_id, expires, ip),
         )
+        # Expiry is enforced at read time, so a stale row is not an auth
+        # bypass — but nothing ever deleted them and the table only grew
+        # (109 of 110 rows were expired). Login is the natural sweep point.
+        conn.execute("DELETE FROM sessions WHERE expires < ?", (datetime.utcnow().isoformat(),))
+        conn.commit()
     finally:
         conn.close()
     resp.set_cookie(

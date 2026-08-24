@@ -2,36 +2,103 @@
 <html lang="en" data-theme="dark">
 <head>
   <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="description" content="DEL — application inventory and safe uninstall for this host: discover apps, map their resources, and remove them with an auditable plan.">
+  <meta name="theme-color" content="#0c0e13">
   <title>{% block title %}DEL{% endblock %} · DEL</title>
+  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/app.css">
 </head>
-<body>
-  <div class="layout">
-    <nav class="sidebar">
-      <div class="brand">DEL</div>
-      <button type="button" id="nav-toggle" class="btn btn-sm nav-toggle" aria-label="Toggle navigation">☰</button>
-      {% set path = request.url.path %}
-      <ul class="nav-links">
-        <li><a href="/"{% if path == '/' %} class="active"{% endif %}>Dashboard</a></li>
-        <li><a href="/apps"{% if path.startswith('/apps') %} class="active"{% endif %}>Applications</a></li>
-        <li><a href="/resources/container"{% if path.startswith('/resources') %} class="active"{% endif %}>Resources</a></li>
-        <li><a href="/orphans"{% if path.startswith('/orphans') %} class="active"{% endif %}>Orphans</a></li>
-        <li><a href="/jobs"{% if path.startswith('/jobs') %} class="active"{% endif %}>Jobs</a></li>
-        <li><a href="/docs" target="_blank" rel="noopener">Docs</a></li>
-        <li><a href="/settings"{% if path.startswith('/settings') %} class="active"{% endif %}>Settings</a></li>
-      </ul>
-      <form method="post" action="/logout" class="logout-form">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <button type="submit" class="link-button">Log out</button>
-      </form>
+{% set path = request.url.path %}
+{% if path == '/' %}
+  {% set glossary_ctx = 'general' %}
+{% elif path.startswith('/view-apps') %}
+  {% set glossary_ctx = 'view-apps' %}
+{% elif path == '/apps' or path.startswith('/apps?') %}
+  {% set glossary_ctx = 'apps' %}
+{% elif path.startswith('/apps/') and '/plan' in path %}
+  {% set glossary_ctx = 'jobs' %}
+{% elif path.startswith('/apps/') %}
+  {% set glossary_ctx = 'app-detail' %}
+{% elif path.startswith('/resources/') %}
+  {% set glossary_ctx = 'resources-' + path.split('/')[2].split('?')[0] %}
+{% elif path.startswith('/resources') %}
+  {% set glossary_ctx = 'resources' %}
+{% elif path.startswith('/orphans') %}
+  {% set glossary_ctx = 'orphans' %}
+{% elif path.startswith('/jobs/') %}
+  {% set glossary_ctx = 'job-detail' %}
+{% elif path.startswith('/jobs') %}
+  {% set glossary_ctx = 'jobs' %}
+{% elif path.startswith('/settings') %}
+  {% set glossary_ctx = 'general' %}
+{% else %}
+  {% set glossary_ctx = 'general' %}
+{% endif %}
+<body data-glossary="{{ glossary_ctx }}">
+  <a class="skip-link" href="#main-content">Skip to main content</a>
+  <div class="layout" id="app-layout">
+    <nav class="sidebar" id="sidebar" aria-label="Main">
+      <div class="sidebar-top">
+        <a href="/" class="brand" title="Dashboard">DEL</a>
+        <div class="sidebar-controls">
+          <button type="button" id="sidebar-collapse" class="btn btn-sm icon-btn sidebar-collapse-btn"
+                  aria-label="Collapse sidebar" title="Collapse sidebar">‹</button>
+          <button type="button" id="nav-toggle" class="btn btn-sm icon-btn nav-toggle"
+                  aria-label="Open menu" aria-expanded="false" aria-controls="nav-drawer">☰</button>
+        </div>
+      </div>
+      <div class="nav-drawer" id="nav-drawer">
+        <ul class="nav-links">
+          <li><a href="/" title="Dashboard"{% if path == '/' %} class="active"{% endif %}><span class="nav-ico" aria-hidden="true">⌂</span><span class="nav-label">Dashboard</span></a></li>
+          <li><a href="/view-apps" title="View Apps"{% if path.startswith('/view-apps') %} class="active"{% endif %}><span class="nav-ico" aria-hidden="true">◫</span><span class="nav-label">View Apps</span></a></li>
+          <li><a href="/apps" title="Applications"{% if path.startswith('/apps') %} class="active"{% endif %}><span class="nav-ico" aria-hidden="true">▦</span><span class="nav-label">Applications</span></a></li>
+          <li><a href="/resources/container" title="Resources"{% if path.startswith('/resources') %} class="active"{% endif %}><span class="nav-ico" aria-hidden="true">⧉</span><span class="nav-label">Resources</span></a></li>
+          <li><a href="/orphans" title="Orphans"{% if path.startswith('/orphans') %} class="active"{% endif %}><span class="nav-ico" aria-hidden="true">◌</span><span class="nav-label">Orphans</span></a></li>
+          <li><a href="/jobs" title="Jobs"{% if path.startswith('/jobs') %} class="active"{% endif %}><span class="nav-ico" aria-hidden="true">▶</span><span class="nav-label">Jobs</span></a></li>
+          <li><a href="/docs" title="Docs" target="_blank" rel="noopener"><span class="nav-ico" aria-hidden="true">?</span><span class="nav-label">Docs</span></a></li>
+          <li><a href="/settings" title="Settings"{% if path.startswith('/settings') %} class="active"{% endif %}><span class="nav-ico" aria-hidden="true">⚙</span><span class="nav-label">Settings</span></a></li>
+        </ul>
+        <form method="post" action="/logout" class="logout-form">
+          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+          <button type="submit" class="btn btn-sm logout-btn" title="Log out"><span class="logout-label">Log out</span></button>
+        </form>
+      </div>
     </nav>
-    <main class="content">
-      {% if flash %}<div class="flash flash-ok" data-autodismiss>{{ flash }}</div>{% endif %}
-      {% if error %}<div class="flash flash-error" data-autodismiss>{{ error }}</div>{% endif %}
-      {% block content %}{% endblock %}
-    </main>
+
+    <div class="main-wrap">
+      <main class="content" id="main-content">
+        {# Successes time out; errors stay until dismissed (app.js adds the button). #}
+        {% if flash %}<div class="flash flash-ok" role="status" data-autodismiss>{{ flash }}</div>{% endif %}
+        {% if error %}<div class="flash flash-error" role="alert">{{ error }}</div>{% endif %}
+        {% block content %}{% endblock %}
+      </main>
+
+      <aside class="glossary-rail" id="glossary-rail" aria-label="Glossary">
+        {% include "_glossary.html" %}
+      </aside>
+    </div>
   </div>
+
+  {# Mobile glossary FAB + bottom sheet #}
+  <button type="button" class="glossary-fab" id="glossary-fab" aria-controls="glossary-sheet" aria-expanded="false">
+    Glossary
+  </button>
+  <div class="glossary-sheet" id="glossary-sheet" hidden>
+    <div class="glossary-sheet-backdrop" id="glossary-sheet-backdrop"></div>
+    <div class="glossary-sheet-panel" role="dialog" aria-modal="true" aria-labelledby="glossary-sheet-title">
+      <div class="glossary-sheet-bar">
+        <strong id="glossary-sheet-title">Glossary</strong>
+        <button type="button" class="btn btn-sm" id="glossary-sheet-close" aria-label="Close glossary">Close</button>
+      </div>
+      <div class="glossary-sheet-body">
+        {% include "_glossary.html" %}
+      </div>
+    </div>
+  </div>
+
+  <div class="nav-backdrop" id="nav-backdrop" hidden></div>
+
   <script src="/static/app.js"></script>
 </body>
 </html>

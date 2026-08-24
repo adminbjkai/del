@@ -7,13 +7,15 @@
 {%- endmacro %}
 {% block content %}
 {% if removed %}
-<div class="flash flash-info" style="margin-bottom:1rem">
+<div class="flash flash-info" role="status" style="margin-bottom:1rem">
   This application was <strong>not present in the latest scan</strong> — it has been removed
   (or is no longer discoverable). This page shows its last-known state for history/audit.
   Resources listed here no longer exist unless marked preserved in its final removal job.
 </div>
 {% endif %}
-<h1>{{ app.get('name', app.get('slug')) }}</h1>
+<div class="page-header">
+  <h1>{{ app.get('name', app.get('slug')) }}</h1>
+</div>
 <p class="muted">slug: {{ app.get('slug') }} · status: {{ app.get('status') }}
   {% if app.get('protected') %}<span class="badge badge-blue">protected</span>{% endif %}
 </p>
@@ -33,8 +35,18 @@
   <dl class="kv">
     <dt>Kind</dt><dd>{{ app.get('kind') or '—' }}</dd>
     <dt>Domains</dt><dd>{{ m.domain_links(app.get('domains')) }}</dd>
-    <dt>First seen</dt><dd>{{ app.get('first_seen') or '—' }}</dd>
-    <dt>Last seen</dt><dd>{{ app.get('last_seen') or '—' }}</dd>
+    <dt>Installed</dt>
+    <dd title="Best available host signal (container created / project directory age), else first discovery">
+      <span class="dt">{{ format_dt(app.get('installed_at')) }}</span>
+    </dd>
+    <dt>First seen by DEL</dt>
+    <dd title="Scan #{{ app.get('first_seen') or '—' }}">
+      <span class="dt">{{ format_dt(app.get('first_seen_at')) }}</span>
+    </dd>
+    <dt>Last seen by DEL</dt>
+    <dd title="Scan #{{ app.get('last_seen') or '—' }}">
+      <span class="dt">{{ format_dt(app.get('last_seen_at')) }}</span>
+    </dd>
     <dt>Manifest</dt><dd>{{ app.get('manifest_path') or '—' }}</dd>
     <dt>Resources</dt><dd>{{ associations | length }}</dd>
   </dl>
@@ -56,7 +68,8 @@
     <summary><strong>{{ section_title }}</strong> <span class="count-pill">{{ items | length }}</span></summary>
     {% if items %}
     <table class="table" data-enhanced data-empty="Nothing found." data-page-size="25">
-      <thead><tr><th>Resource</th>{% if section_key == 'docker' %}<th>Host port(s)</th><th>Container port(s)</th>{% endif %}<th data-filter="confidence">Confidence</th><th data-filter="risk">Risk</th><th data-filter="removal">Removal</th><th data-nosort>Evidence</th><th data-nosort>Actions</th></tr></thead>
+      <caption class="sr-only">{{ section_title }} resources associated with this application.</caption>
+      <thead><tr><th scope="col">Resource</th>{% if section_key == 'docker' %}<th scope="col">Host port(s)</th><th scope="col">Container port(s)</th>{% endif %}<th scope="col">Confidence</th><th scope="col">Risk</th><th scope="col">Removal</th><th scope="col" data-nosort>Evidence</th><th scope="col" data-nosort>Actions</th></tr></thead>
       <tbody>
         {% for a in items %}
         <tr>
@@ -83,7 +96,7 @@
             </details>
           </td>
           <td>
-            <form method="post" action="/apps/{{ app.get('slug') }}/rescan-approve" class="inline-form">
+            <form method="post" action="/apps/{{ app.get('slug') }}/rescan-approve" class="inline-form" data-submit-guard="saving…">
               <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
               <input type="hidden" name="association_id" value="{{ a.get('id') }}">
               <button type="submit" name="action" value="approve" class="link-button">approve</button>
@@ -105,7 +118,8 @@
 <section class="panel">
   <h2>Removal readiness <span class="count-pill">{{ associations | length }}</span></h2>
   <table class="table" data-enhanced data-empty="No associated resources." data-page-size="25">
-    <thead><tr><th>Resource</th><th data-filter="confidence">Confidence</th><th data-filter="risk">Risk</th><th data-filter="removal">Removal</th></tr></thead>
+    <caption class="sr-only">Every associated resource with its confidence, data-loss risk and removal eligibility.</caption>
+    <thead><tr><th scope="col">Resource</th><th scope="col">Confidence</th><th scope="col">Risk</th><th scope="col">Removal</th></tr></thead>
     <tbody>
       {% for a in associations %}
       <tr class="{% if a.get('data_loss_risk') == 'data' %}row-danger{% endif %}">

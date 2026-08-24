@@ -3,7 +3,7 @@ import shutil
 import pytest
 
 from del_app.correlate import build_apps
-from del_app.discovery import docker_src, nginx_src, proc_src
+from del_app.discovery import docker_src, fs_src, nginx_src, proc_src, systemd_src
 from del_app.models import Resource
 
 
@@ -426,6 +426,100 @@ def test_pure_systemd_app_seeded_with_unit_nginx_dir_and_port():
     assert unit_assoc.level == "confirmed"
 
 
+def test_parse_systemctl_show_does_not_mix_execstart_across_units():
+    """Batched `systemctl show` emits ExecStart before Id= and separates
+    units with a blank line. The parser must keep each unit's ExecStart."""
+    raw = (
+        "ExecStart={ path=/apps/glmflix/start.sh ; argv[]=/apps/glmflix/start.sh ; ignore_errors=no }\n"
+        "WorkingDirectory=/apps/glmflix\n"
+        "Id=glmflix.service\n"
+        "FragmentPath=/etc/systemd/system/glmflix.service\n"
+        "\n"
+        "ExecStart={ path=/apps/url2/target/release/url-shortener ; argv[]=/apps/url2/target/release/url-shortener ; ignore_errors=no }\n"
+        "WorkingDirectory=/apps/url2\n"
+        "Id=url-shortener.service\n"
+        "FragmentPath=/etc/systemd/system/url-shortener.service\n"
+        "\n"
+        "ExecStart={ path=/usr/bin/gpu-manager ; argv[]=/usr/bin/gpu-manager --log /var/log/gpu-manager.log ; ignore_errors=no }\n"
+        "WorkingDirectory=\n"
+        "Id=gpu-manager.service\n"
+        "FragmentPath=/lib/systemd/system/gpu-manager.service\n"
+    )
+    parsed = systemd_src._parse_systemctl_show(raw)
+    assert set(parsed) == {
+        "glmflix.service", "url-shortener.service", "gpu-manager.service",
+    }
+    assert "/apps/glmflix/start.sh" in parsed["glmflix.service"]["ExecStart"]
+    assert parsed["glmflix.service"]["WorkingDirectory"] == "/apps/glmflix"
+    assert "/apps/url2/target/release/url-shortener" in parsed["url-shortener.service"]["ExecStart"]
+    assert "gpu-manager" in parsed["gpu-manager.service"]["ExecStart"]
+    assert "/apps/glmflix" not in parsed["gpu-manager.service"].get("ExecStart", "")
+
+
+def test_host_monitor_bind_mounts_do_not_claim_foreign_systemd_units():
+    """Netdata bind-mounts /, /sys, /proc, /var/log for host monitoring.
+    Those must not become ownership paths that absorb glmflix / url-shortener."""
+    netdata = _container(
+        "netdata", compose_project="netdata", compose_working_dir="/apps/netdata",
+    )
+    binds = []
+    for src, dest in (
+        ("/", "/host/root"),
+        ("/sys", "/host/sys"),
+        ("/proc", "/host/proc"),
+        ("/var/log", "/host/var/log"),
+        ("/etc/passwd", "/host/etc/passwd"),
+        ("/var/run/docker.sock", "/var/run/docker.sock"),
+    ):
+        binds.append(Resource(
+            type="bind_mount",
+            key=f"{src}->netdata:{dest}",
+            display=f"{src} -> netdata:{dest}",
+            path=src,
+            state="ro",
+            data={"container": "netdata", "source": src, "destination": dest},
+        ))
+    glmflix = Resource(
+        type="systemd_unit", key="glmflix.service", display="glmflix.service",
+        path="/etc/systemd/system/glmflix.service", state="active",
+        data={
+            "is_custom": True,
+            "working_directory": "/apps/glmflix",
+            "exec_start": "/apps/glmflix/start.sh",
+        },
+    )
+    # Scrambled ExecStart as stored by the old batched-show parser — contains
+    # /var/log, which netdata also bind-mounts.
+    scrambled = Resource(
+        type="systemd_unit", key="url-shortener.service", display="url-shortener.service",
+        path="/etc/systemd/system/url-shortener.service", state="active",
+        data={
+            "is_custom": True,
+            "working_directory": None,
+            "exec_start": "/usr/bin/gpu-manager --log /var/log/gpu-manager.log",
+        },
+    )
+    own_unit = Resource(
+        type="systemd_unit", key="netdata.service", display="netdata.service",
+        path="/etc/systemd/system/netdata.service", state="active",
+        data={
+            "is_custom": True,
+            "working_directory": "/apps/netdata",
+            "exec_start": "/apps/netdata/run.sh",
+        },
+    )
+    apps = build_apps([netdata, *binds, glmflix, scrambled, own_unit], {})
+    by_slug = {r.slug: assocs for r, assocs in apps}
+    assert "netdata" in by_slug
+    net_units = {
+        a.resource_key for a in by_slug["netdata"] if a.resource_type == "systemd_unit"
+    }
+    assert "glmflix.service" not in net_units
+    assert "url-shortener.service" not in net_units
+    assert "netdata.service" in net_units
+    assert "glmflix" in by_slug
+
+
 def test_system_unit_not_under_scan_root_does_not_seed_an_app():
     """A vendor/system unit (sshd) never resolves to a scan-root project dir,
     so it must not seed a phantom app."""
@@ -464,3 +558,255 @@ def test_proc_src_sanitize_args_redacts_secret_shaped_flags():
     assert "abc123" not in cleaned
     assert "xyz" not in cleaned
     assert "--other=fine" in cleaned
+
+
+def test_fs_src_epoch_to_iso_and_directory_timestamps(tmp_path, monkeypatch):
+    """Directory resources must carry mtime/ctime ISO timestamps for the
+    Installed column (no birthtime required on Linux)."""
+    assert fs_src._epoch_to_iso(None) is None
+    assert fs_src._epoch_to_iso(0).startswith("1970-01-01")
+
+    project = tmp_path / "myproj"
+    project.mkdir()
+    (project / "docker-compose.yml").write_text("services: {}\n")
+
+    # Point scan_roots at tmp via settings
+    from del_app.config import get_settings
+
+    config_path = tmp_path / "del.toml"
+    config_path.write_text(
+        f"""
+port = 8075
+db_path = "{tmp_path}/del.db"
+manifests_dir = "{tmp_path}/manifests"
+backups_dir = "{tmp_path}/backups"
+logs_dir = "{tmp_path}/logs"
+scan_roots = ["{tmp_path}"]
+helper_socket = "{tmp_path}/helper.sock"
+protected_apps = ["del"]
+"""
+    )
+    monkeypatch.setenv("DEL_CONFIG_PATH", str(config_path))
+    get_settings.cache_clear()
+    try:
+        resources = fs_src.collect()
+    finally:
+        get_settings.cache_clear()
+
+    dirs = [r for r in resources if r.type == "directory" and r.display == "myproj"]
+    assert len(dirs) == 1
+    data = dirs[0].data
+    assert data.get("mtime") and data["mtime"].endswith("Z")
+    assert data.get("ctime") and data["ctime"].endswith("Z")
+    assert "size_kb" in data
+
+
+# --------------------------------------------------------------------------
+# Regression tests for the 2026-08-24 correlation-accuracy pass.
+# Each of these locks in a fix for a defect that could have caused a WRONG
+# removal — an operator deleting one app and taking another app's live
+# resources with it.
+# --------------------------------------------------------------------------
+
+
+def test_systemd_app_wins_its_own_nginx_site_over_a_host_network_container():
+    """A systemd-run app must claim the vhost that proxies to its own port.
+
+    Regression: the nginx-by-port step used to run before the pass that puts a
+    systemd unit's ports into `app.ports`, so a systemd app could never match
+    its own site and whichever container claimed the port first took the vhost.
+
+    NOTE the ExecStart deliberately carries no `--port N` flag. The unit-seeding
+    step scrapes that flag when it is present, which masked the ordering bug;
+    the real-world case is a service that reads its port from a config file or
+    environment, where the *only* source of the port is the listener's cgroup
+    owner — which is exactly what used to be discovered too late.
+    """
+    unit = Resource(
+        type="systemd_unit", key="astv-remote.service", display="astv-remote.service",
+        path="/etc/systemd/system/astv-remote.service", state="active",
+        data={
+            "is_custom": True,
+            "working_directory": "/apps/astv-remote",
+            "exec_start": "/apps/astv-remote/.venv/bin/gunicorn -c gunicorn.conf.py astv:app",
+        },
+    )
+    port = _port(8083, systemd_unit="astv-remote.service")
+    site = Resource(
+        type="nginx_site",
+        key="/etc/nginx/sites-enabled/astv.bjk.ai.conf",
+        display="astv.bjk.ai",
+        path="/etc/nginx/sites-enabled/astv.bjk.ai.conf",
+        state="enabled",
+        data={
+            "server_names": ["astv.bjk.ai"],
+            "upstreams": [{"host": "127.0.0.1", "port": 8083}],
+            "enabled": True,
+        },
+    )
+    # An unrelated host-network container also exists on this host.
+    other = _container("bjkflix", compose_project="bjk-ai-flix",
+                       compose_working_dir="/apps/bjk-ai-flix")
+
+    apps = build_apps([unit, port, site, other], {})
+    by_slug = {r.slug: assocs for r, assocs in apps}
+
+    owners = [
+        slug for slug, assocs in by_slug.items()
+        if any(a.resource_type == "nginx_site" and a.resource_key == site.key for a in assocs)
+    ]
+    assert owners == ["astv-remote"], f"vhost went to {owners}, expected only astv-remote"
+
+
+def test_nested_compose_file_attaches_to_the_enclosing_app_not_a_phantom():
+    """`/apps/karakeep/docker/compose.yml` belongs to karakeep.
+
+    Regression: the compose step slugified by directory basename, inventing a
+    phantom app literally named "docker" that then accumulated the nested
+    compose roots of every unrelated project and reported them safe to delete.
+    """
+    container = _container("karakeep_web", compose_project="karakeep",
+                           compose_working_dir="/apps/karakeep")
+    nested = Resource(
+        type="compose_project", key="/apps/karakeep/docker/docker-compose.yml",
+        display="docker", path="/apps/karakeep/docker/docker-compose.yml",
+        state="present",
+        data={"working_dir": "/apps/karakeep/docker", "declared_name": None, "images": []},
+    )
+    apps = build_apps([container, nested], {})
+    slugs = {r.slug for r, _ in apps}
+    assert "docker" not in slugs, "a phantom app named after the sub-directory was created"
+
+    by_slug = {r.slug: assocs for r, assocs in apps}
+    assert any(
+        a.resource_type == "compose_project" and a.resource_key == nested.key
+        for a in by_slug["karakeep"]
+    ), "nested compose file was not attached to karakeep"
+
+
+def test_generic_basename_compose_root_does_not_collapse_unrelated_projects():
+    """Two unrelated apps each with a `deploy/` compose root stay separate."""
+    a = Resource(
+        type="compose_project", key="/apps/gongyu/deploy/compose.yml",
+        display="deploy", path="/apps/gongyu/deploy/compose.yml", state="present",
+        data={"working_dir": "/apps/gongyu/deploy", "declared_name": None, "images": []},
+    )
+    b = Resource(
+        type="compose_project", key="/apps/nocodb/deploy/compose.yml",
+        display="deploy", path="/apps/nocodb/deploy/compose.yml", state="present",
+        data={"working_dir": "/apps/nocodb/deploy", "declared_name": None, "images": []},
+    )
+    apps = build_apps([a, b], {})
+    slugs = {r.slug for r, _ in apps}
+    assert "deploy" not in slugs
+    assert {"gongyu", "nocodb"} <= slugs, f"got {slugs}"
+
+    # and neither app claims the other's compose root
+    by_slug = {r.slug: assocs for r, assocs in apps}
+    gongyu_keys = {x.resource_key for x in by_slug["gongyu"]}
+    assert b.key not in gongyu_keys
+
+
+def test_docker_builtin_networks_are_never_associated_to_an_app():
+    """bridge/host/none always exist and can never be removed, so they must
+    not appear in any app's resource set (a plan would emit network_rm)."""
+    container = _container("solo", compose_project="solo", compose_working_dir="/apps/solo")
+    nets = [
+        Resource(type="network", key=name, display=name, path=None, state="active",
+                 data={"attached_containers": ["solo"], "driver": driver})
+        for name, driver in (("bridge", "bridge"), ("host", "host"), ("none", "null"))
+    ]
+    user_net = Resource(
+        type="network", key="solo_default", display="solo_default", path=None,
+        state="active", data={"attached_containers": ["solo"], "compose_project": "solo"},
+    )
+    apps = build_apps([container, *nets, user_net], {})
+    _record, assocs = apps[0]
+    network_keys = {a.resource_key for a in assocs if a.resource_type == "network"}
+    assert network_keys == {"solo_default"}, f"built-ins leaked in: {network_keys}"
+
+
+def test_app_claims_its_project_root_when_compose_lives_in_a_subdirectory():
+    """`/apps/karakeep` belongs to karakeep even though its compose file is at
+    `/apps/karakeep/docker/`.
+
+    Regression: the directory step only matched an app's own working dir or a
+    path *nested* under it, never the parent. The project root therefore fell
+    to the 50-point name-similarity fallback, which is below the removable
+    threshold — so removing the app left its entire directory on disk.
+    """
+    container = _container("karakeep_web", compose_project="karakeep",
+                           compose_working_dir="/apps/karakeep/docker")
+    project_root = Resource(
+        type="directory", key="/apps/karakeep", display="karakeep",
+        path="/apps/karakeep", state="present", data={"size_kb": 4096},
+    )
+    apps = build_apps([container, project_root], {})
+    by_slug = {r.slug: assocs for r, assocs in apps}
+    assoc = next(
+        a for a in by_slug["karakeep"]
+        if a.resource_type == "directory" and a.resource_key == "/apps/karakeep"
+    )
+    assert assoc.confidence >= 90, f"project root only reached {assoc.confidence}"
+    assert assoc.removal_eligible == "safe"
+
+
+def test_project_root_rule_stays_within_one_component_of_a_scan_root():
+    """The rule must claim at most `{scan_root}/{one component}` — never the
+    scan root itself, and never a sibling.
+
+    The original version of this test only checked the sibling case, which the
+    buggy rule never violated; it passed against the defect it was meant to
+    catch. The real failure was reaching an ANCESTOR, so assert that directly.
+    """
+    a = _container("foo_web", compose_project="foo", compose_working_dir="/apps/foo/docker")
+    sibling = Resource(
+        type="directory", key="/apps/bar", display="bar",
+        path="/apps/bar", state="present", data={},
+    )
+    scan_root = Resource(
+        type="directory", key="/apps", display="apps",
+        path="/apps", state="present", data={},
+    )
+    apps = build_apps([a, sibling, scan_root], {})
+    by_slug = {r.slug: assocs for r, assocs in apps}
+    claimed = {
+        x.resource_key for x in by_slug["foo"]
+        if x.resource_type == "directory" and x.confidence >= 90
+    }
+    assert "/apps" not in claimed, "claimed the scan root itself"
+    assert "/apps/bar" not in claimed, "claimed a sibling"
+
+
+def test_project_root_rule_does_not_claim_another_projects_tree():
+    """An app with a clone inside someone else's tree must not claim that
+    tree's root.
+
+    Regression found in production: `banban` had a copy at
+    /apps/agyinstall/banban, and the parent-directory rule then gave it
+    /apps/agyinstall at confidence 92 — marking an unrelated project's root
+    as shared and blocking its real owner from being removed cleanly.
+    """
+    banban = _container("banban", compose_project="banban",
+                        compose_working_dir="/apps/banban/docker")
+    clone = Resource(
+        type="compose_project", key="/apps/agyinstall/banban/compose.yml",
+        display="banban", path="/apps/agyinstall/banban/compose.yml", state="present",
+        data={"working_dir": "/apps/agyinstall/banban", "declared_name": None, "images": []},
+    )
+    foreign_root = Resource(
+        type="directory", key="/apps/agyinstall", display="agyinstall",
+        path="/apps/agyinstall", state="present", data={},
+    )
+    own_root = Resource(
+        type="directory", key="/apps/banban", display="banban",
+        path="/apps/banban", state="present", data={},
+    )
+    apps = build_apps([banban, clone, foreign_root, own_root], {})
+    by_slug = {r.slug: assocs for r, assocs in apps}
+    claimed = {
+        a.resource_key for a in by_slug["banban"]
+        if a.resource_type == "directory" and a.confidence >= 90
+    }
+    assert "/apps/agyinstall" not in claimed, "claimed an unrelated project's root"
+    assert "/apps/banban" in claimed, "should still claim its own project root"

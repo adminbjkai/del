@@ -1,0 +1,127 @@
+{% extends "base.html" %}
+{% block title %}View Apps{% endblock %}
+{% block content %}
+<div class="page-header app-gallery-header">
+  <div>
+    {# The count is what actually changes as filters run, so the live region lives here. #}
+    <h1>View Apps <span class="count-pill" id="gallery-visible-count" role="status">{{ apps | length }}</span></h1>
+    <p class="muted gallery-lede">A launchpad for domains verified from the latest DEL scan and a live HTTPS check.</p>
+  </div>
+  <div class="page-actions">
+    <span class="badge badge-ok">{{ apps | length }} online</span>
+    {% if excluded_count %}<span class="badge badge-grey" title="Enabled domains that failed the live HTTPS check">{{ excluded_count }} unavailable hidden</span>{% endif %}
+    <a class="btn btn-sm" href="/view-apps?refresh=1" data-pending-label="Checking…"
+       title="Bypass the two-minute health cache and check every domain again">Refresh health</a>
+  </div>
+</div>
+
+<section class="gallery-toolbar" aria-label="App gallery controls">
+  <label class="gallery-search-wrap">
+    <span class="sr-only">Search apps</span>
+    <input id="gallery-search" class="gallery-input" type="search" placeholder="Search apps or domains…" autocomplete="off">
+  </label>
+  <label>
+    <span class="sr-only">Category</span>
+    <select id="gallery-category" class="gallery-select">
+      <option value="">All categories</option>
+      <option value="__favorites">Favorites</option>
+      {% for category in categories %}<option value="{{ category }}">{{ category }}</option>{% endfor %}
+    </select>
+  </label>
+  <label>
+    <span class="sr-only">Sort apps</span>
+    <select id="gallery-sort" class="gallery-select">
+      <option value="category">Category</option>
+      <option value="name">Name</option>
+      <option value="domain">Domain</option>
+      <option value="latency">Response time</option>
+      <option value="custom">My order</option>
+    </select>
+  </label>
+  <div class="gallery-view-switch" role="group" aria-label="Gallery view">
+    <button type="button" class="btn btn-sm active" data-gallery-view="grid" aria-pressed="true" title="Grid view">▦ <span>Grid</span></button>
+    <button type="button" class="btn btn-sm" data-gallery-view="list" aria-pressed="false" title="List view">☷ <span>List</span></button>
+  </div>
+  <button type="button" class="btn btn-sm" id="gallery-layout-toggle" aria-expanded="false" aria-controls="gallery-layout-panel">Customize</button>
+</section>
+
+<section class="gallery-layout-panel" id="gallery-layout-panel" hidden aria-label="Customize gallery layout">
+  <label>Card width
+    <input id="gallery-card-width" type="range" min="190" max="380" step="10" value="250">
+    <output id="gallery-card-width-value">250px</output>
+  </label>
+  <label>Spacing
+    <select id="gallery-density" class="gallery-select">
+      <option value="compact">Compact</option>
+      <option value="comfortable" selected>Comfortable</option>
+      <option value="roomy">Roomy</option>
+    </select>
+  </label>
+  <label class="gallery-check"><input id="gallery-show-hidden" type="checkbox"> Show hidden apps while customizing</label>
+  <p class="muted">Use each card’s category menu, star, and visibility control. Drag cards to save a personal order. Preferences stay in this browser only.</p>
+  <button type="button" class="btn btn-sm" id="gallery-reset">Reset gallery preferences</button>
+</section>
+
+<div class="gallery-meta muted" id="gallery-meta">
+  {% if checked_at %}Health checked {{ relative_dt(checked_at) }} · {% endif %}latest completed scan #{{ latest_scan or '—' }}
+</div>
+
+{% if apps %}
+<div id="app-gallery" class="app-gallery" data-view="grid" data-density="comfortable">
+  {% for category in categories %}
+  <section class="gallery-section" data-gallery-section="{{ category }}">
+    <div class="gallery-section-heading">
+      <h2>{{ category }}</h2>
+      <span class="count-pill">{{ apps | selectattr('category', 'equalto', category) | list | length }}</span>
+    </div>
+    <div class="gallery-grid">
+      {% for app in apps if app.category == category %}
+      <article class="app-launch-card" draggable="false"
+               data-app-id="{{ app.id }}" data-name="{{ app.name | lower }}"
+               data-domain="{{ app.domain }}" data-category="{{ app.category }}"
+               data-latency="{{ app.latency_ms or 999999 }}">
+        <span class="gallery-drag-handle" aria-hidden="true" title="Drag to reorder">⋮⋮</span>
+        <a class="app-launch-link" href="{{ app.url }}" target="_blank" rel="noopener noreferrer">
+          <span class="app-icon-shell">
+            <img class="app-icon" src="{{ app.icon_url }}" alt="" loading="lazy" referrerpolicy="no-referrer">
+            <span class="app-icon-fallback" aria-hidden="true">{{ app.initial }}</span>
+          </span>
+          <span class="app-launch-copy">
+            <strong class="app-launch-name">{{ app.name }}</strong>
+            <span class="app-launch-domain">{{ app.domain }}</span>
+          </span>
+          <span class="app-launch-arrow" aria-hidden="true">↗</span>
+        </a>
+        {# After the link on purpose: Tab reaches each app before its star.
+           The button is absolutely positioned, so nothing moves visually. #}
+        <button type="button" class="app-favorite" aria-label="Add {{ app.name }} to favorites" aria-pressed="false" title="Favorite">☆</button>
+        <div class="app-card-meta">
+          <span class="live-dot" aria-hidden="true"></span><span>Online</span>
+          <span>HTTP {{ app.http_status }}</span>
+          <span>{{ app.latency_ms }} ms</span>
+          <a href="/apps/{{ app.slug }}" title="Open DEL inventory detail">Inventory</a>
+        </div>
+        <div class="app-card-editor" hidden>
+          <label>Category
+            <select class="gallery-card-category gallery-select">
+              {% for option in ['AI & Automation', 'Media & Streaming', 'Notes & Knowledge', 'Productivity', 'Files & Data', 'Developer Tools', 'Infrastructure', 'Security & Identity', 'Business & Finance', 'Utilities', 'Other'] %}
+              <option value="{{ option }}"{% if app.category == option %} selected{% endif %}>{{ option }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label class="gallery-check"><input class="gallery-card-hidden" type="checkbox"> Hide</label>
+        </div>
+      </article>
+      {% endfor %}
+    </div>
+  </section>
+  {% endfor %}
+</div>
+<div id="gallery-empty" class="gallery-empty panel" hidden>No online apps match these filters.</div>
+{% else %}
+<div class="panel gallery-empty">
+  <h2>No verified apps are online</h2>
+  <p class="muted">The latest completed scan has no enabled domain that passed the HTTPS health check. Run a scan or refresh health after correcting DNS, TLS, Nginx, or the upstream service.</p>
+</div>
+{% endif %}
+{% endblock %}

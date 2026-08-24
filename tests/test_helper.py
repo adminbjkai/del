@@ -129,9 +129,35 @@ def test_unit_name_injection_rejected(bad):
         V.validate_unit_name(bad)
 
 
-@pytest.mark.parametrize("good", ["nginx.service", "my-app@1.timer", "a_b.C.service"])
+@pytest.mark.parametrize("good", ["my-app.service", "my-app@1.timer", "a_b.C.service"])
 def test_unit_name_accepted(good):
     assert V.validate_unit_name(good) == good
+
+
+@pytest.mark.parametrize("protected", [
+    "del-helper.service",   # the root daemon itself — stopping it is the
+    "del-web.service",      # first move in a helper-code-swap attack
+    "ssh.service",
+    "sshd.service",
+    "nginx.service",
+    "docker.service",
+    "systemd-journald.service",
+    "cron.service",
+    "DEL-Helper.service",   # matching is case-insensitive
+])
+def test_protected_units_rejected(protected):
+    """Host infrastructure and DEL's own units must be refused helper-side,
+    not merely by the web tier's foreign-unit guard."""
+    with pytest.raises(V.ValidationError, match="protected"):
+        V.validate_unit_name(protected)
+
+
+def test_protected_units_are_policy_overridable(tmp_policy):
+    tmp_policy["protected_units"] = ["only-this.service"]
+    with pytest.raises(V.ValidationError, match="protected"):
+        V.validate_unit_name("only-this.service", tmp_policy)
+    # nginx is no longer protected under this custom policy
+    assert V.validate_unit_name("nginx.service", tmp_policy) == "nginx.service"
 
 
 def test_unit_rm_requires_file(tmp_policy):
@@ -239,6 +265,14 @@ def test_cron_rm_already_absent_is_idempotent_success(tmp_policy):
     path = os.path.join(cron_dir, "ghost")
     ops = H.Operations(tmp_policy)
     res = ops.cron_rm({"path": path}, dry_run=False)
+    assert "already absent" in res["output"]
+    assert res["changed"] == []
+
+
+def test_process_term_already_gone_is_idempotent_success(tmp_policy):
+    """Quiesce must not fail the job when systemd_stop already reaped the pid."""
+    ops = H.Operations(tmp_policy)
+    res = ops.process_term({"pid": 999999999, "expected_exe": "/bin/true"}, dry_run=False)
     assert "already absent" in res["output"]
     assert res["changed"] == []
 

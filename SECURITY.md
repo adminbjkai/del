@@ -2,25 +2,44 @@
 
 ## Auth model
 
-- Single admin account (or more, if created), Argon2id password hashing (bcrypt
-  fallback), created only via `del-admin create-admin` / `change-password` — there
-  are no default or hardcoded credentials.
-- Every route requires an authenticated session except `/login` and `/healthz`.
-  Unauthenticated requests to protected routes redirect to `/login` (303).
-- If an initial password was generated during setup, it is stored once at
-  `/apps/del/config/admin-initial-password.txt`, mode `0600`, owner `bjkai`. **Log
-  in, run `del-admin change-password`, then delete this file.** It is not
-  regenerated and nothing re-reads it after first login — leaving it in place is
-  the one credential-at-rest risk in this deployment.
+- Single admin account (or more, if created), **Argon2id** password hashing via
+  `argon2.PasswordHasher` — that is the only hasher; there is no bcrypt fallback
+  path. Accounts are created only via `del-admin create-admin` /
+  `change-password`; there are no default or hardcoded credentials.
+- The unauthenticated routes are exactly: `/login`, `/healthz`, `/favicon.ico`
+  (a 301 to the SVG), and the four static assets `/static/app.css`,
+  `/static/app.js`, `/static/ag-grid-community.min.js`, `/static/favicon.svg`.
+  Every other route carries `Depends(auth.require_user)` — including
+  `/app-icon/{domain}`, the gallery's server-side favicon proxy. Unauthenticated
+  requests to protected routes redirect to `/login` (303).
+- Nothing writes a password to disk. `del-admin` takes it from a `getpass` prompt
+  or stdin and persists only the argon2 hash. The
+  `/apps/del/config/admin-initial-password.txt` this document used to describe has
+  been deleted and is not regenerated.
 
 ## Sessions, CSRF, rate limiting
 
 - Session tokens are server-side (a `sessions` table keyed by `token_hash`, not the
   raw token), 12-hour expiry (`session_hours` in `del.toml`).
-- Cookies: `HttpOnly`, `Secure`, `SameSite=Lax`.
+- Cookies: `HttpOnly`, `Secure`, `SameSite=Lax`. The pre-login CSRF seed cookie
+  carries `Secure` too.
+- Expired session rows are swept on every successful login. Expiry was always
+  enforced at read time, so a stale row was never an auth bypass, but nothing
+  deleted them and the table only grew.
 - CSRF token required and checked on every mutating (`POST`) request
   (`auth.csrf_token` / `auth.check_csrf`); forms and `app.js` fetches both carry it.
-- Login is rate-limited: 5 attempts/minute/IP, in-memory, with backoff.
+- Login is rate-limited to 5 attempts per 60 seconds per IP — a plain in-memory
+  sliding window (`auth.rate_limited` / `auth.record_attempt`). There is no
+  escalating backoff and no persistence: a `del-web` restart clears the counters.
+
+## File permissions
+
+- `/apps/del/database/del.db` (+ `-wal`/`-shm`): mode `0640`. It holds the admin
+  argon2 hash and session token hashes, and was previously world-readable.
+- `/apps/del/backups/`: mode `0750`.
+- `/apps/del/config/secret.key` (the HMAC signing key): mode `0600`.
+- `/usr/local/lib/del-helper/` and `/etc/del/helper-policy.json`: `root:root`,
+  not writable by `bjkai`. See the next section for why that is load-bearing.
 
 ## Helper privilege split
 
@@ -28,9 +47,26 @@
 constructs shell strings from user input. Instead it sends a typed operation name +
 validated structured arguments as JSON over a unix socket
 (`/run/del/helper.sock`, mode `0660`, owner `root:bjkai`) to `del-helper`, a separate
-~600-line stdlib-only daemon running as `root`. `del-helper` re-validates every
+stdlib-only daemon running as `root` (`del_helper.py` ~740 lines plus
+`validation.py` ~400, about 1,100 lines together). `del-helper` re-validates every
 argument independently of whatever `del-web` claims, and executes exclusively via
 subprocess argument arrays (`shell=False`) — never a shell string.
+
+### Where the helper's code and policy actually live
+
+`del-helper.service` runs `/usr/local/lib/del-helper/del_helper.py` with
+`/etc/del/helper-policy.json`, both `root:root` and installed by
+`scripts/install.sh` with `install -o root -g root`. The repo copies (`helper/*.py`,
+`config/helper-policy.json`) are the source you edit; the deployed copies are what
+root executes and reads.
+
+This split is the point of the boundary, not a packaging detail. `/apps/del` is
+writable by `bjkai`, the account `del-web` runs as — so pointing `ExecStart` at the
+working tree would let a compromised web tier rewrite the code root is about to run,
+and rewrite the allowlist policy alongside it. **After editing `helper/` or
+`config/helper-policy.json`, re-run `scripts/install.sh` (or re-`install` the two
+paths by hand) before restarting `del-helper`; a plain restart re-runs the old
+deployed copy.**
 
 ### Allowlisted operations (summary)
 
@@ -38,19 +74,52 @@ subprocess argument arrays (`shell=False`) — never a shell string.
 `image_rm`, `volume_rm`, `network_rm`, `systemd_stop`/`systemd_disable`/`systemd_rm_unit`,
 `cron_rm`, `nginx_rm_site`, `nginx_test`, `nginx_test_reload`, `path_delete`,
 `path_restore`, `tmux_kill`, `process_term`, `backup_tar`, `volume_backup`,
-`file_backup` — 22 operations total. Nothing
-outside this fixed list is possible; a compromised `del-web` cannot smuggle an
-arbitrary command past the
-helper. Every operation supports `dry_run` (returns what would happen without
-changing anything) and is logged to `/apps/del/logs/helper-audit.log` regardless of
-outcome. Live volume deletion additionally requires a plan option, a per-volume
-checkbox, and a typed confirmation phrase at execution time (see
-docs/REMOVAL-LIFECYCLE.md).
+`file_backup` — **22 operations**, matching `ALLOWED_OPS` in `del_helper.py`.
+Nothing outside this fixed list is possible; a compromised `del-web` cannot smuggle
+an arbitrary command past the helper. Every operation supports `dry_run` (returns
+what would happen without changing anything) and is logged to
+`/apps/del/logs/helper-audit.log` regardless of outcome. Live volume deletion
+additionally requires a plan option, a per-volume checkbox, and a typed
+confirmation phrase at execution time (see docs/REMOVAL-LIFECYCLE.md).
 
-Approved plans are signed with an HMAC (key readable only by root and the `bjkai`
-user, see `/apps/del/config/secret.key`); the helper does not trust the plan
-signature alone and still re-validates each argument against its own rules
-(`helper-policy.json`).
+### Where plan integrity is enforced
+
+Plans are signed with an HMAC over the canonical JSON of their steps (key
+`/apps/del/config/secret.key`, mode `0600`) when written to the `plans` table, and
+`planner.verify_plan()` recomputes and compares it before a job is created and
+again before it runs. **That check is entirely web-side.**
+
+The helper has no concept of a plan. `handle_request` reads `op`, `args` and
+`dry_run`; it also records `plan_id`, `step_id`, `job_id` and `requested_by` in the
+audit line, but it does not — and cannot — verify them, because it never sees the
+`plans` table. What bounds a compromised web tier is therefore not the signature
+but the fixed op allowlist plus the helper's own independent argument validation
+against `/etc/del/helper-policy.json`. Read every "must appear in the approved
+plan" phrasing in this repo as a *planner* constraint, not a helper one.
+
+### Helper-side refusals that do not depend on the caller
+
+These are enforced inside the root daemon, because the web tier's equivalents run
+inside the process an attacker would already control:
+
+- **`protected_units`** — `systemd_stop`/`systemd_disable`/`systemd_rm_unit` refuse
+  any unit matching the policy's glob list: DEL's own `del-*.service`/`del-*.timer`
+  first (stopping `del-helper` is the opening move in a helper-code-swap attack),
+  then `ssh`/`sshd`, `nginx`, `docker`/`containerd`, `systemd-*`, `cron`, `dbus`,
+  `network*`, `polkit`, `rsyslog`, `fail2ban`, `ufw`.
+- **`path_restore` confinement** — the destination must resolve under a DEL-managed
+  root (the approved deletion roots plus nginx sites, `/etc/systemd/system`,
+  `/etc/cron.d`), must not be protected or never-delete, and **must keep the
+  backup's basename**. `/etc/systemd/system` stays restorable so unit removal can
+  roll back, but only as the unit that was removed — a backup cannot be planted
+  under an attacker-chosen name, and a protected unit cannot be recreated.
+- **`backup_tar` / `file_backup` source confinement** — the path being read must be
+  under a managed root, so the operator-readable backups directory cannot be used
+  to exfiltrate `/etc/shadow` or a TLS private key via root.
+- **Audit correlation** — every helper request logs `plan_id`, `step_id`, `job_id`
+  and `requested_by` alongside the op and args, so a root-level action is
+  attributable to a DEL user and job rather than matched to `logs/audit.log` by
+  timestamp.
 
 ### Protected roots
 
@@ -58,30 +127,33 @@ Never deletable, even if referenced in an approved plan:
 `/`, `/bin`, `/boot`, `/dev`, `/etc`, `/home`, `/lib`, `/lib64`, `/opt`, `/proc`,
 `/root`, `/run`, `/sbin`, `/srv`, `/sys`, `/tmp`, `/usr`, `/var`, `/apps`, `/data`,
 and `/apps/del` itself. `path_delete` additionally requires the target to
-canonicalize (via `realpath`, no symlink escape) under one of the approved
-deletion roots (`/apps`, `/data`, `/srv`, `/var/www`, `/home/bjkai`,
-`/etc/nginx/sites-{available,enabled}`, `/etc/systemd/system`, `/etc/cron.d`) *and*
-appear in the specific approved plan; it refuses mountpoints outright.
+canonicalize (via `realpath`, no symlink escape) at least one component deep under
+an approved deletion root (`/apps`, `/data`, `/srv`, `/var/www`, `/home/bjkai`,
+`/etc/nginx/sites-{available,enabled}`, `/etc/systemd/system`, `/etc/cron.d`), to be
+absent from the `never_delete` list, and not to be a mountpoint. (The planner
+separately only emits paths it derived from an approved plan, but as above, the
+helper cannot check that.)
 
 DEL itself is recorded as `protected=1` in the `applications` table (see
 `manifests/del.yaml`, `notes: "Protected application — must never be removable
 through DEL"`), and the planner refuses to build a removal plan for it — DEL cannot
 remove itself by design, not just by policy.
 
-## Documentation site auth (`/docs`, `/_next`)
+## Documentation site (`/docs`, `/_next`)
 
 The rendered Fern documentation site (`del-docs.service`, a `fern-api docs dev`
-process on 127.0.0.1:8072/8073) is exposed at `https://del.bjk.ai/docs`. It is
-**not** protected by DEL's own session/CSRF auth — Nginx instead gates the
-`/docs` and `/_next` locations directly with HTTP basic auth
-(`auth_basic_user_file /etc/nginx/.del-docs-htpasswd`), i.e. those two paths
-bypass the app entirely and are proxied straight to the docs dev server. The
-basic-auth password is tracked in plaintext at
-`/apps/del/config/docs-basic-auth-password.txt` (mode `0600`) for operator
-reference; the htpasswd hash Nginx actually checks against lives outside the
-repo at `/etc/nginx/.del-docs-htpasswd`. The docs site itself serves only
-static/rendered documentation content — it has no access to the DEL database,
-helper socket, or app session cookies.
+process on 127.0.0.1:8072/8073) is exposed at `https://del.bjk.ai/docs` **without
+HTTP basic auth** (open documentation by operator choice, 2026-07-26). Those
+paths bypass the app entirely and are proxied straight to the docs dev server.
+The docs site serves only static/rendered documentation — it has no access to
+the DEL database, helper socket, or app session cookies. The **app UI** at `/`
+still requires DEL session login.
+
+The whole-server inventory export at `/miscwork.html` (and `/inventory`) is the
+**only** location in the vhost with an `auth_basic` directive — it is HTTP
+basic-auth protected via `/etc/nginx/.del-docs-htpasswd` because it contains a full
+host inventory dump, not public docs. Despite the file's name, `/docs` does not use
+it.
 
 ## What is never logged
 
@@ -99,8 +171,8 @@ and reports on other apps, even though DEL doesn't own or manage these directly
 
 - **Cockpit** (the systemd/services web UI for non-Docker apps) is bound to
   `127.0.0.1:9091` only — not reachable directly from the internet. The sole
-  path in is `https://cockpit.bjk.ai`, an nginx vhost behind HTTP basic auth,
-  the same pattern DEL's own docs site uses for `/docs`.
+  path in is `https://cockpit.bjk.ai`, an nginx vhost behind HTTP basic auth —
+  the same pattern as DEL's inventory export at `/miscwork.html`.
 - **`nginx sites-enabled` must contain only symlinks** to `sites-available`
   files — nginx's `include sites-enabled/*;` has no filename filter, so any
   stray regular file or backup left in `sites-enabled` is parsed as a vhost on
@@ -113,16 +185,18 @@ and reports on other apps, even though DEL doesn't own or manage these directly
 
 ## Threat model
 
-Full attacker/vector/mitigation table: see
-[docs/server-audit.md §14 "Threat model"](docs/server-audit.md). Summary:
+The original full attacker/vector/mitigation table lives in `docs/server-audit.md`
+§14, which is gitignored and present on the deployment host only. Summary:
 
 | Vector | Mitigation |
 |---|---|
-| Internet → Nginx → auth bypass | TLS termination + security headers at Nginx; `del-web` bound to 127.0.0.1 only; auth on every route but `/healthz`; rate-limited login |
+| Internet → Nginx → auth bypass | TLS termination + security headers (incl. CSP and HSTS with `includeSubDomains`) at Nginx; `del-web` bound to 127.0.0.1 only; a session required on every route except `/login`, `/healthz`, `/favicon.ico` and the four `/static/*` assets; rate-limited login |
 | Compromised web session → arbitrary host command | Fixed 22-op helper allowlist with independent re-validation bounds the blast radius regardless of what `del-web` is tricked into requesting |
-| Path traversal / symlink escape | `realpath` canonicalization + protected-root refusal + approved-root/approved-plan checks on every path argument |
+| Compromised web tier → rewrite what root runs | Helper code and policy are deployed `root:root` outside `/apps/del`; `protected_units` refuses to stop `del-helper` itself |
+| Path traversal / symlink escape | `realpath` canonicalization + protected-root refusal + approved-root confinement on every path argument, including backup *reads* and restore *writes* |
 | Command/argument injection | subprocess arg-arrays only, `shell=False`, everywhere |
-| Secrets exposure | env values stripped at collection; never logged or stored |
+| Secrets exposure | env values stripped at collection; never logged or stored; DB and backups no longer world-readable |
+| Server-side request forgery via `/app-icon/` | The proxy accepts only hostnames that are enabled Nginx sites in the latest scan, requires a session, fetches `https://{host}/favicon.ico` only, caps the body at 256 KiB, and checks content type |
 
 ## Hardening notes
 
@@ -134,10 +208,29 @@ Full attacker/vector/mitigation table: see
   `ProtectKernelModules=true`, `ProtectClock=true`, `RestrictSUIDSGID=true`,
   `RestrictRealtime=true`, `LockPersonality=true`, `MemoryDenyWriteExecute=true`,
   `SystemCallArchitectures=native`.
-- CSP is `default-src 'self'` with no external assets anywhere in the UI (no CDN
-  scripts, fonts, or images), reducing exposure if a template is ever compromised.
-- `/apps/del/config/secret.key` (HMAC signing key) and
-  `/apps/del/config/admin-initial-password.txt` are both mode `0600` — keep them
-  that way; delete the initial-password file once the password has been changed.
-- `del-docs.service`: `NoNewPrivileges=true`, runs as `bjkai`; relies on Nginx
-  basic auth (not a systemd sandbox profile) since it only serves docs content.
+- **Response headers**, all set in `config/nginx-del.bjk.ai.conf` with `always`:
+  `X-Content-Type-Options: nosniff`, `X-Frame-Options: DENY`, `Referrer-Policy:
+  no-referrer`, `Strict-Transport-Security: max-age=31536000; includeSubDomains`,
+  and a real `Content-Security-Policy`:
+
+  ```
+  default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';
+  img-src 'self' data:; font-src 'self'; connect-src 'self'; form-action 'self';
+  frame-ancestors 'none'; base-uri 'self'; object-src 'none'
+  ```
+
+  Two deliberate relaxations: `style-src 'unsafe-inline'`, because a handful of
+  templates still carry inline `style=""` attributes (tightening it means moving
+  those to classes first); and `img-src data:`, for the inline SVG data URI used in
+  some views. Everything else is `'self'` — AG Grid is vendored, there are no CDN
+  scripts or web fonts, and app icons are proxied through `/app-icon/` rather than
+  loaded from a third-party origin, so no external asset origin is needed.
+  Note that nginx's `add_header` is not inherited into a `location` block that
+  defines its own; none of the blocks in this vhost do, but adding one means
+  repeating these directives.
+- `/apps/del/config/secret.key` (HMAC signing key) is mode `0600` — keep it that
+  way.
+- `del-docs.service`: `NoNewPrivileges=true`, runs as `bjkai`. It has **no** basic
+  auth in front of it and no systemd sandbox profile beyond that flag; the
+  justification is that it serves only static/rendered documentation and holds no
+  access to the DEL database, helper socket, or session cookies.

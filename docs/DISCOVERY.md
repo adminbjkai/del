@@ -42,16 +42,45 @@ score.
 
 | Level | Score range | Removal eligibility |
 |---|---|---|
-| confirmed | 95–100 | eligible for automated inclusion in a plan |
-| high | 80–94 | eligible for automated inclusion in a plan |
-| probable | 60–79 | requires explicit user approval per-resource before inclusion |
-| possible | 30–59 | **always blocked** until manually confirmed by the operator; never auto-removable |
+| confirmed | 95–100 | included in a plan automatically (unless excluded, or shared and unapproved) |
+| high | 80–94 | included in a plan automatically (unless excluded, or shared and unapproved) |
+| probable | 60–79 | **never** included; always preserved with a warning. Raise it via a manifest entry to make it removable |
+| possible | 30–59 | **always blocked**; never auto-removable |
 | unrelated | <30 | not associated |
-| manual | (user-assigned) | set by a manifest entry; treated as confirmed/high depending on entry |
+| manual | `source = 'manual'` | treated exactly like confirmed/high |
 
 Example evidence weights: a Compose project label match is `confirmed`; an nginx
 `proxy_pass` port matching a container's published port is `high`; name-similarity
 alone is `possible` and is never sufficient by itself for automated removal.
+
+### What "requires approval" actually means
+
+`planner._classify` returns `(level, is_step=False, "requires per-resource
+approval")` for **every** `probable` association, unconditionally — it never looks
+at `approved_by_user` for them. So approving a `probable` row on the app detail
+page does not turn it into a plan step; it stays in *Preserved* with that warning.
+To make a `probable` association removable, declare the resource in the app's
+manifest, which raises it to confidence 100.
+
+The per-row **approve** action does exactly two things:
+
+1. It unblocks a `confirmed`/`high`/`manual` association that is flagged `shared`.
+   Shared rows are otherwise held back with "shared resource requires per-resource
+   approval"; approving clears that for this app's plan.
+2. It approves an individual named **volume** for `volume_rm` (equivalently, the
+   per-volume checkbox on the plan form does the same thing).
+
+It also clears `excluded` on the row it touches.
+
+### Manifest entries display as `confirmed`, not `manual`
+
+`correlate.py` sets `level = "manual"` on a manifest-declared association in
+memory, but `scanner.py` writes the literal string `"correlate"` into
+`associations.source` for every row it persists — the in-memory `level` is not
+stored at all. Both `_level()` functions (`planner.py`, `web/routes.py`) derive
+`manual` solely from `source == 'manual'`, so a manifest entry — confidence 100 —
+reads and classifies as `confirmed`. Behaviourally identical for removal; only the
+badge differs.
 
 ## Correlation rules (`correlate.py`)
 
@@ -62,12 +91,45 @@ def build_apps(resources: list[Resource], manifests: dict[str, Manifest]) -> lis
 - **Grouping seed**: the Compose project label. Every resource carrying a given
   compose project label seeds one application.
 - **Attachment rules**, applied after seeding:
-  - nginx sites attach via `proxy_pass` port → the app's published container port.
   - systemd units attach via `WorkingDirectory`/`ExecStart` path matching the app's
-    directory.
+    directory, followed immediately by the cgroup pass that attributes listening
+    ports and processes to their owning unit.
+  - nginx sites attach via `proxy_pass` port → the app's published container port
+    (or, for a systemd app, the port the pass above just registered).
   - directories attach via the compose `working_dir` or bind mounts referenced by
     the app's containers.
   - cron entries attach via command path matching the app's directory.
+- **Pass order matters and is fixed.** The systemd-unit pass (7c) and the
+  unit/cgroup port+process pass (7d) run *before* nginx matching (8, 8b). Nginx
+  matching compares `proxy_pass` against `app.ports`, and for a non-Docker,
+  systemd-managed app the only thing that populates that set is pass 7d — so when
+  those passes ran after nginx matching, a systemd app could never win its own
+  vhost unless its `ExecStart` happened to spell the port out, and the vhost went
+  to whichever container claimed the port first.
+- **Compose files in a sub-directory attach to the enclosing app.** Compose
+  projects are processed shallowest working-directory first, so a parent project
+  has already created its app before a nested compose file is considered; a nested
+  file then attaches to the deepest matching app directory
+  (`/apps/karakeep/docker/compose.yml` → `karakeep`). A directory basename that
+  names a *layout role* rather than an application — `docker`, `deploy`, `compose`,
+  `server`, `backend`, `config`, `stack`, and so on — is never used as an app name;
+  correlation anchors on the owning project directory instead. Without these two
+  rules, phantom apps called `docker`, `deploy` and `compose-project` accumulated
+  many unrelated projects' compose roots at confidence 95 and reported them safe to
+  delete.
+- **An app claims its own project root — and only its own.** When an app's compose
+  file or directory sits one level down, the enclosing project root is attributed to
+  that app directly, instead of falling through to the name-similarity fallback at
+  50 (below the removable threshold) and being left on disk after a removal. The
+  parent's basename must **slugify to the app's own slug** for this to apply. That
+  restriction matters: an app with an archived clone inside another project's tree
+  (`/apps/agyinstall/banban`) would otherwise walk up and claim that unrelated
+  180 GB archive root, marking it shared and blocking its real owner from ever being
+  removed cleanly. The slug comparison also makes the match case-insensitive, so
+  `/apps/2FAuth` resolves to app `2fauth`.
+- **Docker's built-in networks are never associated.** `bridge`, `host` and `none`
+  always exist and cannot be removed; associating them would put
+  `network_rm bridge` in a plan as soon as one app happened to be attached.
 - **Non-Docker (pure-systemd) apps are seeded as first-class applications too**,
   not just Docker/Compose ones — a custom (`is_custom`) systemd unit whose
   `WorkingDirectory`/`ExecStart` resolves to a directory directly under a scan
@@ -90,11 +152,17 @@ def build_apps(resources: list[Resource], manifests: dict[str, Manifest]) -> lis
   unless explicitly approved for a given app's removal.
 - **Host-network containers correlate via listener ownership** — a container run
   with `--network host` publishes no distinct container port, so `proc_src.py`
-  traces a listening port's pid back to its owning container via
-  `/proc/<pid>/cgroup` (falling back to the `list_listeners` helper op under
-  `NoNewPrivileges`, since sudo isn't available there); an nginx site proxying to
-  that port is then attached to the resolved container's app at `high` confidence,
-  with evidence naming the container and noting "(host network)".
+  traces a listening port's pid back to its owning container by matching the
+  socket's inode against `/proc/<pid>/fd` (using the `list_listeners` helper op to
+  read `ss -lntp` as root, since `del-web` runs `NoNewPrivileges` with no sudo); an
+  nginx site proxying to that port is then attached to the resolved container's app
+  at `high` confidence, with evidence naming the container and noting
+  "(host network)". **The inode match is exact and there is no fallback.** An
+  earlier version fell back to "this uid owns exactly one host-network container,
+  so give it every port that uid listens on" — on a host where uid 1000 runs every
+  systemd-managed app, that gave one container the whole box, including DEL's own
+  port 8075, and marked other apps' live vhosts safe to delete. Unresolved is now
+  the correct answer.
 - **Nginx config debris matched by exact `server_name`**: once an app's containers
   are stopped, proxy-port matching has nothing left to match against. Any nginx
   config file — enabled or not, including differently-named/`.bak`/disabled
@@ -109,11 +177,51 @@ def build_apps(resources: list[Resource], manifests: dict[str, Manifest]) -> lis
   survive removal as leftover debris; it is now always removal-eligible along
   with the rest of the app.
 - **Manifest override**: entries in `/apps/del/manifests/*.yaml` override or augment
-  automatic correlation, and are recorded at `level=manual` or `confirmed`.
+  automatic correlation at confidence 100. They display as `confirmed` (see
+  "Manifest entries display as `confirmed`" above).
 - **Shared-resource detection**: if a resource is associated with more than one
   application, `shared=True` is set on all of its associations. Shared resources
   are **blocked from removal until explicitly approved** per-application — removing
-  one app's plan will never silently take a resource another app depends on.
+  one app's plan will never silently take a resource another app depends on. This
+  is the one case where the per-row *approve* action changes what a plan contains.
+
+## Persistence: what a scan rewrites
+
+`scanner.run_scan()` does not merge into the association table — for every app it
+re-correlated, it runs `DELETE FROM associations WHERE app_id = ?` and re-inserts
+the freshly correlated set. It then deletes the associations of every application
+whose `last_seen` is older than this scan.
+
+<a id="approvals-are-not-durable"></a>
+**Consequence, and it is important: per-resource `approve`, `exclude` and
+`mark-shared` do not survive a scan.** Those actions write `approved_by_user`,
+`excluded` and `shared` onto an association row, and the next scan replaces that
+row. Use them immediately before building a plan. For a correction that must
+persist, edit the app's manifest — `shared:` and `excluded:` are manifest fields
+precisely because correlation re-derives everything else from scratch.
+
+The stale-owner purge exists because an app removed from the host used to keep its
+associations forever. Those rows point at resources that are still live, so they
+went on claiming ownership: real leftovers were hidden from Orphans, and surviving
+apps looked "shared" with a ghost, which blocks a clean removal. The first run of
+the purge removed 1,171 rows and took stale-owner associations from 152 to 0.
+
+## Orphans: what counts as "no owner"
+
+A resource is an orphan candidate when **no** association on it satisfies all of:
+the association is not excluded, its confidence is **at least 60** (`probable` or
+better), and the owning application is itself present in the latest completed
+scan.
+
+Both extra conditions were added deliberately:
+
+- Without the "owner still exists" condition, a resource whose only owner was an
+  app removed several scans ago stayed permanently hidden from the page whose
+  entire purpose is to surface exactly that leftover.
+- Without the confidence floor, a sub-60 `difflib` name-similarity guess (the Step
+  11 fallback) was enough to hide a resource while being far too weak to make it
+  removable anywhere — a dead zone where the resource was neither actionable nor
+  cleanable.
 
 ## Latest-scan-only views
 
@@ -157,9 +265,13 @@ notes: |
 Additional fields supported by the schema (per `models.Manifest`): `compose`
 (compose file paths), `cron`, `shared: []` (resource keys explicitly marked
 shared), `excluded: []` (resource keys explicitly excluded from this app's
-associations regardless of what correlation finds). A manifest entry is the only
-way to force `possible`-level or excluded evidence into an eligible association —
-correlation itself never promotes `possible` on its own.
+associations regardless of what correlation finds).
+
+A manifest entry is the only way to make a `probable` or `possible` association
+removable — correlation never promotes them on its own, and neither does the
+per-row *approve* button (see "What 'requires approval' actually means"). It is
+also the only correction that survives a rescan, since a scan rewrites every
+association row it touches.
 
 ## Adding a new detector
 

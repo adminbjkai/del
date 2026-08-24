@@ -24,6 +24,24 @@ logger = logging.getLogger("del_app.correlate")
 
 NAME_SIMILARITY_THRESHOLD = 0.72
 
+# Docker creates these on every host and they cannot be removed. Single source
+# of truth — the orphan classifier in web/routes.py imports this.
+_DOCKER_BUILTIN_NETWORKS = frozenset({"bridge", "host", "none"})
+
+# Directory basenames that describe a *layout role*, not an application. A
+# compose file at /apps/<app>/docker/compose.yml must attach to <app>; slugging
+# it by basename invents a phantom app called "docker" that then accumulates
+# unrelated projects' compose roots and reports them safe to delete.
+_GENERIC_DIR_BASENAMES = frozenset({
+    "docker", "compose", "docker-compose", "compose-project", "local-docker",
+    "containers", "deploy", "deployment", "deployments",
+    "server", "backend", "frontend", "client", "cli",
+    "config", "conf", "scripts", "script", "build", "dist", "src",
+    "app", "apps", "service", "services", "stack", "infra", "infrastructure",
+    "examples", "example", "samples", "sample", "test", "tests", "e2e-tests",
+    "resources",
+})
+
 
 def _slugify(name: str) -> str:
     s = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
@@ -31,15 +49,60 @@ def _slugify(name: str) -> str:
 
 
 def _is_broad_root(path: str) -> bool:
-    """True for paths too broad to be ownership evidence (a container
-    bind-mounting /apps does not own every project under /apps)."""
-    try:
-        roots = set(get_settings().scan_roots)
-    except Exception:
-        roots = {"/apps", "/data/apps", "/opt", "/srv", "/var/www"}
-    broad = roots | {"/", "/home", "/etc", "/var", "/usr", "/data", "/root", "/tmp", "/mnt", "/media"}
+    """True for paths too broad to be ownership evidence.
+
+    A container bind-mounting /apps does not own every project under /apps.
+    Host-monitoring apps (netdata) also bind-mount /, /sys, /proc, /var/log,
+    /etc/passwd, docker.sock, etc. — those must never become dir_paths, or
+    Step 9 will attach every systemd unit whose ExecStart mentions them.
+    Only a path *under* a scan root (at least one component deep) counts as
+    app-owned; everything else is broad.
+    """
+    if not path:
+        return True
     p = path.rstrip("/") or "/"
-    return p in {r.rstrip("/") or "/" for r in broad}
+    try:
+        roots = [r.rstrip("/") or "/" for r in get_settings().scan_roots]
+    except Exception:
+        roots = ["/apps", "/data/apps", "/opt", "/srv", "/var/www"]
+    for root in roots:
+        if p == root:
+            return True  # the scan root itself is shared
+        if p.startswith(root + "/"):
+            return False  # /apps/netdata, /apps/netdata/conf, ...
+    return True
+
+
+def _exec_refers_to_dir(exec_start: str, dp: str) -> bool:
+    """Path-boundary match so /apps/foo does not hit /apps/foobar, and
+    a leftover broad path like /sys cannot match 'systemd'."""
+    if not exec_start or not dp or _is_broad_root(dp):
+        return False
+    d = dp.rstrip("/")
+    if len(d) < 2:
+        return False
+    return bool(re.search(r"(?:^|[\s=\"'])" + re.escape(d) + r"(?:/|[\s;\"']|$)", exec_start))
+
+
+def _project_dir_for(path: str) -> str | None:
+    """The `{scan_root}/{first-component}` project directory containing `path`.
+
+    `/apps/karakeep/docker` -> `/apps/karakeep`. Used to attribute a compose
+    file living in a sub-directory to the application that actually owns it.
+    Returns None when the path is not under a scan root.
+    """
+    if not path:
+        return None
+    p = path.rstrip("/") or "/"
+    try:
+        roots = [r.rstrip("/") or "/" for r in get_settings().scan_roots]
+    except Exception:
+        roots = ["/apps", "/data/apps", "/opt", "/srv", "/var/www"]
+    for root in sorted(roots, key=len, reverse=True):
+        if p.startswith(root + "/"):
+            rest = p[len(root) + 1:].split("/", 1)[0]
+            return f"{root}/{rest}" if rest else None
+    return None
 
 
 def _level_for_confidence(confidence: int) -> str:
@@ -258,9 +321,24 @@ def build_apps(
     # --- Step 2: compose_src projects not matched by a running container's
     #     project label become their own (stopped/orphaned) app -------------
     running_project_slugs = {_slugify(p) for p in project_containers}
-    for cp in compose_projects:
+    # Shallowest working_dir first, so a parent project has already created its
+    # app by the time a compose file nested inside it is considered — otherwise
+    # the nesting rule below finds nothing to attach to and the sub-directory
+    # becomes its own app.
+    for cp in sorted(
+        compose_projects,
+        key=lambda r: ((r.data.get("working_dir") or "").count("/"),
+                       r.data.get("working_dir") or ""),
+    ):
         working_dir = cp.data.get("working_dir")
-        name_candidates = [cp.data.get("declared_name"), cp.display]
+        # `declared_name` comes from the compose file and is meaningful.
+        # `cp.display` is only the directory basename — matching an existing app
+        # by a generic one (`gateway`, `server`, `docker`) is how an unrelated
+        # project's sub-directory gets absorbed into a same-named app, which
+        # then also drags in that project's root via the parent-directory rule.
+        name_candidates = [cp.data.get("declared_name")]
+        if _slugify(cp.display) not in _GENERIC_DIR_BASENAMES:
+            name_candidates.append(cp.display)
         matched_slug = None
         for cand in name_candidates:
             if cand and _slugify(cand) in apps:
@@ -271,12 +349,46 @@ def build_apps(
                 if working_dir in app.dir_paths:
                     matched_slug = slug
                     break
+        if matched_slug is None and working_dir:
+            # A compose file *nested inside* an app's directory belongs to that
+            # app (/apps/karakeep/docker/compose.yml -> karakeep). Prefer the
+            # deepest matching directory so the most specific app wins.
+            best_len = -1
+            for slug, app in apps.items():
+                for dp in app.dir_paths:
+                    if not dp or _is_broad_root(dp):
+                        continue
+                    if working_dir.startswith(dp.rstrip("/") + "/") and len(dp) > best_len:
+                        matched_slug, best_len = slug, len(dp)
         if matched_slug is None:
             slug = _slugify(cp.display)
-            if slug in running_project_slugs or slug in apps:
+            if slug in _GENERIC_DIR_BASENAMES and working_dir:
+                # "docker" / "deploy" / "server" name a layout role, not an
+                # app. Anchor on the owning project directory instead, so
+                # every nested compose root does not collapse into one
+                # phantom app that then claims all of them as safe to delete.
+                project_dir = _project_dir_for(working_dir)
+                if project_dir:
+                    anchored = _slugify(project_dir.rsplit("/", 1)[-1])
+                    if anchored and anchored not in _GENERIC_DIR_BASENAMES:
+                        slug = anchored
+                        if slug in apps:
+                            matched_slug = slug
+            if matched_slug is None and (slug in running_project_slugs or slug in apps):
                 matched_slug = slug if slug in apps else None
             if matched_slug is None:
-                app = apps.setdefault(slug, _AppBuilder(slug, cp.display, "compose_stopped"))
+                # Name the app after the slug we resolved, not the raw
+                # directory basename. When the slug was anchored to the
+                # project directory above, `cp.display` is still the generic
+                # role name, which is how eight apps ended up displayed as
+                # "docker" / "deploy" / "cli" in the UI — one of them the
+                # 180 GB /apps/agyinstall archive.
+                display_name = (
+                    cp.display
+                    if _slugify(cp.display) == slug
+                    else slug
+                )
+                app = apps.setdefault(slug, _AppBuilder(slug, display_name, "compose_stopped"))
                 app.dir_paths.add(working_dir) if working_dir else None
                 matched_slug = slug
         app = apps[matched_slug]
@@ -341,6 +453,11 @@ def build_apps(
     # --- Step 6: networks (compose label -> confirmed; attached container ---
     # -> high, since infra networks are commonly shared) ---------------------
     for net in networks:
+        # Docker's built-in networks always exist and can never be removed.
+        # Associating them would put `remove_network bridge` in a plan as soon
+        # as only one app happened to be attached to them.
+        if (net.display or net.key) in _DOCKER_BUILTIN_NETWORKS:
+            continue
         target_slugs: set[str] = set()
         label_project = net.data.get("compose_project")
         if label_project and _slugify(label_project) in apps:
@@ -431,15 +548,48 @@ def build_apps(
     # --- Step 7: directories -------------------------------------------------
     matched_directory_keys: set[str] = set()
     for d in directories:
+        dpath = (d.path or "").rstrip("/")
         for slug, app in apps.items():
             if d.path and d.path in app.dir_paths:
                 app.add(
                     d,
                     confidence=95,
                     ownership="exclusive",
-                    data_loss_risk="data" if any(d.path == bm_path for bm_path in app.dir_paths) else "config",
+                    data_loss_risk="data",
                     evidence=[Evidence(source="fs_src", statement="directory matches compose working_dir / bind mount source", weight=95)],
                 )
+                matched_directory_keys.add(d.key)
+            elif (
+                dpath
+                # The parent must be THIS app's project root, not just any
+                # enclosing directory. Without the name check, an app with a
+                # clone inside another project's tree (/apps/agyinstall/banban)
+                # would claim that unrelated project's root (/apps/agyinstall)
+                # — which then marks it shared and blocks the real owner's
+                # removal. Comparing slugs also makes the match case-insensitive,
+                # so /apps/2FAuth resolves to app "2fauth".
+                and _slugify(dpath.rsplit("/", 1)[-1]) == slug
+                and any(
+                    dp and _project_dir_for(dp) == dpath and dp.rstrip("/") != dpath
+                    for dp in app.dir_paths
+                )
+            ):
+                # The app's compose file / working dir lives in a SUB-directory
+                # (/apps/karakeep/docker), so its own project root was never
+                # claimed and fell through to the 50-point name-similarity
+                # fallback — leaving the whole directory behind on removal.
+                app.add(
+                    d,
+                    confidence=92,
+                    ownership="exclusive",
+                    data_loss_risk="data",
+                    evidence=[Evidence(
+                        source="fs_src",
+                        statement=f"project root containing this app's working directory ({dpath})",
+                        weight=92,
+                    )],
+                )
+                app.dir_paths.add(dpath)
                 matched_directory_keys.add(d.key)
             elif d.path and any(d.path.startswith(dp.rstrip("/") + "/") for dp in app.dir_paths):
                 app.add(
@@ -467,6 +617,82 @@ def build_apps(
                             evidence=[Evidence(source="correlate", statement=f"located inside app directory {dp}", weight=95)],
                         )
                         break
+
+    # --- Step 7c: systemd units by WorkingDirectory/ExecStart under app dir --
+    # MUST run before the nginx steps below: those match a vhost to an app by
+    # comparing the proxy_pass port against `app.ports`, and for a systemd-run
+    # (non-Docker) app the only thing that puts its port into that set is the
+    # cgroup pass immediately after this one. When this ran *after* nginx
+    # matching, every systemd app lost its own vhost to whichever container
+    # happened to claim the port first.
+    for unit in systemd_units:
+        if unit.key in unit_slug:
+            # Already definitively attached in Step 6b via its own
+            # WorkingDirectory (the strongest signal). Re-running the looser
+            # exec_start-substring check here could reassign it to an
+            # unrelated app whose dir happens to appear as a substring of
+            # this unit's ExecStart (e.g. a shared venv path).
+            continue
+        wd = unit.data.get("working_directory")
+        exec_start = unit.data.get("exec_start") or ""
+        for slug, app in apps.items():
+            owned = [dp for dp in app.dir_paths if dp and not _is_broad_root(dp)]
+            hit_path = None
+            if wd and any(wd == dp or wd.startswith(dp.rstrip("/") + "/") for dp in owned):
+                hit_path = wd
+            else:
+                hit_path = next((dp for dp in owned if _exec_refers_to_dir(exec_start, dp)), None)
+            if hit_path:
+                app.add(
+                    unit,
+                    confidence=95,
+                    ownership="exclusive",
+                    data_loss_risk="config",
+                    evidence=[Evidence(source="systemd_src", statement=f"WorkingDirectory/ExecStart path under {hit_path}", weight=95)],
+                )
+                unit_slug[unit.key] = slug
+                break
+
+    for timer in systemd_timers:
+        activates = timer.data.get("activates")
+        slug = unit_slug.get(activates)
+        if slug:
+            apps[slug].add(
+                timer,
+                confidence=95,
+                ownership="exclusive",
+                data_loss_risk="config",
+                evidence=[Evidence(source="systemd_src", statement=f"timer activates {activates}", weight=95)],
+            )
+
+    # --- Step 7d: ports/processes owned by a systemd-managed process whose ---
+    # unit is already matched to an app (cgroup match) ------------------------
+    for p in ports:
+        unit = p.data.get("systemd_unit")
+        slug = unit_slug.get(unit)
+        if not slug or (p.type, p.key) in apps[slug].assocs:
+            continue
+        apps[slug].ports.add(p.data.get("port"))
+        apps[slug].add(
+            p,
+            confidence=85,
+            ownership="exclusive",
+            data_loss_risk="none",
+            evidence=[Evidence(source="proc_src", statement=f"listening port owned by systemd unit {unit} (cgroup match)", weight=85)],
+        )
+
+    for pr in processes:
+        unit = pr.data.get("systemd_unit")
+        slug = unit_slug.get(unit)
+        if not slug or (pr.type, pr.key) in apps[slug].assocs:
+            continue
+        apps[slug].add(
+            pr,
+            confidence=85,
+            ownership="exclusive",
+            data_loss_risk="none",
+            evidence=[Evidence(source="proc_src", statement=f"process owned by systemd unit {unit} (cgroup match)", weight=85)],
+        )
 
     # --- Step 8: nginx sites: proxy port == published host port ------------
     for site in nginx_sites:
@@ -559,75 +785,6 @@ def build_apps(
             )
             if enabled:
                 app.domains.add(sn)
-
-    # --- Step 9: systemd units: WorkingDirectory/ExecStart under app dir ----
-    for unit in systemd_units:
-        if unit.key in unit_slug:
-            # Already definitively attached in Step 6b via its own
-            # WorkingDirectory (the strongest signal). Re-running the looser
-            # exec_start-substring check here could reassign it to an
-            # unrelated app whose dir happens to appear as a substring of
-            # this unit's ExecStart (e.g. a shared venv path).
-            continue
-        wd = unit.data.get("working_directory")
-        exec_start = unit.data.get("exec_start") or ""
-        for slug, app in apps.items():
-            hit_path = None
-            if wd and any(wd == dp or wd.startswith(dp.rstrip("/") + "/") for dp in app.dir_paths):
-                hit_path = wd
-            elif app.dir_paths and any(dp in exec_start for dp in app.dir_paths):
-                hit_path = next((dp for dp in app.dir_paths if dp in exec_start), None)
-            if hit_path:
-                app.add(
-                    unit,
-                    confidence=95,
-                    ownership="exclusive",
-                    data_loss_risk="config",
-                    evidence=[Evidence(source="systemd_src", statement=f"WorkingDirectory/ExecStart path under {hit_path}", weight=95)],
-                )
-                unit_slug[unit.key] = slug
-                break
-
-    for timer in systemd_timers:
-        activates = timer.data.get("activates")
-        slug = unit_slug.get(activates)
-        if slug:
-            apps[slug].add(
-                timer,
-                confidence=95,
-                ownership="exclusive",
-                data_loss_risk="config",
-                evidence=[Evidence(source="systemd_src", statement=f"timer activates {activates}", weight=95)],
-            )
-
-    # --- Step 9b: ports/processes owned by a systemd-managed process whose --
-    # unit is already matched to an app (cgroup match) ------------------------
-    for p in ports:
-        unit = p.data.get("systemd_unit")
-        slug = unit_slug.get(unit)
-        if not slug or (p.type, p.key) in apps[slug].assocs:
-            continue
-        apps[slug].ports.add(p.data.get("port"))
-        apps[slug].add(
-            p,
-            confidence=85,
-            ownership="exclusive",
-            data_loss_risk="none",
-            evidence=[Evidence(source="proc_src", statement=f"listening port owned by systemd unit {unit} (cgroup match)", weight=85)],
-        )
-
-    for pr in processes:
-        unit = pr.data.get("systemd_unit")
-        slug = unit_slug.get(unit)
-        if not slug or (pr.type, pr.key) in apps[slug].assocs:
-            continue
-        apps[slug].add(
-            pr,
-            confidence=85,
-            ownership="exclusive",
-            data_loss_risk="none",
-            evidence=[Evidence(source="proc_src", statement=f"process owned by systemd unit {unit} (cgroup match)", weight=85)],
-        )
 
     # --- Step 10: cron entries: command path under app dir ------------------
     for entry in cron_entries:

@@ -11,7 +11,12 @@ Type=simple
 # with a fixed op allowlist and double argument validation, not privilege drop.
 User=root
 Group=root
-ExecStart=/usr/bin/python3 /apps/del/helper/del_helper.py /run/del/helper.sock /apps/del/config/helper-policy.json
+# Runs the ROOT-OWNED deployed copy, not the repo working tree. /apps/del is
+# writable by the unprivileged web user, so executing the helper from there
+# would let a compromised del-web rewrite the code root then runs — making the
+# operation allowlist advisory rather than enforced. `scripts/install.sh`
+# installs these two paths from the repo with `install -o root -g root`.
+ExecStart=/usr/bin/python3 /usr/local/lib/del-helper/del_helper.py /run/del/helper.sock /etc/del/helper-policy.json
 Restart=on-failure
 RestartSec=2
 TimeoutStopSec=15

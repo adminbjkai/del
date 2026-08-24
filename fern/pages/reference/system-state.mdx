@@ -8,7 +8,8 @@ slug: reference/system-state
   This page mirrors `docs/SYSTEM-STATE.md` in the DEL repository, built from the
   8-lane audit run 2026-07-20 (raw findings: `data/audit/2026-07-20/`). Read this
   before starting any new audit — most "what's running, what's shared, what's
-  broken" questions are answered here already.
+  broken" questions are answered here already. Where the two ever disagree,
+  `docs/SYSTEM-STATE.md` is the source of truth; this is the rendered mirror.
 </Callout>
 
 ## 1. Executive summary
@@ -35,10 +36,11 @@ slug: reference/system-state
   **Verdict:** the system is clean and healthy. Docker, nginx, and DEL's own
   inventory all reconcile to ground truth with zero real discrepancies beyond
   expected scan-lag drift. The known exceptions are narrow and fully enumerated in
-  [§5](#5-known-exceptions--needs-attention): 8 nginx sites serving 502 for
-  deliberately-stopped apps, 3 genuinely misconfigured apps, a couple of incomplete
-  decommissions, a few apps DEL's scanner doesn't yet track, and one pre-existing
-  security note (samba public bind). None are active incidents.
+  [§5](#5-known-exceptions--needs-attention): 6 nginx sites serving 502 for
+  deliberately-stopped apps, 2 genuinely misconfigured apps (`17imgshare`, `fizzy`),
+  one stray config artifact (`img3`), 3 apps DEL's automatic scanner doesn't yet
+  track (`semalist`, `trp`, `17imgshare`), and one pre-existing security note (samba
+  public bind). None are active incidents.
 </Callout>
 
 ## 2. Directory classification
@@ -135,19 +137,33 @@ only drift anywhere in the entire audit is a 1-image scan-timing lag.
 
 | # | Item | Impact | Recommended action |
 |---|---|---|---|
-| 1 | Dead-upstream ENABLED nginx sites: dockhand, fizzy, netdata, notecapai, shows, trflix, twenty, zabbix | 8 subdomains 502 for deliberately-stopped apps | Revive or disable+remove per app; group decision recommended |
-| 2 | **OpenPdf** — MISCONFIGURED | `.env` missing, compose config fails outright | Restore `.env` or mark decommissioned |
-| 3 | **17imgshare** — MISCONFIGURED, untracked in DEL | Backend running (8087) but no nginx vhost installed; also invisible to DEL | Install vhost or stop process; add manifest |
-| 4 | **fizzy** — MISCONFIGURED | Container fully absent, nginx still enabled — incomplete teardown | Redeploy or remove nginx + compose together |
-| 5 | **liam** — incomplete decommission | Active + retired nginx configs both present, unit disabled | Confirm revive vs. remove the non-retired config |
-| 6 | **img3** — stray config artifact | Leftover conf referencing the live `img2` app, confusing for editors | Delete the stray file (docs-only task here, not performed) |
-| 7 | **semalist, trp, 17imgshare** — live but untracked in DEL | DEL's scanner misses these non-Docker manual apps | Add DEL manifests so they're tracked |
-| 8 | **`/apps/notes` mis-associated** | Linked to both notex and zennotes but holds unrelated code | Review/correct the DEL association record |
-| 9 | **Samba public bind (139/445)** | Pre-existing, unresolved across audits | Decide once: firewall or accept & document |
-| 10 | **xtr `@reboot` cron vs. `xtr.service`** | Double-start risk, same app two launch mechanisms | Confirm authoritative mechanism, remove the other |
-| 11 | **cap42/cap4l vs. cap/cap4/cap-v2 slug ambiguity** | Risk of deleting the only copy of shared config | Confirm canonical slug before cap-family removal |
-| 12 | **astv-remote/xtr hidden cross-app venv deps** | Deleting "unrelated" app silently breaks another's service | Document in manifests; check before removing appletv-remote/flixapp venvs |
-| 13 | **atv-remote.service disabled duplicate** | Dead config clutter | Already removed — see §6 |
+| 1 | Dead-upstream ENABLED nginx sites: dockhand (9230), fizzy (8077), netdata (19999), notecapai (9101), shows (8335), trflix (8048) | 6 subdomains 502 for deliberately-stopped apps | Revive or disable+remove per app; group decision recommended |
+| 2 | **17imgshare** — MISCONFIGURED, untracked in DEL | Backend running (8087) but no nginx vhost installed; also invisible to DEL | Install vhost or stop process; add manifest |
+| 3 | **fizzy** — MISCONFIGURED (also in #1) | Container fully absent, nginx still enabled — incomplete teardown | Redeploy or remove nginx + compose together |
+| 4 | **img3** — stray config artifact | Leftover conf referencing the live `img2` app, confusing for editors | Delete the stray file (docs-only task here, not performed) |
+| 5 | **semalist, trp, 17imgshare** — live but untracked in DEL | DEL's scanner misses these non-Docker manual apps | Add DEL manifests so they're tracked |
+| 6 | **`/apps/notes` mis-associated** | Linked to both notex and zennotes but holds unrelated code | Review/correct the DEL association record |
+| 7 | **Samba public bind (139/445)** | Pre-existing, unresolved across audits | Decide once: firewall or accept & document |
+| 8 | **xtr `@reboot` cron vs. `xtr.service`** | Double-start risk, same app two launch mechanisms | Confirm authoritative mechanism, remove the other |
+| 9 | **cap42/cap4l vs. cap/cap4/cap-v2 slug ambiguity** | Risk of deleting the only copy of shared config | Confirm canonical slug before cap-family removal |
+| 10 | **astv-remote/xtr hidden cross-app venv deps** | Deleting "unrelated" app silently breaks another's service | Document in manifests; check before removing appletv-remote/flixapp venvs |
+| 11 | **atv-remote.service disabled duplicate** | Dead config clutter | Already removed — see §6 |
+
+### Removed 2026-07-20 (user request)
+
+`liam`, `twenty`, `zabbix` and `OpenPdf` — all previously listed above as needing
+attention — were fully removed via DEL later the same day (containers, volumes,
+nginx sites, directories, systemd units; no backups taken).
+
+<Callout intent="info">
+  `twenty`'s compose file was nested at `/apps/twenty/packages/twenty-docker`, so
+  DEL only weakly claimed the top-level `/apps/twenty` directory and preserved it as
+  `blocked` — correct conservative behaviour at the time; the directory was deleted
+  explicitly. Correlation has since been changed so an app claims its own project
+  root when its compose file lives in a sub-directory, but on any inventory predating
+  that change, expect a nested-compose app's top-level directory to need explicit
+  confirmation.
+</Callout>
 
 ## 6. What was fixed in this audit
 

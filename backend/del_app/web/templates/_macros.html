@@ -14,7 +14,7 @@
   {% if value %}
     {% set s = value|string %}
     {% set short = s.split(':')[-1] %}
-    <span class="mono copy" data-copy="{{ s }}" title="{{ s }} (click to copy)">{{ short[:length] }}<span class="copy-mark">⧉</span></span>
+    <button type="button" class="mono copy" data-copy="{{ s }}" title="{{ s }} (click to copy)" aria-label="Copy {{ s }} to clipboard">{{ short[:length] }}<span class="copy-mark" aria-hidden="true">⧉</span></button>
   {% else %}—{% endif %}
 {%- endmacro %}
 
@@ -28,6 +28,8 @@
 
 {% macro domain_links(domains, sep=', ') -%}
   {% if domains %}
-    {% for d in domains %}<a href="https://{{ d }}" target="_blank" rel="noopener noreferrer" onclick="event.stopPropagation()">{{ d }}</a>{% if not loop.last %}{{ sep }}{% endif %}{% endfor %}
+    {# data-stop-propagation, not an inline onclick: script-src 'self' blocks
+       inline handlers. The listener lives in app.js. #}
+    {% for d in domains %}<a href="https://{{ d }}" target="_blank" rel="noopener noreferrer" data-stop-propagation>{{ d }}</a>{% if not loop.last %}{{ sep }}{% endif %}{% endfor %}
   {% else %}—{% endif %}
 {%- endmacro %}

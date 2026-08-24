@@ -1,7 +1,9 @@
 {% extends "base.html" %}
 {% block title %}Manifest · {{ slug }}{% endblock %}
 {% block content %}
-<h1>Manifest · {{ slug }}</h1>
+<div class="page-header">
+  <h1>Manifest · {{ slug }}</h1>
+</div>
 {% if validation_errors %}
 <div class="box box-warning">
   <h3>Validation errors</h3>

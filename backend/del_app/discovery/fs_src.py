@@ -8,6 +8,7 @@ from __future__ import annotations
 import logging
 import os
 import subprocess
+from datetime import datetime, timezone
 
 from del_app.config import get_settings
 from del_app.models import Resource
@@ -19,6 +20,18 @@ GIT_TIMEOUT = 5
 COMPOSE_FILENAMES = {
     "docker-compose.yml", "docker-compose.yaml", "compose.yml", "compose.yaml",
 }
+
+
+def _epoch_to_iso(epoch: float | int | None) -> str | None:
+    """UTC ISO-8601 from a unix epoch seconds value, or None if unusable."""
+    if epoch is None:
+        return None
+    try:
+        return datetime.fromtimestamp(float(epoch), tz=timezone.utc).strftime(
+            "%Y-%m-%dT%H:%M:%SZ"
+        )
+    except (TypeError, ValueError, OSError, OverflowError):
+        return None
 
 
 def _du_size_kb(path: str) -> int | None:
@@ -126,6 +139,21 @@ def collect() -> list[Resource]:
                 except Exception:
                     logger.exception("fs_src: failed to list top-level files of %s", path)
 
+                # Installation-time signals: birthtime when available (Linux
+                # often lacks true birthtime → falls back to ctime), plus mtime.
+                # ISO-UTC strings so the web layer can sort/format without
+                # re-statting the host.
+                mtime_iso = ctime_iso = birthtime_iso = None
+                try:
+                    st = os.stat(path)
+                    mtime_iso = _epoch_to_iso(st.st_mtime)
+                    ctime_iso = _epoch_to_iso(st.st_ctime)
+                    birth = getattr(st, "st_birthtime", None)
+                    if birth:
+                        birthtime_iso = _epoch_to_iso(birth)
+                except OSError:
+                    pass
+
                 data = {
                     "size_kb": size_kb,
                     "has_compose": bool(compose_files),
@@ -134,6 +162,9 @@ def collect() -> list[Resource]:
                     "env_var_count": env_var_count,
                     "env_var_names": env_var_names,
                     "git": git_info,
+                    "mtime": mtime_iso,
+                    "ctime": ctime_iso,
+                    "birthtime": birthtime_iso,
                 }
 
                 resources.append(

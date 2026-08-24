@@ -371,16 +371,21 @@ accurately, versus best-effort guessing.
 disable --now` + `rm` the unit, or `rm` the nginx site by hand for something
 that's supposed to go away.** Manual removal has no dry-run, no backup, and no
 check for shared resources — exactly the mistakes DEL's lifecycle exists to
-prevent (see `/apps/del/docs/REMOVAL-LIFECYCLE.md` for the full 9-stage
-engine). Always go through DEL:
+prevent (see `/apps/del/docs/REMOVAL-LIFECYCLE.md` for the full engine — six
+stages: `backup`, `quiesce`, `remove_runtime`, `remove_host`, `remove_files`,
+`validate`). Always go through DEL:
 
 1. **Dry-run** — build a plan for the app in the DEL UI; review every step,
    warning, and what's marked preserved/blocked before touching anything.
-   Dry-run is the default mode; nothing executes at this stage.
-2. **Backup** — DEL takes content-addressed backups (`sha256`-tracked, in
-   `/apps/del/backups`) of every resource the plan will touch, before any
-   mutation — automatically, as part of the plan execution, not a separate
-   manual step you have to remember.
+   Dry-run is the default mode; nothing executes at this stage. If the plan
+   builder refuses with "no resources in the latest completed scan", rescan
+   first — it is refusing to emit an empty plan, which is the correct behaviour.
+2. **Backup** — set the plan's backup mode to **Config** or **Full**. The default
+   is *None*, which takes no backup at all. With a mode set, DEL copies the
+   resources the plan will touch into `/apps/del/backups` before any mutation,
+   automatically as part of execution, and records each one in the `backups`
+   table so an in-job failure can roll back. These are plain copies; the
+   `sha256`/`size` columns are not populated, so they are not integrity-checked.
 3. **Live execute** — only once the dry-run looks right, explicitly execute in
    `live` mode. DEL quiesces, then removes runtime resources, then host
    integrations (systemd/cron/nginx — nginx removal itself backs up first,
@@ -402,7 +407,7 @@ automated decommission for a 192-app server safe instead of terrifying.
 
 | Tool | What it's for | Where |
 |---|---|---|
-| **DEL** | Cross-cutting inventory, connection map, correlated resource discovery, and the only sanctioned decommission path (dry-run → backup → live → validate) | https://del.bjk.ai |
+| **DEL** | Cross-cutting inventory, connection map, correlated resource discovery, and the only sanctioned decommission path (rescan → dry-run → live → validate) | https://del.bjk.ai |
 | **Komodo** | Docker Compose stack control plane — start/stop/update/logs for containerized apps | `/apps/komodo` |
 | **Cockpit** | Web UI for systemd services/logs on non-Docker apps — status, start/stop/restart, journal viewing | `https://cockpit.bjk.ai` (basic auth; socket itself is `127.0.0.1:9091`-only) |
 | **journalctl** | Raw log inspection for any systemd unit: `journalctl -u <name>.service -f` | CLI |

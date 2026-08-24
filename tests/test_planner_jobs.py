@@ -8,6 +8,7 @@ test_core.py.
 from __future__ import annotations
 
 import json
+import os
 import time
 
 import pytest
@@ -212,6 +213,51 @@ def test_confirmed_process_becomes_process_term_step(settings_env):
     assert plan.preserved == []
 
 
+def test_foreign_systemd_unit_is_not_planned_for_this_app(settings_env, tmp_path, monkeypatch):
+    """A confirmed association to another app's unit (glmflix on a netdata
+    plan) must be preserved, not turned into systemd_stop / systemd_rm_unit."""
+    conn = get_db()
+    app_id = _insert_app(conn, "netdata")
+    compose_dir = tmp_path / "netdata"
+    compose_dir.mkdir()
+    compose_id = _insert_resource(
+        conn, "compose_project", str(compose_dir), path=str(compose_dir),
+        data={"working_dir": str(compose_dir), "declared_name": "netdata"},
+    )
+    _insert_assoc(conn, app_id, compose_id, confidence=95)
+    other = tmp_path / "glmflix"
+    other.mkdir()
+    unit_id = _insert_resource(
+        conn, "systemd_unit", "glmflix.service",
+        path="/etc/systemd/system/glmflix.service",
+        data={
+            "is_custom": True,
+            "working_directory": str(other),
+            "exec_start": str(other / "start.sh"),
+        },
+    )
+    _insert_assoc(conn, app_id, unit_id, confidence=95)
+    conn.close()
+
+    real_exists = os.path.exists
+
+    def fake_exists(path):
+        if path == "/etc/systemd/system/glmflix.service":
+            return True
+        return real_exists(path)
+
+    monkeypatch.setattr(os.path, "exists", fake_exists)
+    plan = planner.build_plan("netdata", {})
+    unit_ops = [
+        s for s in plan.steps
+        if s.operation in ("systemd_stop", "systemd_disable", "systemd_rm_unit")
+        and s.args.get("unit") == "glmflix.service"
+    ]
+    assert unit_ops == []
+    assert "glmflix.service" in plan.preserved
+    assert any("glmflix.service" in w and "not under this app" in w for w in plan.warnings)
+
+
 def test_process_without_exe_is_preserved_not_dropped(settings_env):
     """If pid/exe is unavailable (e.g. older scan data, or exe unreadable),
     the association must be preserved with a warning rather than silently
@@ -237,7 +283,12 @@ def test_process_without_exe_is_preserved_not_dropped(settings_env):
 
 def test_persist_and_verify_plan_roundtrip(settings_env):
     conn = get_db()
-    _insert_app(conn, "app7", kind="standalone")
+    app_id = _insert_app(conn, "app7", kind="standalone")
+    # A real app has at least one current resource; build_plan now refuses an
+    # app with none rather than emitting a validate-only plan that would
+    # execute as "success" having removed nothing.
+    rid = _insert_resource(conn, "container", "app7_web")
+    _insert_assoc(conn, app_id, rid, 100)
     conn.close()
 
     plan = planner.build_plan("app7", {})
@@ -250,7 +301,9 @@ def test_persist_and_verify_plan_roundtrip(settings_env):
 
 def test_tampered_plan_fails_hmac_verification(settings_env):
     conn = get_db()
-    _insert_app(conn, "app8", kind="standalone")
+    app_id = _insert_app(conn, "app8", kind="standalone")
+    rid = _insert_resource(conn, "container", "app8_web")
+    _insert_assoc(conn, app_id, rid, 100)
     conn.close()
 
     plan = planner.build_plan("app8", {})
@@ -444,6 +497,43 @@ def test_execute_job_runs_in_background_thread(settings_env, monkeypatch):
     assert status["status"] == "success"
 
 
+def test_job_skips_foreign_systemd_unit_at_execute_time(settings_env, tmp_path, monkeypatch):
+    """A poisoned plan that still lists another app's unit must not call the
+    helper — the step is marked done as skipped so retry can continue."""
+    _patch_audit(monkeypatch)
+    fake = _FakeHelper()
+    monkeypatch.setattr(jobs, "helper_client", fake)
+
+    other = tmp_path / "glmflix"
+    other.mkdir()
+    conn = get_db()
+    _insert_resource(
+        conn, "systemd_unit", "glmflix.service",
+        data={"working_directory": str(other), "exec_start": str(other / "start.sh")},
+    )
+    conn.close()
+
+    steps = [
+        PlanStep(seq=1, stage="quiesce", operation="systemd_stop",
+                  args={"unit": "glmflix.service"}, description="stop",
+                  reversible=True, danger="safe"),
+        PlanStep(seq=2, stage="quiesce", operation="container_stop",
+                  args={"container_id": "netdata"}, description="stop c",
+                  reversible=True, danger="safe"),
+    ]
+    plan_id = _persist_manual_plan("netdata", steps)
+    job_id = jobs.create_job(plan_id, "live", user_id=1)
+    jobs._run_job(job_id, None)
+
+    assert [c["op"] for c in fake.calls] == ["container_stop"]
+    status = jobs.job_status(job_id)
+    assert status["status"] == "success"
+    by_op = {s["operation"]: s for s in status["steps"]}
+    assert by_op["systemd_stop"]["state"] == "done"
+    assert "skipped" in (by_op["systemd_stop"]["output_sanitized"] or "")
+    assert "glmflix.service" in (by_op["systemd_stop"]["output_sanitized"] or "")
+
+
 def test_retry_job_resumes_from_first_failed_step(settings_env, monkeypatch):
     _patch_audit(monkeypatch)
     fake = _FakeHelper(failing_ops={"container_rm"})
@@ -464,13 +554,17 @@ def test_retry_job_resumes_from_first_failed_step(settings_env, monkeypatch):
     fake.failing_ops = frozenset()
     jobs.retry_job(job_id)
 
+    # retry_job clears status to 'pending' then runs in a background thread.
+    # Wait until the job is success AND the retried step is done (avoids the
+    # race of seeing step=done a tick before job status flips to success).
     deadline = time.time() + 5
     status = jobs.job_status(job_id)
-    by_op = {s["operation"]: s["state"] for s in status["steps"]}
-    while by_op.get("container_rm") != "done" and time.time() < deadline:
-        time.sleep(0.05)
+    while time.time() < deadline:
         status = jobs.job_status(job_id)
         by_op = {s["operation"]: s["state"] for s in status["steps"]}
+        if status["status"] == "success" and by_op.get("container_rm") == "done":
+            break
+        time.sleep(0.05)
 
     assert status["status"] == "success"
     by_op = {s["operation"]: s["state"] for s in status["steps"]}
@@ -502,3 +596,193 @@ def test_validate_removal_uses_preserved_to_skip_checks(monkeypatch):
     )
     checks = jobs.validate_removal("x", plan)
     assert checks == []
+
+
+# ---------------------------------------------------------------------------
+# Backup recording + rollback (2026-08-24)
+#
+# The `backups` table was created by the initial migration but never written
+# to, so `_restore_from_backups` always iterated zero rows while the job still
+# audited "job_restore_attempted" — operators were told a rollback happened
+# when none had. These lock in the corrected behaviour.
+# ---------------------------------------------------------------------------
+
+def _backup_then_fail_steps(tmp_path):
+    return [
+        PlanStep(
+            seq=1, stage="backup", operation="file_backup",
+            args={"path": f"{tmp_path}/site.conf", "dest": f"{tmp_path}/backups/site.conf"},
+            description="back up nginx site", reversible=True, danger="safe",
+        ),
+        PlanStep(
+            seq=2, stage="remove_host", operation="nginx_rm_site",
+            args={"paths": ["/etc/nginx/sites-enabled/site.conf"]},
+            description="remove nginx site", reversible=True, danger="warning",
+        ),
+    ]
+
+
+def test_live_backup_step_records_a_backups_row(settings_env, tmp_path, monkeypatch):
+    _patch_audit(monkeypatch)
+    fake = _FakeHelper()
+    monkeypatch.setattr(jobs, "helper_client", fake)
+
+    plan_id = _persist_manual_plan("bk1", _backup_then_fail_steps(tmp_path))
+    job_id = jobs.create_job(plan_id, "live", user_id=1)
+    jobs._run_job(job_id, confirm_phrase=None)
+
+    conn = get_db()
+    rows = q(conn, "SELECT * FROM backups WHERE job_id = ?", (job_id,))
+    conn.close()
+    assert len(rows) == 1, "a successful live backup step must record a backups row"
+    assert rows[0]["kind"] == "file_backup"
+    assert rows[0]["src"] == f"{tmp_path}/site.conf"
+    assert rows[0]["dest"] == f"{tmp_path}/backups/site.conf"
+
+
+def test_dry_run_backup_step_records_nothing(settings_env, tmp_path, monkeypatch):
+    _patch_audit(monkeypatch)
+    monkeypatch.setattr(jobs, "helper_client", _FakeHelper())
+
+    plan_id = _persist_manual_plan("bk2", _backup_then_fail_steps(tmp_path))
+    job_id = jobs.create_job(plan_id, "dry_run", user_id=1)
+    jobs._run_job(job_id, confirm_phrase=None)
+
+    conn = get_db()
+    rows = q(conn, "SELECT * FROM backups WHERE job_id = ?", (job_id,))
+    conn.close()
+    assert rows == [], "a dry run backs nothing up, so it must record nothing"
+
+
+def test_failed_removal_restores_recorded_backup_with_correct_helper_args(
+    settings_env, tmp_path, monkeypatch
+):
+    """The restore call previously sent {src, dest}; the helper requires
+    {backup_path, original_path} and rejected every one of them."""
+    audits = _patch_audit(monkeypatch)
+    fake = _FakeHelper(failing_ops={"nginx_rm_site"})
+    monkeypatch.setattr(jobs, "helper_client", fake)
+
+    plan_id = _persist_manual_plan("bk3", _backup_then_fail_steps(tmp_path))
+    job_id = jobs.create_job(plan_id, "live", user_id=1)
+    jobs._run_job(job_id, confirm_phrase=None)
+
+    restores = [c for c in fake.calls if c["op"] == "path_restore"]
+    assert len(restores) == 1, "the failed removal did not trigger a restore"
+    assert restores[0]["args"] == {
+        "backup_path": f"{tmp_path}/backups/site.conf",
+        "original_path": f"{tmp_path}/site.conf",
+    }
+    assert restores[0]["dry_run"] is False
+
+    attempted = [kw or a[3] for a, kw in audits if a[1] == "job_restore_attempted"]
+    assert attempted, "restore attempt was not audited"
+    detail = attempted[0]
+    assert detail["backups_found"] == 1
+    assert detail["restored"] == 1, "audit must report the real outcome, not just the attempt"
+
+
+def test_restore_reports_failure_instead_of_claiming_success(
+    settings_env, tmp_path, monkeypatch
+):
+    audits = _patch_audit(monkeypatch)
+    fake = _FakeHelper(failing_ops={"nginx_rm_site", "path_restore"})
+    monkeypatch.setattr(jobs, "helper_client", fake)
+
+    plan_id = _persist_manual_plan("bk4", _backup_then_fail_steps(tmp_path))
+    job_id = jobs.create_job(plan_id, "live", user_id=1)
+    jobs._run_job(job_id, confirm_phrase=None)
+
+    detail = next(kw or a[3] for a, kw in audits if a[1] == "job_restore_attempted")
+    assert detail["backups_found"] == 1
+    assert detail["restored"] == 0, "a failed restore must not be recorded as restored"
+
+
+# ---------------------------------------------------------------------------
+# Backup destination uniqueness (2026-08-24, found by independent verification)
+#
+# Making rollback real also made it capable of restoring the WRONG file:
+# destinations were keyed on basename only, so two different config files with
+# the same name collided, `cp -a` silently overwrote, both source paths were
+# recorded against that one destination, and a rollback wrote the survivor's
+# contents back over BOTH originals. 21 real collisions with differing content
+# existed in the live inventory.
+# ---------------------------------------------------------------------------
+
+def test_same_basename_in_different_directories_gets_distinct_backup_dests(
+    settings_env, tmp_path
+):
+    # Real files: the backup stage only emits a step for a path that exists.
+    a_dir = tmp_path / "server"
+    b_dir = tmp_path / "server" / "config"
+    b_dir.mkdir(parents=True)
+    a_file = a_dir / "compose.yaml"
+    b_file = b_dir / "compose.yaml"
+    a_file.write_text("services: {a: {}}\n")
+    b_file.write_text("services: {b: {}}\n")
+
+    conn = get_db()
+    app_id = _insert_app(conn, "collide", kind="compose")
+    for key, cfg in (("compose-a", a_file), ("compose-b", b_file)):
+        rid = _insert_resource(conn, "compose_project", key, path=str(cfg),
+                               data={"config_files": [str(cfg)]})
+        _insert_assoc(conn, app_id, rid, 95)
+    conn.close()
+
+    plan = planner.build_plan("collide", {"backup": "config"})
+    backups = [s for s in plan.steps if s.operation == "file_backup"]
+    dests = [s.args["dest"] for s in backups]
+    assert len(dests) == 2, f"expected two backup steps, got {dests}"
+    assert len(set(dests)) == 2, (
+        f"backup destinations collide, so a rollback would restore one file "
+        f"over both originals: {dests}"
+    )
+    # path_restore requires the basename to match the original it replaces.
+    for step in backups:
+        assert os.path.basename(step.args["dest"]) == os.path.basename(step.args["path"])
+
+
+def test_compose_down_never_targets_a_generic_project_label(settings_env):
+    """compose_down sweeps stragglers by Docker label across the WHOLE host, so
+    a project name of "docker" would force-remove every container on the box
+    labelled com.docker.compose.project=docker — other apps included."""
+    conn = get_db()
+    app_id = _insert_app(conn, "myapp", kind="compose")
+    rid = _insert_resource(
+        conn, "compose_project", "myapp-compose",
+        path="/apps/myapp/docker",
+        data={"config_files": ["/apps/myapp/docker/docker-compose.yml"]},
+    )
+    _insert_assoc(conn, app_id, rid, 95)
+    conn.close()
+
+    plan = planner.build_plan("myapp", {})
+    projects = [s.args["project"] for s in plan.steps if s.operation == "compose_down"]
+    assert projects, "no compose_down step was generated"
+    assert "docker" not in projects, f"generic label sweep target: {projects}"
+    assert projects == ["myapp"], projects
+
+
+def test_declared_compose_project_name_is_still_preferred(settings_env):
+    conn = get_db()
+    app_id = _insert_app(conn, "declared", kind="compose")
+    rid = _insert_resource(
+        conn, "compose_project", "declared-compose",
+        path="/apps/declared/docker",
+        data={"declared_name": "realproject",
+              "config_files": ["/apps/declared/docker/compose.yml"]},
+    )
+    _insert_assoc(conn, app_id, rid, 95)
+    conn.close()
+    plan = planner.build_plan("declared", {})
+    projects = [s.args["project"] for s in plan.steps if s.operation == "compose_down"]
+    assert projects == ["realproject"], projects
+
+
+def test_build_plan_refuses_an_app_with_no_associations_at_all(settings_env):
+    """Previously produced a lone validate step that executed as 'success'."""
+    conn = get_db()
+    _insert_app(conn, "empty-app", kind="standalone")
+    conn.close()
+    with pytest.raises(planner.PlanError, match="no resources in the latest completed scan"):
+        planner.build_plan("empty-app", {})

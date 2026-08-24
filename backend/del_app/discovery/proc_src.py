@@ -141,15 +141,19 @@ def _host_network_container_ports() -> dict[int, str]:
     sudo. `sudo -n ss -lntp` (the ideal path) is blocked in production by
     del-web.service's NoNewPrivileges=yes, so `ss` never learns a pid and the
     cgroup-based match in `_collect_ports` can't fire for these. Instead:
-    `docker inspect` gives each host-network container's main pid/uid for
-    free (docker group membership, no root needed); that pid's open socket
-    fds (readable when the container happens to run as the same uid as
-    del-web) or, failing that, a uid unique to exactly one running
-    host-network container, are matched against /proc/net/tcp[6]'s listening
-    sockets. Containers that both run as a different uid *and* share that uid
-    with another host-network container (commonly: several running as root)
-    can't be disambiguated this way and are left unresolved rather than
-    guessed at."""
+    `docker inspect` gives each host-network container's main pid for free
+    (docker group membership, no root needed), and that pid's open socket fds
+    are matched by inode against /proc/net/tcp[6]'s listening sockets. That
+    mapping is exact.
+
+    Ports we cannot resolve this way are deliberately left unresolved. A
+    previous version fell back to "this uid owns exactly one host-network
+    container, so give it every port that uid listens on". That is a guess,
+    and on a host where the service account (uid 1000) also runs the
+    systemd-managed apps it is a catastrophically wrong one: it handed one
+    container every unrelated port on the box, which then propagated into
+    nginx-site ownership and marked other apps' live vhosts `safe` to delete.
+    Unresolved is correct; guessed is not."""
     result: dict[int, str] = {}
     raw = _run(["docker", "ps", "--filter", "network=host", "--format", "{{.Names}}"])
     names = [n for n in raw.splitlines() if n.strip()]
@@ -158,39 +162,16 @@ def _host_network_container_ports() -> dict[int, str]:
 
     listen = _listen_sockets()
     inode_to_port = {inode: port for port, inode, _uid in listen}
-    uid_ports: dict[int, list[int]] = {}
-    for port, _inode, uid in listen:
-        uid_ports.setdefault(uid, []).append(port)
 
-    container_uid: dict[str, int] = {}
     for name in names:
         pid_raw = _run(["docker", "inspect", "-f", "{{.State.Pid}}", name]).strip()
         if not pid_raw.isdigit():
             continue
         pid = int(pid_raw)
-        try:
-            with open(f"/proc/{pid}/status") as f:
-                status = f.read()
-        except OSError:
-            continue
-        m = re.search(r"^Uid:\s+(\d+)", status, re.MULTILINE)
-        if not m:
-            continue
-        container_uid[name] = int(m.group(1))
-
         for inode in _proc_fd_socket_inodes(pid):
             port = inode_to_port.get(inode)
             if port:
                 result[port] = name
-
-    uid_owner_count: dict[int, int] = {}
-    for uid in container_uid.values():
-        uid_owner_count[uid] = uid_owner_count.get(uid, 0) + 1
-    for name, uid in container_uid.items():
-        if uid_owner_count[uid] != 1:
-            continue  # ambiguous: 2+ host-network containers share this uid
-        for port in uid_ports.get(uid, []):
-            result.setdefault(port, name)
 
     return result
 

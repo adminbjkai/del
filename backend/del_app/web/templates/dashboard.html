@@ -1,7 +1,20 @@
 {% extends "base.html" %}
 {% block title %}Dashboard{% endblock %}
 {% block content %}
-<h1>Dashboard</h1>
+<div class="page-header">
+  <h1>Dashboard</h1>
+  {% if last_scan %}
+  <div class="scan-strip muted">
+    Last scan
+    <span class="badge status-{{ last_scan.get('status') }}">#{{ last_scan.get('id') }} {{ last_scan.get('status') }}</span>
+    {% if last_scan_age %} · {{ last_scan_age }}{% endif %}
+    {% if last_scan_duration and last_scan_duration != '—' %} · took {{ last_scan_duration }}{% endif %}
+    · finished <span class="dt">{{ format_dt(last_scan.get('finished') or last_scan.get('started')) }}</span>
+  </div>
+  {% else %}
+  <div class="scan-strip muted">No scans yet — run one below.</div>
+  {% endif %}
+</div>
 <div class="stat-grid">
   <a class="stat-card" href="/apps"><div class="stat-value">{{ stats.get('apps', 0) }}</div><div class="stat-label">Applications</div></a>
   <a class="stat-card" href="/jobs"><div class="stat-value">{{ stats.get('running', 0) }}</div><div class="stat-label">Running jobs</div></a>
@@ -15,19 +28,20 @@
 <section class="panel">
   <h2>Recent scans</h2>
   <table class="table" data-enhanced data-empty="No scans yet." data-page-size="25">
-    <thead><tr><th>ID</th><th>Started</th><th>Finished</th><th data-filter="status">Status</th></tr></thead>
+    <caption class="sr-only">The most recent inventory scans and their outcome.</caption>
+    <thead><tr><th scope="col">ID</th><th scope="col">Started</th><th scope="col">Finished</th><th scope="col">Status</th></tr></thead>
     <tbody>
       {% for s in recent_scans %}
       <tr>
         <td>{{ s.get('id') }}</td>
-        <td>{{ s.get('started') }}</td>
-        <td>{{ s.get('finished') or '—' }}</td>
+        <td data-sort-value="{{ iso_sort(s.get('started')) }}"><span class="dt">{{ format_dt(s.get('started')) }}</span></td>
+        <td data-sort-value="{{ iso_sort(s.get('finished')) }}"><span class="dt">{{ format_dt(s.get('finished')) }}</span></td>
         <td data-filter-value="{{ s.get('status') }}"><span class="badge status-{{ s.get('status') }}">{{ s.get('status') }}</span></td>
       </tr>
       {% endfor %}
     </tbody>
   </table>
-  <form method="post" action="/scan" style="margin-top:.75rem;">
+  <form method="post" action="/scan" style="margin-top:.75rem;" data-submit-guard="Starting scan…">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <button type="submit" class="btn btn-primary">Run scan now</button>
   </form>
@@ -36,14 +50,15 @@
 <section class="panel">
   <h2>Recent jobs</h2>
   <table class="table" data-enhanced data-empty="No jobs yet." data-page-size="25">
-    <thead><tr><th>ID</th><th data-filter="mode">Mode</th><th data-filter="status">Status</th><th>Started</th></tr></thead>
+    <caption class="sr-only">The most recent removal jobs, their mode and status.</caption>
+    <thead><tr><th scope="col">ID</th><th scope="col">Mode</th><th scope="col">Status</th><th scope="col">Started</th></tr></thead>
     <tbody>
       {% for j in recent_jobs %}
       <tr>
         <td><a href="/jobs/{{ j.get('id') }}">{{ j.get('id') }}</a></td>
         <td data-filter-value="{{ j.get('mode') }}"><span class="badge {{ 'badge-danger' if j.get('mode') == 'live' else 'badge-grey' }}">{{ 'LIVE' if j.get('mode') == 'live' else 'dry-run' }}</span></td>
         <td data-filter-value="{{ j.get('status') }}"><span class="badge status-{{ j.get('status') }}">{{ j.get('status') }}</span></td>
-        <td>{{ j.get('started') or '—' }}</td>
+        <td data-sort-value="{{ iso_sort(j.get('started')) }}"><span class="dt">{{ format_dt(j.get('started')) }}</span></td>
       </tr>
       {% endfor %}
     </tbody>

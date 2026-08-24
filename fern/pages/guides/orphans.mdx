@@ -5,8 +5,34 @@ slug: guides/orphans
 ---
 
 An **orphan candidate** is a resource that showed up in the latest scan but which DEL
-**could not associate with any application**. The **Orphans** page collects them,
+could not tie to a **current, confident owner**. The **Orphans** page collects them,
 grouped by resource type.
+
+## What counts as "no owner"
+
+A resource is listed when **no** association on it satisfies all three of:
+
+1. the association is not excluded;
+2. its confidence is **at least 60** (`probable` or better); and
+3. the owning application is itself present in the latest completed scan.
+
+Conditions 2 and 3 are not incidental — each closes a hole where a resource that
+genuinely needed attention was hidden:
+
+- **Without "the owner still exists"**, a resource whose only owner was an
+  application removed several scans ago stayed permanently invisible on the page
+  whose entire purpose is to surface exactly that leftover. (The scanner now also
+  purges associations belonging to applications that are no longer in the scan, so
+  those ghost owners disappear at the source too.)
+- **Without the confidence floor**, a weak sub-60 name-similarity guess was enough
+  to hide a resource while being far too weak to make it removable through any
+  application — a dead zone where it was neither actionable here nor cleanable
+  there.
+
+A consequence worth knowing: a resource whose only owner is a `probable` (60–79)
+association will **not** appear here, even though `probable` associations are never
+included in a removal plan either. Those show up in the plan's *Preserved* list
+instead — see [Understanding Confidence](/guides/confidence).
 
 <Frame caption="The Orphans page: unattributed resources grouped by type, review-only.">
   <img src="../../assets/12-orphans.png" alt="Orphans page" />

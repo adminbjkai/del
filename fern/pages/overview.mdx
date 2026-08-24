@@ -11,13 +11,13 @@ correlates everything it finds into *applications* — each with a confidence sc
 the full list of resources it owns (containers, images, volumes, networks, nginx
 sites, units, timers, cron jobs, directories, and more).
 
-When you want an application gone, DEL builds a **staged, backed-up, dry-run-first
-removal plan** and executes it through a separate privileged helper. Every deletion
-is previewed before it runs, backed up before it happens, and validated after. The
-one truly irreversible step — deleting a named volume — is gated behind a typed
-confirmation phrase. DEL is careful by construction: it cannot remove itself, it
-refuses shared resources unless you approve them, and anything it is unsure about is
-blocked rather than deleted.
+When you want an application gone, DEL builds a **staged, dry-run-first removal
+plan** and executes it through a separate privileged helper. Every deletion is
+previewed before it runs, optionally backed up before it happens (choose a backup
+mode — the default is *None*), and validated after. The one truly irreversible step
+— deleting a named volume — is gated behind a typed confirmation phrase. DEL is
+careful by construction: it cannot remove itself, it refuses shared resources unless
+you approve them, and anything it is unsure about is preserved rather than deleted.
 
 <Frame caption="Every removal follows the same path: discover the app, review what it owns, build a plan, dry-run it, then remove.">
   <img src="../assets/infographic-flow.png" alt="How DEL removes an app: discover, review, plan, dry-run, remove" />
@@ -61,13 +61,15 @@ blocked rather than deleted.
 | URL | https://del.bjk.ai |
 | Bind | 127.0.0.1:8075 (Nginx-fronted only, not publicly reachable directly) |
 | Web unit | `del-web.service` — runs as user `bjkai` (groups `bjkai`, `docker`, `adm`) |
-| Helper unit | `del-helper.service` — runs as `root`, strictly allowlisted |
-| Docs unit | `del-docs.service` — this documentation site, basic-auth protected via Nginx |
+| Helper unit | `del-helper.service` — runs as `root`, strictly allowlisted (22 operations), executing a root-owned copy at `/usr/local/lib/del-helper/` |
+| Docs unit | `del-docs.service` — this documentation site (open; no basic auth). App UI still session-login. Not installed by `install.sh` |
+| App launcher | `/view-apps` — an authenticated gallery of the apps this host currently serves, live-checked over HTTPS |
 | Database | SQLite, WAL mode, `/apps/del/database/del.db` |
 | Manifests | `/apps/del/manifests/*.yaml` |
 | Backups | `/apps/del/backups/` |
 | Admin CLI | `/apps/del/scripts/del-admin` (`create-admin`, `change-password`, `migrate`, `rescan`, `backup-db`) |
 | Protection | DEL is flagged `protected` — the planner refuses to build a removal plan for it |
+| Unauthenticated routes | `/login`, `/healthz`, `/favicon.ico`, and the four `/static/*` assets. Everything else needs a session |
 
 DEL is read-only against the host in everything except an operator-approved,
 executed removal job. Scanning, browsing, and plan-building never change anything on

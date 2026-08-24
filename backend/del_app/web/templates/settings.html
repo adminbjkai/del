@@ -1,7 +1,9 @@
 {% extends "base.html" %}
 {% block title %}Settings{% endblock %}
 {% block content %}
-<h1>Settings</h1>
+<div class="page-header">
+  <h1>Settings</h1>
+</div>
 
 <section class="panel">
   <h2>Configuration</h2>
@@ -18,17 +20,26 @@
 
 <section class="panel">
   <h2>Scanning</h2>
-  <form method="post" action="/scan">
+  <form method="post" action="/scan" data-submit-guard="Starting scan…">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <button type="submit" class="btn btn-primary">Run scan now</button>
   </form>
-  <table class="table">
-    <thead><tr><th>ID</th><th>Started</th><th>Finished</th><th>Status</th></tr></thead>
+  <p class="muted" style="font-size:.85rem;margin:.5rem 0 0">
+    Inventory uses the latest <strong>done</strong> scan only. Rows stuck at
+    <span class="badge status-running">running</span> after a restart are
+    auto-marked <span class="badge status-failed">failed</span> on service start.
+  </p>
+  <table class="table" data-enhanced data-empty="No scans yet." data-page-size="25">
+    <caption class="sr-only">The most recent inventory scans and their outcome.</caption>
+    <thead><tr><th scope="col">ID</th><th scope="col">Started</th><th scope="col">Finished</th><th scope="col">Status</th></tr></thead>
     <tbody>
       {% for s in recent_scans %}
-      <tr><td>{{ s.get('id') }}</td><td>{{ s.get('started') }}</td><td>{{ s.get('finished') or '—' }}</td><td><span class="badge">{{ s.get('status') }}</span></td></tr>
-      {% else %}
-      <tr><td colspan="4" class="muted">No scans yet.</td></tr>
+      <tr>
+        <td>{{ s.get('id') }}</td>
+        <td data-sort-value="{{ iso_sort(s.get('started')) }}"><span class="dt">{{ format_dt(s.get('started')) }}</span></td>
+        <td data-sort-value="{{ iso_sort(s.get('finished')) }}"><span class="dt">{{ format_dt(s.get('finished')) }}</span></td>
+        <td data-filter-value="{{ s.get('status') }}"><span class="badge status-{{ s.get('status') }}">{{ s.get('status') }}</span></td>
+      </tr>
       {% endfor %}
     </tbody>
   </table>

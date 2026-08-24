@@ -18,16 +18,34 @@ reading a removal plan safely.
 
 | Badge | Score | What it means | Removal eligibility |
 |---|---|---|---|
-| `confirmed` | 95–100 | Strong, direct evidence (e.g. a Compose project label). | Eligible for automatic inclusion in a plan. |
-| `high` | 80–94 | Strong indirect evidence (e.g. an nginx `proxy_pass` port matching a container's published port). | Eligible for automatic inclusion in a plan. |
-| `probable` | 60–79 | Suggestive but not conclusive. | **Requires your explicit per-resource approval** before it can be included. |
-| `possible` | 30–59 | Weak signal only (e.g. name similarity alone). | **Always blocked** until you manually confirm it — never auto-removable. |
-| `manual` | user-set | Declared in a [manifest](#correcting-correlation). | Treated as confirmed/high per the manifest entry. |
+| `confirmed` | 95–100 | Strong, direct evidence (e.g. a Compose project label). | Included in a plan automatically. |
+| `high` | 80–94 | Strong indirect evidence (e.g. an nginx `proxy_pass` port matching a container's published port). | Included in a plan automatically. |
+| `probable` | 60–79 | Suggestive but not conclusive. | **Never included.** Always preserved with a warning — see the callout below. |
+| `possible` | 30–59 | Weak signal only (e.g. name similarity alone). | **Always blocked** — never auto-removable. |
+| `manual` | manifest-declared | Declared in a [manifest](#correcting-correlation). | Treated exactly like confirmed/high. Note it is **displayed as `confirmed`** — see below. |
+
+<Callout intent="warning">
+  **Approving a `probable` resource does not make it removable.** The plan builder
+  returns "requires per-resource approval" for every `probable` association
+  unconditionally — it never checks whether you approved it. A `probable` row stays
+  in the plan's *Preserved* list no matter what you click.
+
+  To actually include one, declare the resource in the application's
+  [manifest](#correcting-correlation), which records it at confidence 100.
+</Callout>
 
 <Callout intent="info">
   Name similarity alone is only ever `possible` — it is never enough, by itself, for
   DEL to remove something. Correlation never promotes a `possible` association on its
-  own; only your approval or a manifest entry can.
+  own, and neither does the approve button; only a manifest entry can.
+</Callout>
+
+<Callout intent="info">
+  **Manifest entries show a `confirmed` badge, not `manual`.** Correlation marks
+  them `manual` internally, but the scanner stores every association it writes with
+  `source = "correlate"`, and the display level is derived from `source == "manual"`.
+  Since manifest entries carry confidence 100, they land in the `confirmed` band.
+  Removal behaviour is identical; only the badge differs from what you might expect.
 </Callout>
 
 ## Evidence
@@ -45,20 +63,47 @@ overall confidence is derived from the combined evidence.
 
 ## Eligible vs. blocked
 
-When DEL builds a removal plan, each associated resource falls into one of three
-buckets:
+When DEL builds a removal plan, each associated resource falls into one of two
+buckets — it either becomes a deletion step, or it is preserved with a warning.
 
-- **Eligible** — `confirmed`, `high`, and `manual` associations are included
-  automatically (subject to the plan options you choose).
-- **Needs approval** — `probable` associations are held back until you **approve**
-  them on the app detail page (Actions → *approve*).
-- **Blocked** — `possible` associations, and anything DEL flags as **shared** across
-  applications, are never included automatically. They appear in the plan's
-  *Preserved* / *Warnings* lists instead of as deletion steps.
+**Becomes a step** — a `confirmed`, `high` or `manual` association that is not
+excluded, not marked `blocked`, and not (shared and unapproved).
+
+**Preserved** — everything else, each with the reason recorded in the plan's
+*Warnings* list:
+
+| Situation | Warning you'll see |
+|---|---|
+| `probable` | `requires per-resource approval` — but see the callout above: approving does not clear it |
+| `possible` / `unrelated` | `confidence too low for automatic removal` |
+| Shared, and not approved for this app | `shared resource requires per-resource approval` |
+| You excluded it | `excluded by user` |
+| Correlation marked it not safely removable | `blocked: not safely removable` |
+
+### What the per-row *approve* button actually does
+
+There are exactly two things:
+
+1. **Unblocks a shared resource.** A `confirmed`/`high`/`manual` association flagged
+   `shared` is held back by default; approving it clears that for this app's plan.
+   This is the button's real job.
+2. **Approves a named volume** for deletion (the per-volume checkboxes on the plan
+   form do the same thing).
+
+It also clears `excluded` on the row. It does **not** promote a `probable`,
+`possible` or `unrelated` association.
 
 <Frame caption="The Actions column on the app detail page: approve, exclude, or mark shared to override DEL's automatic correlation.">
   <img src="../../assets/05-volume-approval.png" alt="Resource approval actions" />
 </Frame>
+
+<Callout intent="warning">
+  **These per-row actions do not survive a scan.** *approve*, *exclude* and *mark
+  shared* write onto an association row, and every scan deletes and re-inserts each
+  application's associations from scratch. Use them right before building a plan.
+  For a correction that has to persist, put it in the app's manifest — `shared:`
+  and `excluded:` are manifest fields for exactly this reason.
+</Callout>
 
 ## Shared resources
 
@@ -72,11 +117,12 @@ app will never quietly take a volume, network, or directory another app relies o
 When DEL gets an association wrong, you have two ways to fix it:
 
 1. **Per-resource actions** on the app detail page — *approve*, *exclude*, or
-   *mark shared*.
+   *mark shared*. Immediate, but reset by the next scan, and limited to the two
+   things listed above.
 2. **A manifest** — a YAML file in `/apps/del/manifests/` that overrides or augments
-   automatic correlation. A manifest entry is recorded at `manual`/`confirmed` level
-   and is the only way to force a `possible` or excluded resource into an eligible
-   association. See the manifest schema in the
+   automatic correlation at confidence 100. This is the only way to make a
+   `probable` or `possible` resource removable, and the only correction that
+   survives a rescan. See the manifest schema in the
    [Architecture reference](/reference/architecture).
 
 With confidence understood, you're ready for the flagship walkthrough:
