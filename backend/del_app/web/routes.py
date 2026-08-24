@@ -853,7 +853,8 @@ _RECLAIMABLE_LOCK = threading.Lock()
 # normal navigation never turns into a thundering herd of HTTPS requests.
 _APP_PROBE_CACHE: dict[str, dict[str, Any]] = {}
 _APP_PROBE_LOCK = threading.Lock()
-_APP_PROBE_TTL = 120
+_PROBE_REFRESHING: set[str] = set()  # coalesces concurrent background refreshes
+_APP_PROBE_TTL = 300
 _APP_PROBE_TIMEOUT = 3.0
 
 _CATEGORY_ORDER = [
@@ -1110,41 +1111,89 @@ def _probe_domain(domain: str) -> dict[str, Any]:
     }
 
 
+def _run_probes(pending: list[str]) -> dict[str, dict[str, Any]]:
+    """Probe a batch concurrently and write the results into the cache."""
+    results: dict[str, dict[str, Any]] = {}
+    if not pending:
+        return results
+    with ThreadPoolExecutor(max_workers=min(16, len(pending))) as pool:
+        futures = {pool.submit(_probe_domain, domain): domain for domain in pending}
+        for future in as_completed(futures):
+            domain = futures[future]
+            try:
+                result = future.result()
+            except Exception as exc:  # defensive: one probe must not break the page
+                result = {
+                    "healthy": False,
+                    "status": None,
+                    "latency_ms": 0,
+                    "error": type(exc).__name__,
+                    "checked_at": datetime.now(timezone.utc).isoformat(),
+                }
+            results[domain] = result
+            with _APP_PROBE_LOCK:
+                _APP_PROBE_CACHE[domain] = {
+                    "cached_at": time.monotonic(),
+                    "result": dict(result),
+                }
+    return results
+
+
+def _refresh_probes_async(pending: list[str]) -> None:
+    """Refresh stale probes off the request thread, one batch at a time."""
+    def _worker() -> None:
+        try:
+            _run_probes(pending)
+        finally:
+            with _APP_PROBE_LOCK:
+                _PROBE_REFRESHING.clear()
+    threading.Thread(target=_worker, daemon=True).start()
+
+
 def _probe_domains(domains: list[str], *, force: bool = False) -> dict[str, dict[str, Any]]:
-    """Return cached/concurrently refreshed health for normalized domains."""
+    """Health for the gallery's domains, stale-while-revalidate.
+
+    Probing ~125 domains takes seconds even 16-way (each has a 3 s timeout),
+    and with a 120 s TTL a browsing operator paid that cost every two minutes.
+    So: serve whatever is cached immediately and refresh in the background,
+    the same pattern `_reclaimable_bytes` already uses for `docker system df`.
+
+    Only two cases block: an explicit `?refresh=1`, and the very first load
+    after a restart, where there is nothing cached to show and an empty
+    gallery would be worse than a slow one.
+    """
     unique = sorted(set(domains))
     now = time.monotonic()
     results: dict[str, dict[str, Any]] = {}
-    pending: list[str] = []
+    stale: list[str] = []
+    uncached: list[str] = []
+
     with _APP_PROBE_LOCK:
         for domain in unique:
             cached = _APP_PROBE_CACHE.get(domain)
-            if not force and cached and now - float(cached.get("cached_at", 0)) < _APP_PROBE_TTL:
-                results[domain] = dict(cached["result"])
-            else:
-                pending.append(domain)
+            if cached is None:
+                uncached.append(domain)
+                continue
+            results[domain] = dict(cached["result"])
+            if now - float(cached.get("cached_at", 0)) >= _APP_PROBE_TTL:
+                stale.append(domain)
 
-    if pending:
-        with ThreadPoolExecutor(max_workers=min(16, len(pending))) as pool:
-            futures = {pool.submit(_probe_domain, domain): domain for domain in pending}
-            for future in as_completed(futures):
-                domain = futures[future]
-                try:
-                    result = future.result()
-                except Exception as exc:  # defensive: one probe must not break the page
-                    result = {
-                        "healthy": False,
-                        "status": None,
-                        "latency_ms": 0,
-                        "error": type(exc).__name__,
-                        "checked_at": datetime.now(timezone.utc).isoformat(),
-                    }
-                results[domain] = result
-                with _APP_PROBE_LOCK:
-                    _APP_PROBE_CACHE[domain] = {
-                        "cached_at": time.monotonic(),
-                        "result": dict(result),
-                    }
+    if force:
+        results.update(_run_probes(unique))
+        return results
+
+    # Nothing cached for these yet — block, or the gallery renders empty.
+    if uncached:
+        results.update(_run_probes(uncached))
+
+    if stale:
+        with _APP_PROBE_LOCK:
+            already = bool(_PROBE_REFRESHING)
+            if not already:
+                _PROBE_REFRESHING.add("1")
+        if not already:
+            _refresh_probes_async(stale)
+
     return results
 
 

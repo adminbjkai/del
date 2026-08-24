@@ -1162,3 +1162,71 @@ def test_gallery_category_ignores_the_public_suffix():
     assert routes._gallery_category("wallos", "Wallos", "wallos.bjk.ai") != "AI & Automation"
     # but a real AI app still matches on a word-boundary hit
     assert routes._gallery_category("ai-tools", "AI Tools", "ai-tools.bjk.ai") == "AI & Automation"
+
+
+# ---------------------------------------------------------------------------
+# Gallery health probing: stale-while-revalidate (2026-08-24)
+# ---------------------------------------------------------------------------
+
+def test_stale_probes_are_served_immediately_and_refreshed_in_background(monkeypatch):
+    """Probing ~125 domains takes seconds; with the old 120s hard TTL a
+    browsing operator paid that cost every two minutes. A stale entry must be
+    served at once and refreshed off the request thread."""
+    import time as _time
+
+    routes._APP_PROBE_CACHE.clear()
+    routes._PROBE_REFRESHING.clear()
+
+    calls = []
+
+    def slow_probe(domain):
+        calls.append(domain)
+        _time.sleep(0.25)
+        return {"healthy": True, "status": 200, "latency_ms": 5,
+                "error": "", "checked_at": "2026-08-24T00:00:00+00:00"}
+
+    monkeypatch.setattr(routes, "_probe_domain", slow_probe)
+
+    # First call has nothing cached: it must block and actually probe.
+    started = _time.perf_counter()
+    first = routes._probe_domains(["a.example.com", "b.example.com"])
+    blocked_for = _time.perf_counter() - started
+    assert set(first) == {"a.example.com", "b.example.com"}
+    assert blocked_for >= 0.2, "an empty cache must block rather than render an empty gallery"
+
+    # Force both entries stale.
+    with routes._APP_PROBE_LOCK:
+        for entry in routes._APP_PROBE_CACHE.values():
+            entry["cached_at"] = 0.0
+    calls.clear()
+
+    started = _time.perf_counter()
+    second = routes._probe_domains(["a.example.com", "b.example.com"])
+    served_in = _time.perf_counter() - started
+    assert set(second) == {"a.example.com", "b.example.com"}, "stale data must still be served"
+    assert served_in < 0.15, f"stale read blocked for {served_in:.3f}s; should be immediate"
+
+    # The refresh happens, just not on the request thread.
+    deadline = _time.time() + 3
+    while _time.time() < deadline and not calls:
+        _time.sleep(0.05)
+    assert calls, "no background refresh was started for the stale entries"
+
+    routes._APP_PROBE_CACHE.clear()
+    routes._PROBE_REFRESHING.clear()
+
+
+def test_forced_refresh_still_blocks_and_reprobes(monkeypatch):
+    """?refresh=1 is an explicit 'check again now' — it must not serve stale."""
+    routes._APP_PROBE_CACHE.clear()
+    routes._PROBE_REFRESHING.clear()
+    calls = []
+    monkeypatch.setattr(routes, "_probe_domain", lambda d: calls.append(d) or {
+        "healthy": True, "status": 200, "latency_ms": 1, "error": "",
+        "checked_at": "2026-08-24T00:00:00+00:00",
+    })
+    routes._probe_domains(["x.example.com"])
+    calls.clear()
+    routes._probe_domains(["x.example.com"], force=True)
+    assert calls == ["x.example.com"], "forced refresh did not re-probe"
+    routes._APP_PROBE_CACHE.clear()
