@@ -599,3 +599,128 @@ protected_apps = ["del"]
     assert data.get("mtime") and data["mtime"].endswith("Z")
     assert data.get("ctime") and data["ctime"].endswith("Z")
     assert "size_kb" in data
+
+
+# --------------------------------------------------------------------------
+# Regression tests for the 2026-08-24 correlation-accuracy pass.
+# Each of these locks in a fix for a defect that could have caused a WRONG
+# removal — an operator deleting one app and taking another app's live
+# resources with it.
+# --------------------------------------------------------------------------
+
+
+def test_systemd_app_wins_its_own_nginx_site_over_a_host_network_container():
+    """A systemd-run app must claim the vhost that proxies to its own port.
+
+    Regression: the nginx-by-port step used to run before the pass that puts a
+    systemd unit's ports into `app.ports`, so a systemd app could never match
+    its own site and whichever container claimed the port first took the vhost.
+
+    NOTE the ExecStart deliberately carries no `--port N` flag. The unit-seeding
+    step scrapes that flag when it is present, which masked the ordering bug;
+    the real-world case is a service that reads its port from a config file or
+    environment, where the *only* source of the port is the listener's cgroup
+    owner — which is exactly what used to be discovered too late.
+    """
+    unit = Resource(
+        type="systemd_unit", key="astv-remote.service", display="astv-remote.service",
+        path="/etc/systemd/system/astv-remote.service", state="active",
+        data={
+            "is_custom": True,
+            "working_directory": "/apps/astv-remote",
+            "exec_start": "/apps/astv-remote/.venv/bin/gunicorn -c gunicorn.conf.py astv:app",
+        },
+    )
+    port = _port(8083, systemd_unit="astv-remote.service")
+    site = Resource(
+        type="nginx_site",
+        key="/etc/nginx/sites-enabled/astv.bjk.ai.conf",
+        display="astv.bjk.ai",
+        path="/etc/nginx/sites-enabled/astv.bjk.ai.conf",
+        state="enabled",
+        data={
+            "server_names": ["astv.bjk.ai"],
+            "upstreams": [{"host": "127.0.0.1", "port": 8083}],
+            "enabled": True,
+        },
+    )
+    # An unrelated host-network container also exists on this host.
+    other = _container("bjkflix", compose_project="bjk-ai-flix",
+                       compose_working_dir="/apps/bjk-ai-flix")
+
+    apps = build_apps([unit, port, site, other], {})
+    by_slug = {r.slug: assocs for r, assocs in apps}
+
+    owners = [
+        slug for slug, assocs in by_slug.items()
+        if any(a.resource_type == "nginx_site" and a.resource_key == site.key for a in assocs)
+    ]
+    assert owners == ["astv-remote"], f"vhost went to {owners}, expected only astv-remote"
+
+
+def test_nested_compose_file_attaches_to_the_enclosing_app_not_a_phantom():
+    """`/apps/karakeep/docker/compose.yml` belongs to karakeep.
+
+    Regression: the compose step slugified by directory basename, inventing a
+    phantom app literally named "docker" that then accumulated the nested
+    compose roots of every unrelated project and reported them safe to delete.
+    """
+    container = _container("karakeep_web", compose_project="karakeep",
+                           compose_working_dir="/apps/karakeep")
+    nested = Resource(
+        type="compose_project", key="/apps/karakeep/docker/docker-compose.yml",
+        display="docker", path="/apps/karakeep/docker/docker-compose.yml",
+        state="present",
+        data={"working_dir": "/apps/karakeep/docker", "declared_name": None, "images": []},
+    )
+    apps = build_apps([container, nested], {})
+    slugs = {r.slug for r, _ in apps}
+    assert "docker" not in slugs, "a phantom app named after the sub-directory was created"
+
+    by_slug = {r.slug: assocs for r, assocs in apps}
+    assert any(
+        a.resource_type == "compose_project" and a.resource_key == nested.key
+        for a in by_slug["karakeep"]
+    ), "nested compose file was not attached to karakeep"
+
+
+def test_generic_basename_compose_root_does_not_collapse_unrelated_projects():
+    """Two unrelated apps each with a `deploy/` compose root stay separate."""
+    a = Resource(
+        type="compose_project", key="/apps/gongyu/deploy/compose.yml",
+        display="deploy", path="/apps/gongyu/deploy/compose.yml", state="present",
+        data={"working_dir": "/apps/gongyu/deploy", "declared_name": None, "images": []},
+    )
+    b = Resource(
+        type="compose_project", key="/apps/nocodb/deploy/compose.yml",
+        display="deploy", path="/apps/nocodb/deploy/compose.yml", state="present",
+        data={"working_dir": "/apps/nocodb/deploy", "declared_name": None, "images": []},
+    )
+    apps = build_apps([a, b], {})
+    slugs = {r.slug for r, _ in apps}
+    assert "deploy" not in slugs
+    assert {"gongyu", "nocodb"} <= slugs, f"got {slugs}"
+
+    # and neither app claims the other's compose root
+    by_slug = {r.slug: assocs for r, assocs in apps}
+    gongyu_keys = {x.resource_key for x in by_slug["gongyu"]}
+    assert b.key not in gongyu_keys
+
+
+def test_docker_builtin_networks_are_never_associated_to_an_app():
+    """bridge/host/none always exist and can never be removed, so they must
+    not appear in any app's resource set (a plan would emit network_rm)."""
+    container = _container("solo", compose_project="solo", compose_working_dir="/apps/solo")
+    nets = [
+        Resource(type="network", key=name, display=name, path=None, state="active",
+                 data={"attached_containers": ["solo"], "driver": driver})
+        for name, driver in (("bridge", "bridge"), ("host", "host"), ("none", "null"))
+    ]
+    user_net = Resource(
+        type="network", key="solo_default", display="solo_default", path=None,
+        state="active", data={"attached_containers": ["solo"], "compose_project": "solo"},
+    )
+    apps = build_apps([container, *nets, user_net], {})
+    _record, assocs = apps[0]
+    network_keys = {a.resource_key for a in assocs if a.resource_type == "network"}
+    assert network_keys == {"solo_default"}, f"built-ins leaked in: {network_keys}"

@@ -19,6 +19,7 @@ Security model notes
 
 from __future__ import annotations
 
+import fnmatch
 import os
 import re
 from typing import Iterable
@@ -33,6 +34,22 @@ class ValidationError(ValueError):
 # ---------------------------------------------------------------------------
 # systemd unit / timer names
 _UNIT_RE = re.compile(r"\A[A-Za-z0-9@_.\-]+\.(service|timer)\Z")
+
+# Units the helper must never stop/disable/remove, even if the web tier asks.
+# DEL's own units are first: `systemd_stop del-helper.service` was the trigger
+# an attacker would use to get a rewritten helper loaded.
+_DEFAULT_PROTECTED_UNITS = (
+    "del-*.service", "del-*.timer",
+    "ssh.service", "sshd.service", "ssh@*.service",
+    "nginx.service",
+    "docker.service", "docker.socket", "containerd.service",
+    "systemd-*.service", "systemd-*.timer",
+    "cron.service", "crond.service",
+    "dbus.service", "dbus.socket",
+    "network*.service", "systemd-networkd.service",
+    "polkit.service", "rsyslog.service",
+    "fail2ban.service", "ufw.service",
+)
 # docker object identifiers (container / volume / network / image tag component)
 _DOCKER_NAME_RE = re.compile(r"\A[A-Za-z0-9][A-Za-z0-9_.\-]*\Z")
 
@@ -125,6 +142,14 @@ def validate_path_for_deletion(path: str, policy: dict, must_exist: bool = True)
 # ---------------------------------------------------------------------------
 # systemd unit names
 # ---------------------------------------------------------------------------
+def protected_unit_patterns(policy: dict | None = None) -> tuple[str, ...]:
+    """Glob patterns for units the helper refuses to act on."""
+    configured = (policy or {}).get("protected_units")
+    if isinstance(configured, list) and configured:
+        return tuple(str(p) for p in configured)
+    return _DEFAULT_PROTECTED_UNITS
+
+
 def validate_unit_name(name: str, policy: dict | None = None,
                        require_unit_file: bool = False,
                        must_exist: bool = True) -> str:
@@ -136,9 +161,21 @@ def validate_unit_name(name: str, policy: dict | None = None,
     the corresponding file must exist under the configured systemd unit dir,
     unless ``must_exist=False`` (for idempotent callers that treat an
     already-absent unit file as success).
+
+    Units matching ``protected_units`` in the policy (DEL's own units, sshd,
+    nginx, docker, systemd-*, cron, …) are refused outright. This is a *helper
+    side* control on purpose: the web tier's own foreign-unit guard runs inside
+    the process an attacker would already control.
     """
     if not isinstance(name, str) or not _UNIT_RE.match(name):
         raise ValidationError(f"invalid systemd unit name: {name!r}")
+
+    lowered = name.lower()
+    for pattern in protected_unit_patterns(policy):
+        if fnmatch.fnmatch(lowered, pattern.lower()):
+            raise ValidationError(
+                f"unit is protected, refusing: {name!r} (matches {pattern!r})"
+            )
 
     if require_unit_file:
         unit_dir = _norm_root((policy or {}).get(
@@ -281,4 +318,79 @@ def validate_backup_source(backup_path: str, policy: dict) -> str:
             f"backup_path must be under {backup_dir}: {realpath!r}")
     if not os.path.exists(realpath):
         raise ValidationError(f"backup_path does not exist: {realpath!r}")
+    return realpath
+
+
+def _managed_roots(policy: dict) -> list[str]:
+    """Every root DEL legitimately reads from or writes back to.
+
+    This is the approved deletion roots plus the three system config
+    directories DEL is allowed to remove files from (and therefore must be
+    able to back up and restore): nginx sites, systemd units, cron.d.
+    """
+    roots = list(policy.get("approved_deletion_roots", []) or [])
+    roots += list(policy.get("nginx_site_roots", []) or [])
+    unit_dir = policy.get("systemd_unit_dir")
+    if unit_dir:
+        roots.append(unit_dir)
+    cron_dir = policy.get("cron_d_dir")
+    if cron_dir:
+        roots.append(cron_dir)
+    return roots
+
+
+def validate_backup_src_path(path: str, policy: dict) -> str:
+    """Validate a path the helper will *read* into a backup archive.
+
+    Without this, `backup_tar` / `file_backup` would let the unprivileged web
+    tier make the root helper copy any file on the host (``/etc/shadow``,
+    ``/root/.ssh/``, TLS private keys) into the operator-readable backups dir.
+    The planner only ever passes app-owned paths, so confining to the managed
+    roots costs nothing and closes the read primitive.
+    """
+    if not isinstance(path, str) or not path:
+        raise ValidationError("backup source path must be a non-empty string")
+    if not os.path.isabs(path):
+        raise ValidationError(f"backup source path must be absolute: {path!r}")
+    realpath = os.path.realpath(path)
+    if not os.path.exists(realpath):
+        raise ValidationError(f"backup source does not exist: {path!r}")
+    if _matched_root(realpath, _managed_roots(policy)) is None:
+        raise ValidationError(
+            f"backup source is not under a DEL-managed root: {realpath!r}")
+    return realpath
+
+
+def validate_restore_target(original_path: str, policy: dict) -> str:
+    """Validate the destination the helper will *write* during a restore.
+
+    ``path_restore`` previously accepted any absolute path, which made it an
+    arbitrary root-owned file write (``/etc/ld.so.preload``, a systemd unit,
+    an nginx config) reachable from the web tier. A restore may only put a
+    file back where DEL could have removed one from.
+    """
+    if not isinstance(original_path, str) or not original_path:
+        raise ValidationError("original_path must be a non-empty string")
+    if not os.path.isabs(original_path):
+        raise ValidationError(f"original_path must be absolute: {original_path!r}")
+
+    realpath = os.path.realpath(original_path)
+    if _matched_root(realpath, _managed_roots(policy)) is None:
+        raise ValidationError(
+            f"restore target is not under a DEL-managed root: {realpath!r}")
+
+    protected = {_norm_root(p) for p in policy.get("protected_roots", [])}
+    if realpath in protected:
+        raise ValidationError(
+            f"restore target is a protected root, refusing: {realpath!r}")
+
+    for entry in policy.get("never_delete", []):
+        n = _norm_root(entry)
+        if realpath == n or _is_under(realpath, n):
+            raise ValidationError(
+                f"restore target is on the never-delete list, refusing: {realpath!r}")
+
+    if realpath.count("/") < 2:
+        raise ValidationError(f"restore target is too shallow, refusing: {realpath!r}")
+
     return realpath

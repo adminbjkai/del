@@ -268,10 +268,19 @@ def build_plan(app_slug: str, options: dict) -> Plan:
             FROM associations a
             JOIN resources r ON r.id = a.resource_id
             WHERE a.app_id = ?
-              AND (r.last_seen = (SELECT MAX(id) FROM scans) OR NOT EXISTS (SELECT 1 FROM scans))
+              AND (r.last_seen = (SELECT MAX(id) FROM scans WHERE status = 'done')
+                   OR NOT EXISTS (SELECT 1 FROM scans WHERE status = 'done'))
             """,
             (app["id"],),
         )
+        if not assoc_rows and q(conn, "SELECT 1 FROM associations WHERE app_id = ? LIMIT 1", (app["id"],)):
+            # The app has associations but none in the latest completed scan.
+            # Refuse rather than emit a plan that would "succeed" having
+            # removed nothing (this is what a mid-scan build used to do).
+            raise PlanError(
+                f"application '{app_slug}' has no resources in the latest completed scan; "
+                "re-scan before planning a removal"
+            )
     finally:
         conn.close()
 

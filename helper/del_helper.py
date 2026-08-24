@@ -437,8 +437,11 @@ class Operations:
                                                 must_exist=False)
         if not os.path.lexists(realpath):
             return {"output": f"path already absent: {realpath}", "changed": []}
-        # defence-in-depth guard, matches validation but re-asserted at exec site
-        assert realpath.count("/") >= 2, "refusing shallow path"
+        # Defence-in-depth guard, matches validation but re-checked at the exec
+        # site. Deliberately not an `assert`: asserts vanish under `python -O`,
+        # which would silently remove a last-line safety check.
+        if realpath.count("/") < 2:
+            raise OpError(f"refusing shallow path: {realpath!r}")
         cmd = ["rm", "-rf", "--one-file-system", "--", realpath]
         if dry_run:
             return {"output": _fmt_cmds([cmd]), "changed": []}
@@ -509,12 +512,7 @@ class Operations:
 
     # -- backups -------------------------------------------------------------
     def backup_tar(self, args, dry_run):
-        src = args.get("src_path", "")
-        if not isinstance(src, str) or not os.path.isabs(src):
-            raise OpError(f"src_path must be absolute: {src!r}")
-        src_real = os.path.realpath(src)
-        if not os.path.exists(src_real):
-            raise OpError(f"src_path does not exist: {src!r}")
+        src_real = V.validate_backup_src_path(args.get("src_path", ""), self.policy)
         dest = V.validate_backup_dest(args.get("dest", ""), self.policy)
         parent = os.path.dirname(src_real) or "/"
         base = os.path.basename(src_real)
@@ -545,12 +543,9 @@ class Operations:
         return {"output": out + err, "changed": [f"backup:{dest}"]}
 
     def file_backup(self, args, dry_run):
-        path = args.get("path", "")
-        if not isinstance(path, str) or not os.path.isabs(path):
-            raise OpError(f"path must be absolute: {path!r}")
-        path_real = os.path.realpath(path)
+        path_real = V.validate_backup_src_path(args.get("path", ""), self.policy)
         if not os.path.isfile(path_real):
-            raise OpError(f"path is not a file: {path!r}")
+            raise OpError(f"path is not a file: {args.get('path')!r}")
         dest = args.get("dest")
         if not dest:
             backup_dir = self.policy.get("backup_dir", "/apps/del/backups")
@@ -570,9 +565,8 @@ class Operations:
     def path_restore(self, args, dry_run):
         backup_path = V.validate_backup_source(args.get("backup_path", ""),
                                                self.policy)
-        original = args.get("original_path", "")
-        if not isinstance(original, str) or not os.path.isabs(original):
-            raise OpError(f"original_path must be absolute: {original!r}")
+        original = V.validate_restore_target(args.get("original_path", ""),
+                                             self.policy)
         cmd = ["cp", "-a", "--", backup_path, original]
         if dry_run:
             return {"output": _fmt_cmds([cmd]), "changed": []}
@@ -590,6 +584,7 @@ def handle_request(raw: bytes, ops: Operations, auditor: Auditor) -> dict:
     op = None
     args = {}
     dry_run = True
+    context: dict = {}
     try:
         req = json.loads(raw.decode("utf-8"))
         if not isinstance(req, dict):
@@ -597,6 +592,9 @@ def handle_request(raw: bytes, ops: Operations, auditor: Auditor) -> dict:
         op = req.get("op")
         args = req.get("args") or {}
         dry_run = bool(req.get("dry_run", True))
+        for field in ("plan_id", "step_id", "job_id", "requested_by"):
+            if req.get(field) is not None:
+                context[field] = req[field]
         if not isinstance(args, dict):
             raise ValueError("args must be an object")
         if not isinstance(op, str):
@@ -622,8 +620,11 @@ def handle_request(raw: bytes, ops: Operations, auditor: Auditor) -> dict:
         resp = {"ok": False, "dry_run": dry_run, "output": "",
                 "error": f"internal error: {exc}", "changed": []}
 
+    # Correlation fields let a root-level destructive action be traced back to
+    # the DEL job, plan step and user that requested it. Without them the root
+    # audit trail could only be matched to logs/audit.log by timestamp.
     auditor.log({"op": op, "args": args, "dry_run": dry_run,
-                 "ok": resp["ok"], "error": resp["error"]})
+                 "ok": resp["ok"], "error": resp["error"], **context})
     return resp
 
 

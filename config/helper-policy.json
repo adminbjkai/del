@@ -42,6 +42,28 @@
     "/home/bjkai/.bashrc",
     "/home/bjkai/.profile"
   ],
+  "protected_units": [
+    "del-*.service",
+    "del-*.timer",
+    "ssh.service",
+    "sshd.service",
+    "ssh@*.service",
+    "nginx.service",
+    "docker.service",
+    "docker.socket",
+    "containerd.service",
+    "systemd-*.service",
+    "systemd-*.timer",
+    "cron.service",
+    "crond.service",
+    "dbus.service",
+    "dbus.socket",
+    "network*.service",
+    "polkit.service",
+    "rsyslog.service",
+    "fail2ban.service",
+    "ufw.service"
+  ],
   "backup_dir": "/apps/del/backups",
   "nginx_site_roots": [
     "/etc/nginx/sites-available",

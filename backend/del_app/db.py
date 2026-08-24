@@ -20,7 +20,25 @@ def get_db(db_path: str | None = None) -> sqlite3.Connection:
     conn.execute("PRAGMA journal_mode=WAL")
     conn.execute("PRAGMA busy_timeout=5000")
     conn.execute("PRAGMA foreign_keys=ON")
+    # WAL already gives crash-safety; NORMAL drops one fsync per commit, which
+    # matters because x() commits per statement (create_job writes one row per
+    # plan step, auditlog writes one row per step transition).
+    conn.execute("PRAGMA synchronous=NORMAL")
     return conn
+
+
+def latest_done_scan_id(conn: sqlite3.Connection) -> int | None:
+    """Id of the most recent *completed* scan, or None if there is none yet.
+
+    Single source of truth for scan scoping. run_scan() inserts its scan row as
+    'running' before it collects anything, so MAX(id) with no status filter
+    points at an empty in-flight scan — which made every scoped query (the
+    inventory pages, and worse, build_plan) see zero resources mid-scan.
+    """
+    row = conn.execute(
+        "SELECT MAX(id) AS m FROM scans WHERE status = 'done'"
+    ).fetchone()
+    return row["m"] if row else None
 
 
 def run_migrations(db_path: str | None = None) -> None:
