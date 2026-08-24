@@ -110,31 +110,48 @@ _SYSTEM_CRON_BASENAMES = frozenset({
     "google-chrome", "google-chrome-stable",
 })
 
-# Systemd timer basenames that are distro maintenance, not app orphans.
-_SYSTEM_TIMER_MARKERS = (
+# Unit/timer basenames that are distro or vendor infrastructure, not app
+# leftovers. Applied to BOTH units and timers: snapd writes its generated
+# units into /etc/systemd/system, which is exactly the "custom" location the
+# classifier uses to decide something is app-owned, so every snap unit showed
+# up as an actionable orphan.
+_SYSTEM_UNIT_MARKERS = (
     "anacron", "apport", "apt-", "dpkg-", "e2scrub", "fstrim", "fwupd",
     "logrotate", "man-db", "motd-", "systemd-", "ua-", "update-notifier",
-    "phpsessionclean", "certbot", "snap.",
+    "phpsessionclean", "certbot", "snap.", "snapd", "avahi", "ollama",
+    "pm2-", "docker-", "pmcd", "pmlogger", "nxserver", "cups", "bluetooth",
+    "packagekit", "unattended-upgrade", "networkd", "resolvconf",
 )
+
+# Retained name for the timer-only call sites / any external reference.
+_SYSTEM_TIMER_MARKERS = _SYSTEM_UNIT_MARKERS
 
 # Listener ports that are almost always OS / infra, not abandoned apps.
 _SYSTEM_PORTS = frozenset({
     22, 25, 53, 67, 68, 111, 123, 137, 138, 139, 445, 631, 2049, 5353, 5355,
 })
 
-# Process name prefixes that are host infrastructure.
+# Process name prefixes that are host infrastructure. MUST be lowercase: the
+# classifier lowercases the process name before matching, so mixed-case
+# entries here (previously "NetworkManager", "Xorg", "Xvfb") could never match
+# and those processes were reported as actionable orphans.
 _SYSTEM_PROCESS_MARKERS = (
     "sshd", "systemd", "smbd", "nmbd", "dockerd", "containerd", "cron",
-    "rsyslog", "dbus", "NetworkManager", "nginx", "tailscaled", "udevd",
+    "rsyslog", "dbus", "networkmanager", "nginx", "tailscaled", "udevd",
     "multipathd", "irqbalance", "polkit", "accounts-daemon", "avahi",
     "postgres", "postmaster", "mysqld", "redis-server", "mongod", "beam.smp",
-    "gnome-", "Xorg", "Xvfb", "pipewire", "pulseaudio", "cupsd",
+    "gnome-", "xorg", "xvfb", "pipewire", "pulseaudio", "cupsd",
+    "ollama", "pmcd", "pmlogger", "nxserver", "snapd", "packagekit",
 )
 
-# Interactive / IDE noise often has cwd under /apps but is not an abandoned app.
+# Interactive / IDE / agent noise often has cwd under /apps but is not an
+# abandoned app service. Also lowercase-only, for the same reason.
 _INTERACTIVE_PROCESS_MARKERS = (
     "bash", "zsh", "fish", "sh", "tmux", "screen", "claude", "code",
     "cursor", "nvim", "vim", "emacs", "less", "tail", "htop", "top",
+    "node", "npm", "npx", "pnpm", "yarn", "bun", "deno",
+    "python", "python3", "uv", "uvx", "ruby", "java",
+    "grok", "codex", "gemini", "mainthread", "adb", "qemu",
 )
 
 
@@ -223,11 +240,15 @@ def classify_orphan_candidate(
         under_vendor = frag.startswith(("/lib/systemd/", "/usr/lib/systemd/", "/lib/systemd", "/usr/lib/systemd"))
         under_custom = frag.startswith(("/etc/systemd/system", "/home/", "/usr/local/lib/systemd"))
         name_l = (display or key).lower()
-        if res_type == "systemd_timer" and any(m in name_l for m in _SYSTEM_TIMER_MARKERS):
+        if any(m in name_l for m in _SYSTEM_UNIT_MARKERS):
+            kind = "timer" if res_type == "systemd_timer" else "unit"
             return {
                 "bucket": "system",
                 "label": "System",
-                "reason": "distro/maintenance timer (apt, logrotate, fstrim, …) — not an app orphan",
+                "reason": (
+                    f"distro/vendor {kind} (apt, logrotate, snap, ollama, …) — "
+                    "host infrastructure, not an app orphan"
+                ),
             }
         if under_vendor or (not is_custom and not under_custom):
             return {
@@ -314,7 +335,8 @@ def classify_orphan_candidate(
                 for p in (
                     "ssh", "smbd", "nmbd", "cron", "nginx", "docker", "containerd",
                     "systemd", "postgres", "mysql", "mariadb", "redis", "fail2ban",
-                    "ufw", "unattended",
+                    "ufw", "unattended", "ollama", "pmcd", "pmlogger", "nxserver",
+                    "pm2-", "snap.", "avahi", "cups",
                 )
             ):
                 return {
@@ -382,6 +404,19 @@ def classify_orphan_candidate(
                     "sites-available copy not enabled — parked/stale config, not a live orphan site"
                     if data.get("stale_copy")
                     else "config present but not enabled (not serving) — review if leftover"
+                ),
+            }
+        # A catch-all / default vhost has no server_name (or only `_`) and no
+        # upstream: it exists to reject unknown Host headers, not to serve an
+        # app, so it is never a leftover.
+        names = [n for n in (data.get("server_names") or []) if n and n != "_"]
+        if not names or not (data.get("upstreams") or []):
+            return {
+                "bucket": "system",
+                "label": "System",
+                "reason": (
+                    "default/catch-all vhost (no server_name or no upstream) — "
+                    "rejects unknown hosts, not an app site"
                 ),
             }
         return {
@@ -836,17 +871,35 @@ _CATEGORY_ORDER = [
     "Other",
 ]
 
+# Ordered: the FIRST category with a keyword hit wins, so put the more
+# specific/greedy categories ahead of the generic ones. Keywords prefixed with
+# "=" must match a whole word (see _gallery_category) — used for short or
+# substring-prone tokens like "ai", "tv" and "vault", which otherwise pull in
+# "streamvault-iptv", "nativetv", etc.
 _CATEGORY_KEYWORDS = [
-    ("Security & Identity", ("auth", "vault", "passbolt", "bitwarden", "identity", "login")),
-    ("Media & Streaming", ("flix", "media", "jelly", "stream", "iptv", "tv", "cine", "video", "immich", "photo")),
-    ("Notes & Knowledge", ("note", "memo", "docmost", "karakeep", "bookmark", "wiki", "papra", "knowledge", "hearth")),
-    ("Business & Finance", ("expense", "wallos", "monize", "invoice", "finance", "nocodb")),
-    ("Files & Data", ("file", "share", "stash", "sheet", "database", "libredb", "byte", "openbook")),
-    ("AI & Automation", ("ai", "ocr", "agent", "glean", "gongyu", "deep", "poco", "claude", "glm")),
-    ("Productivity", ("kan", "board", "task", "plan", "focal", "calendar", "slash", "banban", "lastboard")),
-    ("Infrastructure", ("portainer", "dock", "komodo", "netdata", "beszel", "monitor", "speed", "hivedock", "appwrite")),
-    ("Developer Tools", ("code", "dev", "git", "query", "api", "draw", "excalidraw", "tldraw", "prettier", "json", "termix")),
-    ("Utilities", ("convert", "pdf", "tools", "txt", "b64", "short", "calc", "simple", "tiny")),
+    ("Media & Streaming", ("flix", "media", "jelly", "stream", "iptv", "=tv", "cine",
+                           "video", "immich", "photo", "ente", "plex", "emby", "music")),
+    ("Security & Identity", ("auth", "=vault", "vaultwarden", "passbolt", "bitwarden",
+                             "identity", "login", "sso", "keycloak")),
+    ("Notes & Knowledge", ("note", "memo", "docmost", "karakeep", "bookmark", "wiki",
+                           "papra", "knowledge", "hearth", "affine", "warden", "obsidian",
+                           "outline", "docnow")),
+    ("Business & Finance", ("expense", "wallos", "monize", "invoice", "finance", "nocodb",
+                            "=crm", "twenty", "billing", "budget")),
+    ("Files & Data", ("file", "share", "stash", "sheet", "database", "libredb", "byte",
+                      "openbook", "drive", "upload")),
+    ("AI & Automation", ("=ai", "ocr", "agent", "glean", "gongyu", "deep", "poco",
+                         "claude", "glm", "llm", "gpt", "chat")),
+    ("Productivity", ("kan", "board", "task", "plan", "focal", "calendar", "slash",
+                      "banban", "lastboard", "todo")),
+    ("Infrastructure", ("portainer", "dock", "komodo", "netdata", "beszel", "monitor",
+                        "speed", "hivedock", "appwrite", "cron", "schedule", "uptime",
+                        "status", "dashboard", "homepage", "=home", "portracker")),
+    ("Developer Tools", ("code", "dev", "git", "gist", "query", "api", "draw",
+                         "excalidraw", "tldraw", "prettier", "json", "termix", "repo",
+                         "deploy")),
+    ("Utilities", ("convert", "pdf", "tools", "txt", "b64", "short", "calc", "simple",
+                   "tiny", "qr", "paste")),
 ]
 
 
@@ -1006,15 +1059,22 @@ def _valid_gallery_domain(value: Any) -> str | None:
 
 
 def _gallery_category(slug: str, name: str, domain: str) -> str:
-    # Ignore the public suffix (notably `.ai`) so every bjk.ai endpoint does
-    # not accidentally land in AI & Automation.
+    """Bucket a gallery app. First matching category in _CATEGORY_KEYWORDS wins.
+
+    A keyword written as ``"=word"`` must match on word boundaries; a plain
+    keyword matches anywhere. Only the first domain label is considered, and
+    the public suffix is dropped, so every `*.bjk.ai` endpoint does not land
+    in AI & Automation on the strength of the TLD.
+    """
     haystack = " ".join((slug, name, domain.split(".", 1)[0])).lower()
     for category, keywords in _CATEGORY_KEYWORDS:
-        if any(
-            (bool(re.search(r"(?:^|[-_ ])ai(?:$|[-_ ])", haystack)) if keyword == "ai" else keyword in haystack)
-            for keyword in keywords
-        ):
-            return category
+        for keyword in keywords:
+            if keyword.startswith("="):
+                word = keyword[1:]
+                if re.search(rf"(?:^|[-_ ]){re.escape(word)}(?:$|[-_ ])", haystack):
+                    return category
+            elif keyword in haystack:
+                return category
     return "Other"
 
 
@@ -1245,8 +1305,12 @@ def _render(name: str, request: Request, response: Response, **extra) -> HTMLRes
     ctx.update(extra)
     rendered = templates.TemplateResponse(request, name, ctx)
     if seed is not None:
+        # Same cookie name as the real session, so it needs the same flags —
+        # notably `secure`, which this pre-login anti-forgery seed was missing
+        # while auth.login_session set it correctly.
         rendered.set_cookie(
-            auth.SESSION_COOKIE_NAME, auth.sign_token(seed), httponly=True, samesite="lax"
+            auth.SESSION_COOKIE_NAME, auth.sign_token(seed),
+            httponly=True, secure=True, samesite="lax",
         )
     return rendered
 

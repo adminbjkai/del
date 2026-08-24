@@ -1876,4 +1876,15 @@
     }
     setTimeout(poll, 2000);
   }
+
+  // =========================================================================
+  // Stop-propagation links (domain links inside clickable table rows)
+  // =========================================================================
+  // Replaces an inline onclick="event.stopPropagation()", which a
+  // script-src 'self' CSP blocks. Delegated so it also covers rows that
+  // AG Grid or the live job poller render after load.
+  document.addEventListener("click", function (e) {
+    var el = e.target && e.target.closest && e.target.closest("[data-stop-propagation]");
+    if (el) e.stopPropagation();
+  });
 })();

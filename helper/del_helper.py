@@ -567,6 +567,22 @@ class Operations:
                                                self.policy)
         original = V.validate_restore_target(args.get("original_path", ""),
                                              self.policy)
+        # A restore puts a file back where it came from, and DEL's backup
+        # destinations preserve the basename. Requiring them to match stops an
+        # arbitrary backup being written under a NEW name into a sensitive
+        # managed root — /etc/systemd/system has to stay restorable so unit
+        # removal can roll back, but only as the unit that was removed, not as
+        # an attacker-chosen one.
+        if os.path.basename(backup_path) != os.path.basename(original):
+            raise OpError(
+                f"restore basename mismatch: {os.path.basename(backup_path)!r} -> "
+                f"{os.path.basename(original)!r}; a restore may only replace the "
+                "file it was taken from"
+            )
+        # Belt and braces: never let a restore recreate a protected unit file.
+        unit_dir = self.policy.get("systemd_unit_dir", "/etc/systemd/system")
+        if os.path.dirname(original) == os.path.realpath(unit_dir):
+            V.validate_unit_name(os.path.basename(original), self.policy)
         cmd = ["cp", "-a", "--", backup_path, original]
         if dry_run:
             return {"output": _fmt_cmds([cmd]), "changed": []}

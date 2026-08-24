@@ -1089,3 +1089,76 @@ def test_gallery_markup_points_icons_at_the_proxy(
     assert resp.status_code == 200
     assert "/app-icon/iconapp.bjk.ai" in resp.text
     assert "https://iconapp.bjk.ai/favicon.ico" not in resp.text
+
+
+# ---------------------------------------------------------------------------
+# Orphan classifier + gallery categoriser precision (2026-08-24)
+# ---------------------------------------------------------------------------
+
+@pytest.mark.parametrize("comm", ["Xvfb", "NetworkManager", "Xorg"])
+def test_mixed_case_system_processes_are_not_actionable(comm):
+    """The classifier lowercases the process name before matching, so the
+    marker list must be lowercase too — these three never matched and were
+    reported as abandoned apps."""
+    result = routes.classify_orphan_candidate("process", comm, comm, None, {"comm": comm})
+    assert result["bucket"] == "system"
+
+
+@pytest.mark.parametrize("unit", [
+    "snap.cups.cupsd.service", "ollama.service", "avahi-daemon.service", "pm2-root.service",
+])
+def test_vendor_units_under_etc_systemd_are_not_actionable(unit):
+    """snapd and friends write generated units into /etc/systemd/system, the
+    very location the classifier uses to infer 'app-owned'."""
+    result = routes.classify_orphan_candidate(
+        "systemd_unit", unit, unit, None,
+        {"is_custom": True, "fragment_path": f"/etc/systemd/system/{unit}"},
+    )
+    assert result["bucket"] == "system"
+
+
+def test_agent_and_runtime_processes_under_a_project_dir_are_not_actionable():
+    result = routes.classify_orphan_candidate(
+        "process", "node", "node (pid 1)", None, {"comm": "node", "cwd": "/apps/del"},
+    )
+    assert result["bucket"] == "system"
+
+
+def test_default_catchall_vhost_is_not_an_actionable_orphan():
+    result = routes.classify_orphan_candidate(
+        "nginx_site", "00-default", "00-default-reject-unknown.conf", None,
+        {"enabled": True, "server_names": [], "upstreams": []},
+    )
+    assert result["bucket"] == "system"
+
+
+def test_a_real_enabled_app_vhost_is_still_actionable():
+    """The catch-all rule must not swallow genuine leftover sites."""
+    result = routes.classify_orphan_candidate(
+        "nginx_site", "leftover", "leftover.bjk.ai", None,
+        {"enabled": True, "server_names": ["leftover.bjk.ai"],
+         "upstreams": [{"port": 9000}]},
+    )
+    assert result["bucket"] == "actionable"
+
+
+@pytest.mark.parametrize("slug,domain,expected", [
+    # "vault" inside "streamvault" used to win Security & Identity outright
+    ("streamvault-iptv", "streamvault-iptv.bjk.ai", "Media & Streaming"),
+    ("vaultwarden", "vaultwarden.bjk.ai", "Security & Identity"),
+    ("affine", "affine.bjk.ai", "Notes & Knowledge"),
+    ("linkwarden", "linkwarden.bjk.ai", "Notes & Knowledge"),
+    ("opengist", "opengist.bjk.ai", "Developer Tools"),
+    ("portracker", "portracker.bjk.ai", "Infrastructure"),
+    ("twenty", "twenty.bjk.ai", "Business & Finance"),
+    ("homepage", "homepage.bjk.ai", "Infrastructure"),
+])
+def test_gallery_categories_for_previously_misfiled_apps(slug, domain, expected):
+    assert routes._gallery_category(slug, slug.title(), domain) == expected
+
+
+def test_gallery_category_ignores_the_public_suffix():
+    """Every endpoint here is *.bjk.ai; the TLD must not put them all in AI."""
+    assert routes._gallery_category("wallos", "Wallos", "wallos.bjk.ai") != "AI & Automation"
+    # but a real AI app still matches on a word-boundary hit
+    assert routes._gallery_category("ai-tools", "AI Tools", "ai-tools.bjk.ai") == "AI & Automation"
