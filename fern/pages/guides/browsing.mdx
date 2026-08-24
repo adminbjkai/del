@@ -5,10 +5,37 @@ slug: guides/browsing
 ---
 
 Once a scan has run, everything DEL found is browsable from the sidebar. This page
-covers the two main views — **Applications** and **Resources** — and the table
+opens with the **View Apps** launchpad and covers the two inventory views —
+**Applications** and **Resources** — plus the table
 controls and badges you'll see throughout. The sidebar also has a **Docs** link
-(opens this documentation site in a new tab; it's basic-auth protected separately
-from your DEL login).
+(opens this documentation site in a new tab; docs are open — no separate basic
+auth. The app UI still requires your DEL login).
+
+## The View Apps launchpad
+
+**View Apps** is the clean, homelab-style gallery for opening web applications.
+It is intentionally stricter than the inventory table: a card appears only when
+the application and its enabled Nginx domain are present in the latest completed
+scan **and** a live HTTPS check succeeds. DEL verifies DNS, TLS, the Nginx route,
+and that an upstream answers. HTTP responses below 500 count as online (including
+login challenges and apps whose root path returns 404); connection failures and
+5xx responses stay hidden. **Refresh health** bypasses the short two-minute cache.
+
+Each card shows the site's favicon when available, domain, live HTTP status,
+response time, and a link back to its DEL inventory detail. Use the toolbar to:
+
+- search names, domains, and categories;
+- filter by category or favorites;
+- sort by name, domain, response time, category, or your saved order;
+- switch between grid and list views;
+- customize card width and spacing;
+- star, recategorize, hide, and drag cards into a personal order.
+
+<Callout intent="info">
+  Gallery customization is stored only in this browser's local storage. It does
+  not edit Nginx, manifests, applications, associations, removal plans, or any
+  other server-side DEL state.
+</Callout>
 
 ## The Applications list
 
@@ -20,33 +47,52 @@ pill next to the heading shows the total. Click any application name to open its
   <img src="../../assets/03-apps-list.png" alt="Applications list filtered to deldemo" />
 </Frame>
 
-Columns: **Name** (with the slug beneath), **Status**, **Kind**, **Domains** (each a
-clickable link to the site), **Host ports**, **Resources** (count), **Warnings** (an
-amber badge when non-zero), and **Protected** (a blue badge for apps DEL will refuse
-to remove, such as DEL itself).
+Columns: **Name** (with the slug beneath — click the slug to copy it), **Status**,
+**Kind**, **Installed** (best available install-time signal: Docker container
+`Created`, project directory age, or when DEL first discovered the app — shown in
+Eastern time as compact `MM-DD-YY H:MM AM/PM`), **Domains**
+(each a clickable link to the site), **Host ports**, **Resources** (count),
+**Warnings** (an amber badge when non-zero), and **Protected** (a blue badge for apps
+DEL will refuse to remove, such as DEL itself).
+
+Use **Show removed too** / **Show live only** at the top of the page (or
+`?show=removed` in the URL) to include apps that no longer appear in the latest
+completed scan. **Export CSV** downloads the currently filtered/visible rows.
 
 <Callout intent="info">
-  By default, **Applications** only shows apps present in the **latest scan** — once
-  an app is fully removed, it disappears from this list on its own (a successful live
-  removal triggers an automatic rescan, so you don't have to remember to refresh it
-  yourself). Add `?show=removed` to the URL to see removed apps too; visiting a
-  removed app's detail page directly shows a "not present in the latest scan" banner
-  instead of a 404, so its history stays reachable.
+  By default, **Applications** only shows apps present in the **latest completed
+  scan** — once an app is fully removed, it disappears from this list on its own (a
+  successful live removal triggers an automatic rescan, so you don't have to remember
+  to refresh it yourself). During a running rescan the UI keeps showing the previous
+  completed inventory so the list does not briefly empty. Visiting a removed app's
+  detail page directly shows a "not present in the latest scan" banner instead of a
+  404, so its history stays reachable. Detail pages show **Installed**, **First seen
+  by DEL**, and **Last seen by DEL** as real timestamps (not internal scan IDs).
 </Callout>
 
-## Table controls
+## Glossary rail
 
-Every table in DEL behaves the same way, all client-side (no page reloads):
+On wide screens a **Glossary** panel sits on the right and explains the labels for
+**whatever page or resource tab you’re on** (it updates with the tab). Entries cover
+Status, Warnings, Protected, State/health, Dangling, Orphan classes, Shared,
+Dirty/clean, and more. On phone and tablet, open it with the floating **Glossary**
+button (bottom-right).
 
-- **Sort** — click a column header to sort by it; click again to reverse.
-- **Filter** — a single *Filter…* box narrows rows as you type, instantly, client-side.
-  Some columns also expose a dropdown filter (for example, filtering applications by
-  status, kind, or protected).
-- **Deep links** — visiting `/apps?search=…` prefills the filter box with that term,
-  so you can share or bookmark a filtered view; there is no separate server-side
-  search form to keep in sync.
-- **Pagination** — long tables paginate with a page-size selector and **‹ Prev** /
-  **Next ›** controls.
+## Table controls (AG Grid)
+
+Data tables use **AG Grid Community** (self-hosted, no CDN) with a light theme that
+matches DEL. Controls are client-side only:
+
+- **Sort** — click a column header.
+- **Quick filter** — top box matches **all columns**. Press **`/`** to focus it.
+- **Per-column filters** — click the floating control under a header for an
+  Excel-style panel: **checkbox list of existing values** (select all / clear /
+  search values) plus text operators (**contains**, **does not contain**, equals,
+  starts with, ends with, …).
+- **Clear all filters** — one button resets every column filter and the quick filter.
+- **Pagination** — page size selector in the grid footer.
+- **CSV export** — on Applications, exports the **currently filtered** rows.
+- **Deep links** — `/apps?search=…` prefills the quick filter.
 
 ## The Resources view
 

@@ -37,8 +37,8 @@ via systemd, and journald logging.
 - **del-helper.service** — the privileged root daemon on the unix socket.
 - **del-docs.service** — serves this documentation site (Fern, `fern/` sources) on
   127.0.0.1:8072/8073, fronted by Nginx at `/docs` (and its `/_next` static assets)
-  behind HTTP basic auth, independent of the app's own session auth. It carries no
-  privileged access — it only serves static/rendered docs content.
+  **without** HTTP basic auth (open docs). The app UI at `/` still requires DEL
+  session login. Docs carry no privileged access — static/rendered content only.
 
 ## Process / privilege model
 
@@ -264,7 +264,7 @@ flowchart TD
 ```
 
 The volume-deletion gate sits on the `volume_rm` step in stage 5: it runs live only
-with the plan option, the per-volume checkbox, and the typed `DELETE VOLUMES` phrase
+with the plan option, the per-volume checkbox, and the typed `y` phrase
 all present. See [Removing an Application](/guides/removing-an-application) for the
 operator-facing walkthrough.
 

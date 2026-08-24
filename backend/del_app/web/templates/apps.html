@@ -2,17 +2,31 @@
 {% import "_macros.html" as m %}
 {% block title %}Applications{% endblock %}
 {% block content %}
-<h1>Applications <span class="count-pill">{{ apps | length }}</span></h1>
+<div class="page-header">
+  <h1>Applications <span class="count-pill">{{ apps | length }}</span></h1>
+  <div class="page-actions">
+    {% if show_removed %}
+      <a class="btn btn-sm" href="/apps{% if search %}?search={{ search }}{% endif %}">Show live only</a>
+      <span class="badge badge-amber">including removed</span>
+    {% else %}
+      <a class="btn btn-sm" href="/apps?show=removed{% if search %}&amp;search={{ search }}{% endif %}">Show removed too</a>
+    {% endif %}
+    <button type="button" class="btn btn-sm" data-export-table="apps-table" title="Export the currently filtered rows as CSV">Export CSV</button>
+  </div>
+</div>
 <p class="muted">Click a column header to sort. Filtering and pagination happen
   instantly in your browser; use <code>?search=</code> in the URL for a deep link
-  that prefills the filter below.</p>
+  that prefills the filter below. Press <kbd>/</kbd> to focus the filter.
+  <strong>Installed</strong> is the best available host signal (container created
+  date or project directory age), falling back to when DEL first discovered the app.</p>
 
-<table class="table" data-enhanced data-empty="No applications found." data-search-placeholder="Filter apps…"{% if search %} data-prefill="{{ search }}"{% endif %}>
+<table id="apps-table" class="table" data-enhanced data-empty="No applications found." data-search-placeholder="Filter apps…"{% if search %} data-prefill="{{ search }}"{% endif %}>
   <thead>
     <tr>
       <th>Name</th>
       <th data-filter="status">Status</th>
       <th data-filter="kind">Kind</th>
+      <th>Installed</th>
       <th>Domains</th>
       <th>Host ports</th>
       <th>Resources</th>
@@ -22,13 +36,22 @@
   </thead>
   <tbody>
     {% for app in apps %}
-    <tr>
-      <td><a href="/apps/{{ app.slug }}">{{ app.name }}</a><div class="muted mono" style="font-size:.75rem">{{ app.slug }}</div></td>
-      <td data-filter-value="{{ app.status }}"><span class="badge">{{ app.status }}</span></td>
+    <tr{% if app.is_removed %} class="row-muted"{% endif %}>
+      <td>
+        <a href="/apps/{{ app.slug }}">{{ app.name }}</a>
+        <div class="muted mono" style="font-size:.75rem">
+          <span class="copy" data-copy="{{ app.slug }}" title="Copy slug">{{ app.slug }}<span class="copy-mark">⧉</span></span>
+          {% if app.is_removed %}<span class="badge badge-grey" style="margin-left:.35rem">removed</span>{% endif %}
+        </div>
+      </td>
+      <td data-filter-value="{{ app.status }}"><span class="badge status-{{ app.status }}">{{ app.status }}</span></td>
       <td data-filter-value="{{ app.kind }}">{{ app.kind or '—' }}</td>
+      <td data-sort-value="{{ iso_sort(app.installed_at) }}" data-filter-value="{{ format_dt(app.installed_at) }}" title="{% if app.installed_at %}{{ format_dt(app.installed_at) }}{% else %}Unknown{% endif %}">
+        <span class="dt">{{ format_dt(app.installed_at) }}</span>
+      </td>
       <td>{{ m.domain_links(app.domains) }}</td>
       <td>{{ m.joinlist(app.ports) }}</td>
-      <td>{{ app.res_count }}</td>
+      <td data-sort-value="{{ app.res_count }}">{{ app.res_count }}</td>
       <td data-sort-value="{{ app.warn_count }}">{% if app.warn_count %}<span class="badge badge-amber">{{ app.warn_count }}</span>{% else %}0{% endif %}</td>
       <td data-filter-value="{{ 'yes' if app.protected else 'no' }}">{% if app.protected %}<span class="badge badge-blue">protected</span>{% else %}—{% endif %}</td>
     </tr>

@@ -157,6 +157,350 @@ def test_apps_list_has_enhanced_table(authed_client):
     assert "data-enhanced" in resp.text
 
 
+def test_view_apps_only_renders_current_enabled_healthy_domains(
+    authed_client, settings_env, monkeypatch
+):
+    """Gallery is an additive live view, not a dump of stale/broken Nginx data."""
+    import json
+
+    from del_app.db import get_db, x
+
+    conn = get_db()
+    try:
+        old_scan = x(conn, "INSERT INTO scans (status) VALUES ('done')")
+        scan_id = x(conn, "INSERT INTO scans (status) VALUES ('done')")
+        good_app = x(
+            conn,
+            "INSERT INTO applications (slug, name, status, kind, first_seen, last_seen) "
+            "VALUES (?,?,?,?,?,?)",
+            ("good-app", "Good App", "running", "compose", scan_id, scan_id),
+        )
+        bad_app = x(
+            conn,
+            "INSERT INTO applications (slug, name, status, kind, first_seen, last_seen) "
+            "VALUES (?,?,?,?,?,?)",
+            ("bad-app", "Bad App", "running", "compose", scan_id, scan_id),
+        )
+        stale_app = x(
+            conn,
+            "INSERT INTO applications (slug, name, status, kind, first_seen, last_seen) "
+            "VALUES (?,?,?,?,?,?)",
+            ("stale-app", "Stale App", "running", "compose", old_scan, old_scan),
+        )
+
+        def add_site(key, domain, enabled, seen):
+            return x(
+                conn,
+                "INSERT INTO resources (type, key, display, state, data_json, first_seen, last_seen) "
+                "VALUES ('nginx_site',?,?,?,?,?,?)",
+                (key, key, "enabled" if enabled else "available", json.dumps({
+                    "enabled": enabled, "server_names": [domain],
+                }), seen, seen),
+            )
+
+        good_site = add_site("good-site", "good-app.bjk.ai", True, scan_id)
+        bad_site = add_site("bad-site", "bad-app.bjk.ai", True, scan_id)
+        disabled_site = add_site("disabled-site", "disabled.bjk.ai", False, scan_id)
+        stale_site = add_site("stale-site", "stale-app.bjk.ai", True, old_scan)
+        for app_id, resource_id in (
+            (good_app, good_site), (bad_app, bad_site),
+            (good_app, disabled_site), (stale_app, stale_site),
+        ):
+            x(
+                conn,
+                "INSERT INTO associations (app_id, resource_id, confidence, ownership, shared) "
+                "VALUES (?,?,?,?,0)",
+                (app_id, resource_id, 90, "exclusive"),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+    def fake_probes(domains, force=False):
+        assert set(domains) == {"good-app.bjk.ai", "bad-app.bjk.ai"}
+        return {
+            "good-app.bjk.ai": {
+                "healthy": True, "status": 200, "latency_ms": 42,
+                "checked_at": "2026-08-03T12:00:00+00:00",
+            },
+            "bad-app.bjk.ai": {
+                "healthy": False, "status": 502, "latency_ms": 15,
+                "checked_at": "2026-08-03T12:00:00+00:00",
+            },
+        }
+
+    monkeypatch.setattr(routes, "_probe_domains", fake_probes)
+    resp = authed_client.get("/view-apps")
+    assert resp.status_code == 200
+    assert "Good App" in resp.text
+    assert "good-app.bjk.ai" in resp.text
+    assert "HTTP 200" in resp.text
+    assert "42 ms" in resp.text
+    assert "Bad App" not in resp.text
+    assert "disabled.bjk.ai" not in resp.text
+    assert "stale-app.bjk.ai" not in resp.text
+    assert "1 unavailable hidden" in resp.text
+    assert 'id="gallery-layout-toggle"' in resp.text
+    assert 'data-gallery-view="grid"' in resp.text
+    assert 'href="/view-apps"' in resp.text
+
+
+def test_view_apps_domain_validation_and_category_helpers():
+    assert routes._valid_gallery_domain("Example.BJK.AI.") == "example.bjk.ai"
+    assert routes._valid_gallery_domain("*.bjk.ai") is None
+    assert routes._valid_gallery_domain("192.168.1.164") is None
+    assert routes._valid_gallery_domain("localhost") is None
+    assert routes._gallery_category("jellyfin", "Jellyfin", "jellyfin.bjk.ai") == "Media & Streaming"
+    # The .ai public suffix must not classify every app as AI.
+    assert routes._gallery_category("plainpad", "Plainpad", "plainpad.bjk.ai") != "AI & Automation"
+
+
+def test_parse_and_format_dt_helpers():
+    """Docker Created, sqlite scan times → Eastern MM-DD-YY H:MM AM/PM.
+
+    Offsets verified against zoneinfo America/New_York (EDT=UTC-4, EST=UTC-5).
+    """
+    # 2026-05-13 11:31 UTC = 7:31 AM EDT
+    assert routes._format_dt("2026-05-13T11:31:00.840175564Z", date_only=True) == "05-13-26"
+    assert routes._format_dt("2026-05-13T11:31:00.840175564Z") == "05-13-26 7:31 AM"
+    # sqlite-style naive UTC: 2026-07-26 19:04:30 UTC = 3:04 PM EDT
+    assert routes._format_dt("2026-07-26 19:04:30") == "07-26-26 3:04 PM"
+    # day-boundary: UTC midnight → previous evening in Eastern (EST UTC-5 in Feb)
+    assert routes._format_dt("2026-02-01T00:00:00Z") == "01-31-26 7:00 PM"
+    assert routes._format_dt(None) == "—"
+    assert routes._format_dt("not-a-date") == "—"
+    assert "ET" not in routes._format_dt("2026-05-13T11:31:00Z")
+    assert routes._iso_sort_key("2026-05-13T11:31:00Z") == "2026-05-13T11:31:00Z"
+    # Parse treats naive as UTC and returns aware UTC
+    parsed = routes._parse_dt("2026-07-26 19:04:30")
+    assert parsed is not None and parsed.tzinfo is not None
+    assert parsed.hour == 19
+    # earliest of docker + dir signals
+    rows = [
+        {"type": "container", "data_json": '{"created": "2026-05-13T11:31:00Z"}'},
+        {"type": "directory", "data_json": '{"ctime": "2026-01-01T00:00:00Z", "mtime": "2026-06-01T00:00:00Z"}'},
+    ]
+    # directory contributes ctime only (first of birth/ctime/mtime); earliest overall is dir ctime
+    assert routes._installed_at_from_resources(rows).startswith("2026-01-01")
+    assert routes._installed_at_from_resources([]) is None
+
+
+def test_apps_list_shows_installed_column_and_container_date(authed_client, settings_env):
+    """Apps table exposes an Installed column populated from container Created."""
+    from del_app.db import get_db, x
+
+    conn = get_db()
+    try:
+        scan_id = x(
+            conn,
+            "INSERT INTO scans (status, started, finished) VALUES ('done', '2026-07-01 12:00:00', '2026-07-01 12:01:00')",
+        )
+        app_id = x(
+            conn,
+            "INSERT INTO applications (slug, name, status, kind, first_seen, last_seen) "
+            "VALUES (?,?,?,?,?,?)",
+            ("dated-app", "Dated App", "running", "compose", scan_id, scan_id),
+        )
+        cont_id = x(
+            conn,
+            "INSERT INTO resources (type, key, display, state, data_json, first_seen, last_seen) "
+            "VALUES (?,?,?,?,?,?,?)",
+            (
+                "container",
+                "dated-app-web",
+                "dated-app-web",
+                "running",
+                '{"created": "2026-03-15T08:00:00.123456789Z", "published_ports": [9090]}',
+                scan_id,
+                scan_id,
+            ),
+        )
+        x(
+            conn,
+            "INSERT INTO associations (app_id, resource_id, confidence, ownership, shared) "
+            "VALUES (?,?,?,?,?)",
+            (app_id, cont_id, 100, "exclusive", 0),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    resp = authed_client.get("/apps")
+    assert resp.status_code == 200
+    assert "Installed" in resp.text
+    # 2026-03-15T08:00:00Z → 03-15-26 4:00 AM (EDT)
+    assert "03-15-26 4:00 AM" in resp.text
+    assert "dated-app" in resp.text
+    assert 'data-export-table="apps-table"' in resp.text
+    assert "Show removed too" in resp.text
+
+
+def test_apps_list_show_removed_toggle(authed_client, settings_env):
+    """Default list hides apps not in the latest completed scan; ?show=removed keeps them."""
+    from del_app.db import get_db, x
+
+    conn = get_db()
+    try:
+        old_id = x(conn, "INSERT INTO scans (status) VALUES ('done')")
+        new_id = x(conn, "INSERT INTO scans (status) VALUES ('done')")
+        x(
+            conn,
+            "INSERT INTO applications (slug, name, status, kind, first_seen, last_seen) "
+            "VALUES (?,?,?,?,?,?)",
+            ("live-one", "Live One", "running", "compose", new_id, new_id),
+        )
+        x(
+            conn,
+            "INSERT INTO applications (slug, name, status, kind, first_seen, last_seen) "
+            "VALUES (?,?,?,?,?,?)",
+            ("gone-one", "Gone One", "stopped", "compose", old_id, old_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    live = authed_client.get("/apps")
+    assert live.status_code == 200
+    assert "Live One" in live.text
+    assert "Gone One" not in live.text
+
+    all_apps = authed_client.get("/apps", params={"show": "removed"})
+    assert all_apps.status_code == 200
+    assert "Live One" in all_apps.text
+    assert "Gone One" in all_apps.text
+    assert "including removed" in all_apps.text
+    assert "removed" in all_apps.text  # badge on removed row
+
+
+def test_app_detail_shows_human_dates_not_raw_scan_ids(authed_client, settings_env):
+    from del_app.db import get_db, x
+
+    conn = get_db()
+    try:
+        scan_id = x(
+            conn,
+            "INSERT INTO scans (status, started, finished) VALUES ('done', '2026-06-10 09:30:00', '2026-06-10 09:31:00')",
+        )
+        app_id = x(
+            conn,
+            "INSERT INTO applications (slug, name, status, kind, first_seen, last_seen) "
+            "VALUES (?,?,?,?,?,?)",
+            ("detail-dates", "Detail Dates", "running", "compose", scan_id, scan_id),
+        )
+        cont_id = x(
+            conn,
+            "INSERT INTO resources (type, key, display, state, data_json, first_seen, last_seen) "
+            "VALUES (?,?,?,?,?,?,?)",
+            (
+                "container",
+                "detail-dates-web",
+                "detail-dates-web",
+                "running",
+                '{"created": "2026-02-01T00:00:00Z"}',
+                scan_id,
+                scan_id,
+            ),
+        )
+        x(
+            conn,
+            "INSERT INTO associations (app_id, resource_id, confidence, ownership, shared) "
+            "VALUES (?,?,?,?,?)",
+            (app_id, cont_id, 100, "exclusive", 0),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    resp = authed_client.get("/apps/detail-dates")
+    assert resp.status_code == 200
+    assert "Installed" in resp.text
+    # container Created 2026-02-01T00:00:00Z → 01-31-26 7:00 PM (EST)
+    assert "01-31-26 7:00 PM" in resp.text
+    # scan started 2026-06-10 09:30:00 UTC → 06-10-26 5:30 AM (EDT)
+    assert "06-10-26 5:30 AM" in resp.text
+    assert "First seen by DEL" in resp.text
+    assert "ET" not in resp.text
+
+
+def test_latest_scan_id_ignores_running_scans(authed_client, settings_env):
+    """During a post-removal rescan the UI must keep showing the last completed scan."""
+    from del_app.db import get_db, x
+
+    conn = get_db()
+    try:
+        done_id = x(conn, "INSERT INTO scans (status) VALUES ('done')")
+        x(
+            conn,
+            "INSERT INTO applications (slug, name, status, kind, last_seen) VALUES (?,?,?,?,?)",
+            ("still-here", "Still Here", "running", "compose", done_id),
+        )
+        # In-progress scan must not empty the apps list
+        x(conn, "INSERT INTO scans (status) VALUES ('running')")
+        conn.commit()
+    finally:
+        conn.close()
+
+    resp = authed_client.get("/apps")
+    assert resp.status_code == 200
+    assert "Still Here" in resp.text
+
+
+def test_dashboard_shows_last_scan_strip(authed_client, settings_env):
+    from del_app.db import get_db, x
+
+    conn = get_db()
+    try:
+        x(
+            conn,
+            "INSERT INTO scans (status, started, finished) VALUES ('done', '2026-07-26 10:00:00', '2026-07-26 10:01:30')",
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    resp = authed_client.get("/")
+    assert resp.status_code == 200
+    assert "Last scan" in resp.text
+
+
+def test_shell_has_glossary_sidebar_and_collapse_controls(authed_client):
+    """Authenticated pages include the glossary rail, FAB, and nav collapse UI."""
+    resp = authed_client.get("/apps")
+    assert resp.status_code == 200
+    assert 'data-glossary="apps"' in resp.text
+    assert 'id="glossary-rail"' in resp.text
+    assert 'id="glossary-fab"' in resp.text
+    assert 'id="sidebar-collapse"' in resp.text
+    assert 'id="nav-toggle"' in resp.text
+    assert "Glossary" in resp.text
+    # Apps-context glossary terms
+    assert "Warnings" in resp.text
+    assert "Protected" in resp.text
+    assert "Status" in resp.text
+
+
+def test_resources_glossary_context_container(authed_client):
+    resp = authed_client.get("/resources/container")
+    assert resp.status_code == 200
+    assert 'data-glossary="resources-container"' in resp.text
+    assert "State / health" in resp.text or "State / health" in resp.text.replace("—", "")
+    assert "healthy" in resp.text.lower()
+    assert "no healthcheck" in resp.text.lower() or "healthcheck" in resp.text.lower()
+
+
+def test_resources_glossary_context_volume_and_image(authed_client):
+    for path, needle in (
+        ("/resources/volume", "Orphan"),
+        ("/resources/image", "Dangling"),
+        ("/resources/network", "Shared"),
+        ("/resources/directory", "Dirty"),
+        ("/resources/git_repo", "Dirty"),
+    ):
+        resp = authed_client.get(path)
+        assert resp.status_code == 200, path
+        assert needle in resp.text, path
+
+
 # ---------------------------------------------------------------------------
 # resources: tab bar counts, singular/plural handling, owner join
 # ---------------------------------------------------------------------------
@@ -312,12 +656,59 @@ def test_orphans_grouped_and_review_only(authed_client, settings_env):
     resp = authed_client.get("/orphans")
     assert resp.status_code == 200
     assert "orphan-image" in resp.text
-    assert "orphan candidate" in resp.text.lower()
+    assert "orphan" in resp.text.lower()
+    assert "Actionable" in resp.text
+    assert 'data-glossary="orphans"' in resp.text
 
 
-def test_orphan_image_referenced_by_compose_project_gets_specific_reason(authed_client, settings_env):
-    """An unused image that a discovered (but not-running) compose project
-    still declares gets a more specific reason than the generic one."""
+def test_orphan_classification_filters_system_noise():
+    """Vendor systemd, docker builtins, and OS cron are System — not Actionable."""
+    from del_app.web.routes import classify_orphan_candidate
+
+    nm = classify_orphan_candidate(
+        "systemd_unit",
+        "NetworkManager.service",
+        "NetworkManager.service",
+        "/lib/systemd/system/NetworkManager.service",
+        {"is_custom": False, "fragment_path": "/lib/systemd/system/NetworkManager.service"},
+    )
+    assert nm["bucket"] == "system"
+
+    none_net = classify_orphan_candidate(
+        "network", "none", "none", None, {"driver": "null"},
+    )
+    assert none_net["bucket"] == "system"
+
+    cron = classify_orphan_candidate(
+        "cron_entry", "/etc/cron.daily/logrotate", "[daily] logrotate",
+        "/etc/cron.daily/logrotate", {"command": "/etc/cron.daily/logrotate"},
+    )
+    assert cron["bucket"] == "system"
+
+    ssh = classify_orphan_candidate(
+        "port", "0.0.0.0:22", "0.0.0.0:22", None,
+        {"port": 22, "process": "sshd", "systemd_unit": "ssh.service"},
+    )
+    assert ssh["bucket"] == "system"
+
+    custom = classify_orphan_candidate(
+        "systemd_unit",
+        "myapp.service",
+        "myapp.service",
+        "/etc/systemd/system/myapp.service",
+        {"is_custom": True, "fragment_path": "/etc/systemd/system/myapp.service"},
+    )
+    assert custom["bucket"] == "actionable"
+
+    vol = classify_orphan_candidate(
+        "volume", "leftover_data", "leftover_data", None, {"containers_using": []},
+    )
+    assert vol["bucket"] == "actionable"
+
+
+def test_orphan_image_referenced_by_compose_project_is_expected_not_default(authed_client, settings_env):
+    """Compose-declared unused image is Expected — hidden from default Actionable view,
+    visible with ?show=all and a precise reason."""
     from del_app.db import get_db, x
 
     conn = get_db()
@@ -347,9 +738,16 @@ def test_orphan_image_referenced_by_compose_project_gets_specific_reason(authed_
     finally:
         conn.close()
 
-    resp = authed_client.get("/orphans")
-    assert resp.status_code == 200
-    assert "unused, but referenced by compose project retiredapp (not currently running)" in resp.text
+    default = authed_client.get("/orphans")
+    assert default.status_code == 200
+    # Expected images are not in the default Actionable-only list
+    assert "myregistry/retiredapp:v2" not in default.text
+
+    all_view = authed_client.get("/orphans", params={"show": "all"})
+    assert all_view.status_code == 200
+    assert "myregistry/retiredapp:v2" in all_view.text
+    assert "declared in compose project" in all_view.text
+    assert "Expected" in all_view.text
 
 
 def test_jobs_list_renders(authed_client, settings_env):
@@ -525,13 +923,13 @@ def test_execute_live_with_correct_phrase_creates_job(authed_client, monkeypatch
     csrf = _with_csrf(authed_client)
     resp = authed_client.post(
         "/plans/7/execute",
-        data={"csrf_token": csrf, "mode": "live", "confirm_phrase": "DELETE VOLUMES"},
+        data={"csrf_token": csrf, "mode": "live", "confirm_phrase": "y"},
         follow_redirects=False,
     )
     assert resp.status_code == 303
     assert resp.headers["location"] == "/jobs/99"
     assert calls["create_job"] == (7, "live", 1)
-    assert calls["execute_job"] == (99, "DELETE VOLUMES")
+    assert calls["execute_job"] == (99, "y")
 
 
 # ---------------------------------------------------------------------------

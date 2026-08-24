@@ -243,6 +243,14 @@ def test_cron_rm_already_absent_is_idempotent_success(tmp_policy):
     assert res["changed"] == []
 
 
+def test_process_term_already_gone_is_idempotent_success(tmp_policy):
+    """Quiesce must not fail the job when systemd_stop already reaped the pid."""
+    ops = H.Operations(tmp_policy)
+    res = ops.process_term({"pid": 999999999, "expected_exe": "/bin/true"}, dry_run=False)
+    assert "already absent" in res["output"]
+    assert res["changed"] == []
+
+
 def test_systemd_rm_unit_already_absent_is_idempotent_success(tmp_policy):
     unit_dir = tmp_policy["systemd_unit_dir"]
     os.makedirs(unit_dir, exist_ok=True)

@@ -3,7 +3,7 @@ import shutil
 import pytest
 
 from del_app.correlate import build_apps
-from del_app.discovery import docker_src, nginx_src, proc_src
+from del_app.discovery import docker_src, fs_src, nginx_src, proc_src, systemd_src
 from del_app.models import Resource
 
 
@@ -426,6 +426,100 @@ def test_pure_systemd_app_seeded_with_unit_nginx_dir_and_port():
     assert unit_assoc.level == "confirmed"
 
 
+def test_parse_systemctl_show_does_not_mix_execstart_across_units():
+    """Batched `systemctl show` emits ExecStart before Id= and separates
+    units with a blank line. The parser must keep each unit's ExecStart."""
+    raw = (
+        "ExecStart={ path=/apps/glmflix/start.sh ; argv[]=/apps/glmflix/start.sh ; ignore_errors=no }\n"
+        "WorkingDirectory=/apps/glmflix\n"
+        "Id=glmflix.service\n"
+        "FragmentPath=/etc/systemd/system/glmflix.service\n"
+        "\n"
+        "ExecStart={ path=/apps/url2/target/release/url-shortener ; argv[]=/apps/url2/target/release/url-shortener ; ignore_errors=no }\n"
+        "WorkingDirectory=/apps/url2\n"
+        "Id=url-shortener.service\n"
+        "FragmentPath=/etc/systemd/system/url-shortener.service\n"
+        "\n"
+        "ExecStart={ path=/usr/bin/gpu-manager ; argv[]=/usr/bin/gpu-manager --log /var/log/gpu-manager.log ; ignore_errors=no }\n"
+        "WorkingDirectory=\n"
+        "Id=gpu-manager.service\n"
+        "FragmentPath=/lib/systemd/system/gpu-manager.service\n"
+    )
+    parsed = systemd_src._parse_systemctl_show(raw)
+    assert set(parsed) == {
+        "glmflix.service", "url-shortener.service", "gpu-manager.service",
+    }
+    assert "/apps/glmflix/start.sh" in parsed["glmflix.service"]["ExecStart"]
+    assert parsed["glmflix.service"]["WorkingDirectory"] == "/apps/glmflix"
+    assert "/apps/url2/target/release/url-shortener" in parsed["url-shortener.service"]["ExecStart"]
+    assert "gpu-manager" in parsed["gpu-manager.service"]["ExecStart"]
+    assert "/apps/glmflix" not in parsed["gpu-manager.service"].get("ExecStart", "")
+
+
+def test_host_monitor_bind_mounts_do_not_claim_foreign_systemd_units():
+    """Netdata bind-mounts /, /sys, /proc, /var/log for host monitoring.
+    Those must not become ownership paths that absorb glmflix / url-shortener."""
+    netdata = _container(
+        "netdata", compose_project="netdata", compose_working_dir="/apps/netdata",
+    )
+    binds = []
+    for src, dest in (
+        ("/", "/host/root"),
+        ("/sys", "/host/sys"),
+        ("/proc", "/host/proc"),
+        ("/var/log", "/host/var/log"),
+        ("/etc/passwd", "/host/etc/passwd"),
+        ("/var/run/docker.sock", "/var/run/docker.sock"),
+    ):
+        binds.append(Resource(
+            type="bind_mount",
+            key=f"{src}->netdata:{dest}",
+            display=f"{src} -> netdata:{dest}",
+            path=src,
+            state="ro",
+            data={"container": "netdata", "source": src, "destination": dest},
+        ))
+    glmflix = Resource(
+        type="systemd_unit", key="glmflix.service", display="glmflix.service",
+        path="/etc/systemd/system/glmflix.service", state="active",
+        data={
+            "is_custom": True,
+            "working_directory": "/apps/glmflix",
+            "exec_start": "/apps/glmflix/start.sh",
+        },
+    )
+    # Scrambled ExecStart as stored by the old batched-show parser — contains
+    # /var/log, which netdata also bind-mounts.
+    scrambled = Resource(
+        type="systemd_unit", key="url-shortener.service", display="url-shortener.service",
+        path="/etc/systemd/system/url-shortener.service", state="active",
+        data={
+            "is_custom": True,
+            "working_directory": None,
+            "exec_start": "/usr/bin/gpu-manager --log /var/log/gpu-manager.log",
+        },
+    )
+    own_unit = Resource(
+        type="systemd_unit", key="netdata.service", display="netdata.service",
+        path="/etc/systemd/system/netdata.service", state="active",
+        data={
+            "is_custom": True,
+            "working_directory": "/apps/netdata",
+            "exec_start": "/apps/netdata/run.sh",
+        },
+    )
+    apps = build_apps([netdata, *binds, glmflix, scrambled, own_unit], {})
+    by_slug = {r.slug: assocs for r, assocs in apps}
+    assert "netdata" in by_slug
+    net_units = {
+        a.resource_key for a in by_slug["netdata"] if a.resource_type == "systemd_unit"
+    }
+    assert "glmflix.service" not in net_units
+    assert "url-shortener.service" not in net_units
+    assert "netdata.service" in net_units
+    assert "glmflix" in by_slug
+
+
 def test_system_unit_not_under_scan_root_does_not_seed_an_app():
     """A vendor/system unit (sshd) never resolves to a scan-root project dir,
     so it must not seed a phantom app."""
@@ -464,3 +558,44 @@ def test_proc_src_sanitize_args_redacts_secret_shaped_flags():
     assert "abc123" not in cleaned
     assert "xyz" not in cleaned
     assert "--other=fine" in cleaned
+
+
+def test_fs_src_epoch_to_iso_and_directory_timestamps(tmp_path, monkeypatch):
+    """Directory resources must carry mtime/ctime ISO timestamps for the
+    Installed column (no birthtime required on Linux)."""
+    assert fs_src._epoch_to_iso(None) is None
+    assert fs_src._epoch_to_iso(0).startswith("1970-01-01")
+
+    project = tmp_path / "myproj"
+    project.mkdir()
+    (project / "docker-compose.yml").write_text("services: {}\n")
+
+    # Point scan_roots at tmp via settings
+    from del_app.config import get_settings
+
+    config_path = tmp_path / "del.toml"
+    config_path.write_text(
+        f"""
+port = 8075
+db_path = "{tmp_path}/del.db"
+manifests_dir = "{tmp_path}/manifests"
+backups_dir = "{tmp_path}/backups"
+logs_dir = "{tmp_path}/logs"
+scan_roots = ["{tmp_path}"]
+helper_socket = "{tmp_path}/helper.sock"
+protected_apps = ["del"]
+"""
+    )
+    monkeypatch.setenv("DEL_CONFIG_PATH", str(config_path))
+    get_settings.cache_clear()
+    try:
+        resources = fs_src.collect()
+    finally:
+        get_settings.cache_clear()
+
+    dirs = [r for r in resources if r.type == "directory" and r.display == "myproj"]
+    assert len(dirs) == 1
+    data = dirs[0].data
+    assert data.get("mtime") and data["mtime"].endswith("Z")
+    assert data.get("ctime") and data["ctime"].endswith("Z")
+    assert "size_kb" in data

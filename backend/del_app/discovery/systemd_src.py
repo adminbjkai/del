@@ -86,6 +86,40 @@ def _batched(items: list[str], size: int) -> list[list[str]]:
     return [items[i : i + size] for i in range(0, len(items), size)]
 
 
+def _parse_systemctl_show(raw: str) -> dict[str, dict]:
+    """Split `systemctl show UNIT...` output into one dict per unit.
+
+    systemd emits properties in a fixed order that does **not** start with
+    Id= (ExecStart comes first when requested). Records *are* separated by a
+    blank line. Splitting only on a subsequent Id= therefore copies the next
+    unit's ExecStart/WorkingDirectory onto the previous unit — which is how
+    glmflix.service was stored with gpu-manager's ExecStart and then attached
+    to netdata via a `/var/log` bind-mount substring match.
+    """
+    result: dict[str, dict] = {}
+    current: dict[str, str] = {}
+
+    def _flush() -> None:
+        nonlocal current
+        uid = current.get("Id")
+        if uid:
+            result[uid] = current
+        current = {}
+
+    for line in raw.splitlines():
+        if not line.strip():
+            _flush()
+            continue
+        if "=" not in line:
+            continue
+        k, _, v = line.partition("=")
+        if k == "Id" and current.get("Id"):
+            _flush()
+        current[k] = v
+    _flush()
+    return result
+
+
 def _show_units(unit_names: list[str]) -> dict[str, dict]:
     props = ["Id", "FragmentPath", "Description", "WorkingDirectory", "ExecStart",
              "Environment", "EnvironmentFiles", "ActiveState", "SubState", "UnitFileState"]
@@ -96,21 +130,7 @@ def _show_units(unit_names: list[str]) -> dict[str, dict]:
         args = ["systemctl", "show", *batch, "--no-pager"]
         for p in props:
             args.extend(["-p", p])
-        raw = _run(args)
-        # Delimit records by the Id= property rather than blank lines: a
-        # property value can contain blank lines, which would merge adjacent
-        # units' blocks and drop one (its Id lost to the merged neighbour).
-        current: dict[str, str] = {}
-        for line in raw.splitlines():
-            if "=" not in line:
-                continue
-            k, _, v = line.partition("=")
-            if k == "Id" and current.get("Id"):
-                result[current["Id"]] = current
-                current = {}
-            current[k] = v
-        if current.get("Id"):
-            result[current["Id"]] = current
+        result.update(_parse_systemctl_show(_run(args)))
     return result
 
 

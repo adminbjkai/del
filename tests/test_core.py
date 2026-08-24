@@ -82,7 +82,13 @@ def test_session_cookie_sign_and_verify(settings_env):
     assert auth.unsign_token(signed) == token
 
     # Tampering with the signed value must be rejected.
-    tampered = signed[:-1] + ("a" if signed[-1] != "a" else "b")
+    # Flip a character inside the signature (not the final base64 char —
+    # for HMAC-SHA1 the last encoded char only carries 2 data bits, so
+    # flipping it can still decode to the same signature bytes and pass).
+    payload, sep, sig = signed.rpartition(".")
+    assert sep and len(sig) >= 2
+    flipped = ("A" if sig[0] != "A" else "B") + sig[1:]
+    tampered = f"{payload}.{flipped}"
     assert auth.unsign_token(tampered) is None
 
     # require_user resolves a valid signed cookie back to the user.

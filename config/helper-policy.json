@@ -34,7 +34,13 @@
     "/apps/del"
   ],
   "never_delete": [
-    "/apps/del"
+    "/apps/del",
+    "/home/bjkai/.ssh",
+    "/home/bjkai/.gnupg",
+    "/home/bjkai/.aws",
+    "/home/bjkai/.config",
+    "/home/bjkai/.bashrc",
+    "/home/bjkai/.profile"
   ],
   "backup_dir": "/apps/del/backups",
   "nginx_site_roots": [

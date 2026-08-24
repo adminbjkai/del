@@ -52,7 +52,7 @@ safety-validation failure halts the job before any downstream deletion runs.**
 - **Volume double-confirmation** — live volume deletion requires three
   independent things to all be true: the plan option `remove_named_volumes`
   enabled, the specific volume individually checked by the operator, **and** a
-  typed confirmation phrase (`DELETE VOLUMES`) entered at execution time — not
+  typed confirmation phrase (`y`) entered at execution time — not
   just at plan-build time. This is the one irreversible-by-default operation in
   the allowlist, so it is the only one with a second, explicit, typed
   confirmation gate.

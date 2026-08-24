@@ -19,8 +19,8 @@
       <td data-filter-value="{{ j.get('mode') }}"><span class="badge {{ 'badge-danger' if j.get('mode') == 'live' else 'badge-grey' }}">{{ 'LIVE' if j.get('mode') == 'live' else 'dry-run' }}</span></td>
       <td data-filter-value="{{ j.get('status') }}"><span class="badge status-{{ j.get('status') }}">{{ j.get('status') }}</span></td>
       <td>{{ j.get('duration') }}</td>
-      <td>{{ j.get('started') or '—' }}</td>
-      <td>{{ j.get('finished') or '—' }}</td>
+      <td data-sort-value="{{ iso_sort(j.get('started')) }}"><span class="dt">{{ format_dt(j.get('started')) }}</span></td>
+      <td data-sort-value="{{ iso_sort(j.get('finished')) }}"><span class="dt">{{ format_dt(j.get('finished')) }}</span></td>
     </tr>
     {% endfor %}
   </tbody>

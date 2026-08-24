@@ -37,12 +37,12 @@ service.
    ```
    (Run `nginx -t` before reloading — if it fails, something else references the
    removed file; fix that before reloading.)
-4. **Remove the docs-site basic-auth password file:**
+4. **Remove the inventory basic-auth password file** (if present; used only for
+   `/miscwork.html` / `/inventory`, not for docs):
    ```bash
    sudo rm -f /etc/nginx/.del-docs-htpasswd
    ```
-   (The plaintext copy at `/apps/del/config/docs-basic-auth-password.txt` is
-   removed along with the rest of the project tree in step 5.)
+   (Any leftover plaintext under `/apps/del/config/` is removed with the tree in step 5.)
 5. **Remove the application tree and its `/opt` symlink** (this includes the
    Fern docs sources under `/apps/del/fern/`, which back `del-docs.service`):
    ```bash

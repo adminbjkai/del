@@ -8,6 +8,7 @@ test_core.py.
 from __future__ import annotations
 
 import json
+import os
 import time
 
 import pytest
@@ -210,6 +211,51 @@ def test_confirmed_process_becomes_process_term_step(settings_env):
     assert term_steps[0].stage == "quiesce"
     assert term_steps[0].args == {"pid": 1234, "expected_exe": "/apps/myapp/bin/myapp"}
     assert plan.preserved == []
+
+
+def test_foreign_systemd_unit_is_not_planned_for_this_app(settings_env, tmp_path, monkeypatch):
+    """A confirmed association to another app's unit (glmflix on a netdata
+    plan) must be preserved, not turned into systemd_stop / systemd_rm_unit."""
+    conn = get_db()
+    app_id = _insert_app(conn, "netdata")
+    compose_dir = tmp_path / "netdata"
+    compose_dir.mkdir()
+    compose_id = _insert_resource(
+        conn, "compose_project", str(compose_dir), path=str(compose_dir),
+        data={"working_dir": str(compose_dir), "declared_name": "netdata"},
+    )
+    _insert_assoc(conn, app_id, compose_id, confidence=95)
+    other = tmp_path / "glmflix"
+    other.mkdir()
+    unit_id = _insert_resource(
+        conn, "systemd_unit", "glmflix.service",
+        path="/etc/systemd/system/glmflix.service",
+        data={
+            "is_custom": True,
+            "working_directory": str(other),
+            "exec_start": str(other / "start.sh"),
+        },
+    )
+    _insert_assoc(conn, app_id, unit_id, confidence=95)
+    conn.close()
+
+    real_exists = os.path.exists
+
+    def fake_exists(path):
+        if path == "/etc/systemd/system/glmflix.service":
+            return True
+        return real_exists(path)
+
+    monkeypatch.setattr(os.path, "exists", fake_exists)
+    plan = planner.build_plan("netdata", {})
+    unit_ops = [
+        s for s in plan.steps
+        if s.operation in ("systemd_stop", "systemd_disable", "systemd_rm_unit")
+        and s.args.get("unit") == "glmflix.service"
+    ]
+    assert unit_ops == []
+    assert "glmflix.service" in plan.preserved
+    assert any("glmflix.service" in w and "not under this app" in w for w in plan.warnings)
 
 
 def test_process_without_exe_is_preserved_not_dropped(settings_env):
@@ -444,6 +490,43 @@ def test_execute_job_runs_in_background_thread(settings_env, monkeypatch):
     assert status["status"] == "success"
 
 
+def test_job_skips_foreign_systemd_unit_at_execute_time(settings_env, tmp_path, monkeypatch):
+    """A poisoned plan that still lists another app's unit must not call the
+    helper — the step is marked done as skipped so retry can continue."""
+    _patch_audit(monkeypatch)
+    fake = _FakeHelper()
+    monkeypatch.setattr(jobs, "helper_client", fake)
+
+    other = tmp_path / "glmflix"
+    other.mkdir()
+    conn = get_db()
+    _insert_resource(
+        conn, "systemd_unit", "glmflix.service",
+        data={"working_directory": str(other), "exec_start": str(other / "start.sh")},
+    )
+    conn.close()
+
+    steps = [
+        PlanStep(seq=1, stage="quiesce", operation="systemd_stop",
+                  args={"unit": "glmflix.service"}, description="stop",
+                  reversible=True, danger="safe"),
+        PlanStep(seq=2, stage="quiesce", operation="container_stop",
+                  args={"container_id": "netdata"}, description="stop c",
+                  reversible=True, danger="safe"),
+    ]
+    plan_id = _persist_manual_plan("netdata", steps)
+    job_id = jobs.create_job(plan_id, "live", user_id=1)
+    jobs._run_job(job_id, None)
+
+    assert [c["op"] for c in fake.calls] == ["container_stop"]
+    status = jobs.job_status(job_id)
+    assert status["status"] == "success"
+    by_op = {s["operation"]: s for s in status["steps"]}
+    assert by_op["systemd_stop"]["state"] == "done"
+    assert "skipped" in (by_op["systemd_stop"]["output_sanitized"] or "")
+    assert "glmflix.service" in (by_op["systemd_stop"]["output_sanitized"] or "")
+
+
 def test_retry_job_resumes_from_first_failed_step(settings_env, monkeypatch):
     _patch_audit(monkeypatch)
     fake = _FakeHelper(failing_ops={"container_rm"})
@@ -464,13 +547,17 @@ def test_retry_job_resumes_from_first_failed_step(settings_env, monkeypatch):
     fake.failing_ops = frozenset()
     jobs.retry_job(job_id)
 
+    # retry_job clears status to 'pending' then runs in a background thread.
+    # Wait until the job is success AND the retried step is done (avoids the
+    # race of seeing step=done a tick before job status flips to success).
     deadline = time.time() + 5
     status = jobs.job_status(job_id)
-    by_op = {s["operation"]: s["state"] for s in status["steps"]}
-    while by_op.get("container_rm") != "done" and time.time() < deadline:
-        time.sleep(0.05)
+    while time.time() < deadline:
         status = jobs.job_status(job_id)
         by_op = {s["operation"]: s["state"] for s in status["steps"]}
+        if status["status"] == "success" and by_op.get("container_rm") == "done":
+            break
+        time.sleep(0.05)
 
     assert status["status"] == "success"
     by_op = {s["operation"]: s["state"] for s in status["steps"]}

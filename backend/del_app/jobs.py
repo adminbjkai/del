@@ -15,9 +15,21 @@ from datetime import datetime, timezone
 from del_app import auditlog, helper_client
 from del_app.db import get_db, q, x
 from del_app.models import Plan
-from del_app.planner import PlanError, verify_plan
+from del_app.planner import (
+    PlanError,
+    _owned_app_dirs,
+    _resource_foreign_to_app,
+    verify_plan,
+)
 
-CONFIRM_VOLUMES_PHRASE = "DELETE VOLUMES"
+# Quiesce/host ops that a poisoned plan can aim at the wrong app. Re-check
+# against live resource data so retrying an old job cannot stop/disable/rm
+# another project's unit (job 191: glmflix + url-shortener on a netdata plan).
+_FOREIGN_GUARD_OPS = {
+    "systemd_stop", "systemd_disable", "systemd_rm_unit", "process_term",
+}
+
+CONFIRM_VOLUMES_PHRASE = "y"
 
 _SECRET_RE = re.compile(r"(?i)(password|token|secret|key)=\S+")
 
@@ -33,6 +45,39 @@ _RESTORE_ON_FAILURE_OPS = {"nginx_rm_site", "nginx_test_reload", "systemd_disabl
 
 def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def _foreign_step_reason(conn, app_slug: str, operation: str, args: dict) -> str | None:
+    """Return a skip message if this step targets another app's unit/process."""
+    if operation not in _FOREIGN_GUARD_OPS:
+        return None
+    owned = _owned_app_dirs(app_slug, [])
+    if operation == "process_term":
+        data = {"exe": args.get("expected_exe")}
+        if _resource_foreign_to_app(data, owned):
+            return (
+                f"skipped: process exe {args.get('expected_exe')!r} "
+                f"is not under {app_slug}"
+            )
+        return None
+    unit = args.get("unit")
+    if not unit:
+        return None
+    rows = q(
+        conn,
+        "SELECT data_json FROM resources WHERE key = ? "
+        "AND type IN ('systemd_unit', 'systemd_timer')",
+        (unit,),
+    )
+    if not rows:
+        return None
+    try:
+        data = json.loads(rows[0]["data_json"] or "{}")
+    except json.JSONDecodeError:
+        return None
+    if _resource_foreign_to_app(data, owned):
+        return f"skipped: {unit} is not under {app_slug}"
+    return None
 
 
 def sanitize_output(text: str) -> str:
@@ -210,14 +255,20 @@ def _run_job(job_id: int, confirm_phrase: str | None) -> None:
                         args["confirmed_twice"] = (
                             mode == "dry_run" or confirm_phrase == CONFIRM_VOLUMES_PHRASE
                         )
-                    try:
-                        result = helper_client.call(step["operation"], args, dry_run=(mode == "dry_run"))
-                        ok = bool(result.get("ok"))
-                        output = str(result.get("output") or result.get("error") or "")
-                    except helper_client.HelperError as e:
-                        ok = False
-                        output = str(e)
-                    exit_code = 0 if ok else 1
+                    skip = _foreign_step_reason(conn, plan.app_slug, step["operation"], args)
+                    if skip:
+                        ok = True
+                        output = skip
+                        exit_code = 0
+                    else:
+                        try:
+                            result = helper_client.call(step["operation"], args, dry_run=(mode == "dry_run"))
+                            ok = bool(result.get("ok"))
+                            output = str(result.get("output") or result.get("error") or "")
+                        except helper_client.HelperError as e:
+                            ok = False
+                            output = str(e)
+                        exit_code = 0 if ok else 1
             except Exception as e:
                 ok = False
                 output = f"internal error: {e}"
@@ -277,6 +328,13 @@ def retry_job(job_id: int, confirm_phrase: str | None = None) -> None:
             "UPDATE job_steps SET state = 'pending', exit_code = NULL, output_sanitized = NULL, "
             "started = NULL, finished = NULL WHERE job_id = ? AND seq >= ?",
             (job_id, first_failed_seq),
+        )
+        # Clear the prior terminal status so pollers/UI don't see a stale
+        # 'failed'/'success' while the retry thread is starting.
+        x(
+            conn,
+            "UPDATE jobs SET status = 'pending', finished = NULL WHERE id = ?",
+            (job_id,),
         )
         conn.commit()
     finally:

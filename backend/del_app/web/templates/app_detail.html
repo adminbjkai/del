@@ -33,8 +33,18 @@
   <dl class="kv">
     <dt>Kind</dt><dd>{{ app.get('kind') or '—' }}</dd>
     <dt>Domains</dt><dd>{{ m.domain_links(app.get('domains')) }}</dd>
-    <dt>First seen</dt><dd>{{ app.get('first_seen') or '—' }}</dd>
-    <dt>Last seen</dt><dd>{{ app.get('last_seen') or '—' }}</dd>
+    <dt>Installed</dt>
+    <dd title="Best available host signal (container created / project directory age), else first discovery">
+      <span class="dt">{{ format_dt(app.get('installed_at')) }}</span>
+    </dd>
+    <dt>First seen by DEL</dt>
+    <dd title="Scan #{{ app.get('first_seen') or '—' }}">
+      <span class="dt">{{ format_dt(app.get('first_seen_at')) }}</span>
+    </dd>
+    <dt>Last seen by DEL</dt>
+    <dd title="Scan #{{ app.get('last_seen') or '—' }}">
+      <span class="dt">{{ format_dt(app.get('last_seen_at')) }}</span>
+    </dd>
     <dt>Manifest</dt><dd>{{ app.get('manifest_path') or '—' }}</dd>
     <dt>Resources</dt><dd>{{ associations | length }}</dd>
   </dl>

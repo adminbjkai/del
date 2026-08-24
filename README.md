@@ -7,6 +7,12 @@ correlates what it finds into applications with a confidence score; and drives
 removal through a staged, backed-up, dry-run-by-default job engine executed by a
 separate privileged helper over a unix socket. DEL cannot remove itself.
 
+The authenticated **View Apps** tab at `/view-apps` is a homelab-style launcher
+for current, enabled domains that pass a live HTTPS check. It supports search,
+categories, favorites, grid/list layouts, card sizing, density, hiding, and drag
+ordering; personal layout preferences stay in browser local storage and do not
+change DEL inventory or removal data.
+
 ## Quick facts
 
 | Item | Value |
@@ -15,7 +21,7 @@ separate privileged helper over a unix socket. DEL cannot remove itself.
 | Bind | 127.0.0.1:8075 (Nginx-fronted only, not publicly reachable directly) |
 | Web unit | `del-web.service` — runs as user `bjkai` (groups `bjkai`, `docker`, `adm`) |
 | Helper unit | `del-helper.service` — runs as `root` |
-| Docs unit | `del-docs.service` — Fern docs site, runs as `bjkai`, ports 8072/8073, `/docs` + `/_next` basic-auth protected via Nginx |
+| Docs unit | `del-docs.service` — Fern docs site, runs as `bjkai`, ports 8072/8073, `/docs` + `/_next` open (no basic auth; app UI still session-login) |
 | Helper socket | `/run/del/helper.sock`, mode `0660`, owner `root:bjkai` |
 | Project root | `/apps/del` (also reachable via `/opt/del`, a symlink to `/apps/del`) |
 | Backend package | `/apps/del/backend/del_app` (import as `del_app`), Python 3.10 venv at `/apps/del/.venv` |
@@ -38,7 +44,7 @@ cd /apps/del
 ```
 Then open https://del.bjk.ai, log in, and run a scan from Settings (or `POST /scan`).
 
-Rendered documentation (Fern) is served at https://del.bjk.ai/docs (basic-auth protected).
+Rendered documentation (Fern) is served at https://del.bjk.ai/docs (no basic auth).
 
 ## Documentation index
 
@@ -55,6 +61,7 @@ Rendered documentation (Fern) is served at https://del.bjk.ai/docs (basic-auth p
 | [docs/REMOVAL-LIFECYCLE.md](docs/REMOVAL-LIFECYCLE.md) | The 9-stage removal job lifecycle and its safety gates |
 | [docs/DEPLOYMENT-CONVENTION.md](docs/DEPLOYMENT-CONVENTION.md) | The house standard every app on this server follows (layout, ports, nginx, manifests, decommissioning) |
 | [docs/SYSTEM-STATE.md](docs/SYSTEM-STATE.md) | Consolidated point-in-time audit of the whole host (directory classification, shared resources, known exceptions) |
+| [docs/OPTIMIZATION-2026-07-26.md](docs/OPTIMIZATION-2026-07-26.md) | 2026-07-26 optimization pass: Installed dates, Eastern UI times, docs open, validation log |
 | `docs/PORT-REGISTRY.md` | auto-generated port/subdomain map (`scripts/gen-registry.py`) — **local only, gitignored**, regenerate on demand |
 | `docs/server-audit.md` | Phase-2 host audit this design was built from — **local only, not committed** |
 

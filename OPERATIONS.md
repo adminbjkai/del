@@ -93,8 +93,8 @@ in `/apps/del/fern/docs.yml`), rendered by `del-docs.service`
    sudo systemctl restart del-docs.service
    ```
 3. Verify: `curl -sSL http://127.0.0.1:8072/docs/guides/operations | grep -c
-   '<some text you just added>'`, or check `/docs/...` through Nginx with
-   basic auth.
+   '<some text you just added>'`, or open `https://del.bjk.ai/docs/...`
+   (docs are not basic-auth protected).
 
 ## Rescan (refresh the application inventory)
 
@@ -129,9 +129,10 @@ old copy.
 A self-contained, browsable export of the full inventory (built from `del.db` plus
 the `/apps/del/miscwork/` build scripts, gitignored) is served at
 `https://del.bjk.ai/miscwork.html` (aliased at `/inventory`), basic-auth protected
-by the same Nginx `auth_basic_user_file` used for `/docs`. It is a point-in-time
-snapshot for browsing/handoff, not a live-refreshing view — regenerate it manually
-from `/apps/del/miscwork/extract.py` (and the other scripts in that directory) when
+via `/etc/nginx/.del-docs-htpasswd` (docs at `/docs` are open; inventory is not).
+It is a point-in-time snapshot for browsing/handoff, not a live-refreshing view —
+regenerate it manually from `/apps/del/miscwork/extract.py` (and the other scripts
+in that directory) when
 it goes stale; there is no scheduled job that rebuilds it.
 
 ## Backup

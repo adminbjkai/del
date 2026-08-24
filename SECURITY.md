@@ -68,20 +68,19 @@ DEL itself is recorded as `protected=1` in the `applications` table (see
 through DEL"`), and the planner refuses to build a removal plan for it — DEL cannot
 remove itself by design, not just by policy.
 
-## Documentation site auth (`/docs`, `/_next`)
+## Documentation site (`/docs`, `/_next`)
 
 The rendered Fern documentation site (`del-docs.service`, a `fern-api docs dev`
-process on 127.0.0.1:8072/8073) is exposed at `https://del.bjk.ai/docs`. It is
-**not** protected by DEL's own session/CSRF auth — Nginx instead gates the
-`/docs` and `/_next` locations directly with HTTP basic auth
-(`auth_basic_user_file /etc/nginx/.del-docs-htpasswd`), i.e. those two paths
-bypass the app entirely and are proxied straight to the docs dev server. The
-basic-auth password is tracked in plaintext at
-`/apps/del/config/docs-basic-auth-password.txt` (mode `0600`) for operator
-reference; the htpasswd hash Nginx actually checks against lives outside the
-repo at `/etc/nginx/.del-docs-htpasswd`. The docs site itself serves only
-static/rendered documentation content — it has no access to the DEL database,
-helper socket, or app session cookies.
+process on 127.0.0.1:8072/8073) is exposed at `https://del.bjk.ai/docs` **without
+HTTP basic auth** (open documentation by operator choice, 2026-07-26). Those
+paths bypass the app entirely and are proxied straight to the docs dev server.
+The docs site serves only static/rendered documentation — it has no access to
+the DEL database, helper socket, or app session cookies. The **app UI** at `/`
+still requires DEL session login.
+
+The whole-server inventory export at `/miscwork.html` (and `/inventory`) remains
+HTTP basic-auth protected via `/etc/nginx/.del-docs-htpasswd` because it contains
+a full host inventory dump, not public docs.
 
 ## What is never logged
 
@@ -100,7 +99,7 @@ and reports on other apps, even though DEL doesn't own or manage these directly
 - **Cockpit** (the systemd/services web UI for non-Docker apps) is bound to
   `127.0.0.1:9091` only — not reachable directly from the internet. The sole
   path in is `https://cockpit.bjk.ai`, an nginx vhost behind HTTP basic auth,
-  the same pattern DEL's own docs site uses for `/docs`.
+  HTTP basic auth (same pattern as DEL's inventory export at `/miscwork.html`).
 - **`nginx sites-enabled` must contain only symlinks** to `sites-available`
   files — nginx's `include sites-enabled/*;` has no filename filter, so any
   stray regular file or backup left in `sites-enabled` is parsed as a vhost on

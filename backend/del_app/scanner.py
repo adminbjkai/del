@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import threading
 import time
 
 from del_app import db
@@ -30,6 +31,39 @@ SOURCES = [
     ("fs", fs_src.collect),
 ]
 
+# Only one scan at a time per process. Prevents concurrent run_scan() from
+# interleaving resource last_seen updates and leaving orphan 'running' rows.
+_scan_lock = threading.Lock()
+
+
+class ScanInProgressError(RuntimeError):
+    """Raised when run_scan is called while another scan is already running."""
+
+
+def abandon_stale_scans(reason: str = "abandoned: process restart or crash mid-scan") -> int:
+    """Mark every scan still status='running' as failed.
+
+    Scans insert a 'running' row at start; if the process is restarted (systemd
+    restart, deploy, OOM) that row never gets finished. Call this on app
+    startup so Settings/dashboard never show ghost in-progress scans.
+    Returns the number of rows updated.
+    """
+    conn = db.get_db()
+    try:
+        stats = json.dumps({"abandoned": True, "reason": reason})
+        cur = conn.execute(
+            "UPDATE scans SET status = 'failed', finished = datetime('now'), "
+            "stats_json = ? WHERE status = 'running'",
+            (stats,),
+        )
+        n = cur.rowcount if cur.rowcount is not None and cur.rowcount >= 0 else 0
+        conn.commit()
+        if n:
+            logger.warning("scanner: abandoned %s stale running scan(s): %s", n, reason)
+        return n
+    finally:
+        conn.close()
+
 
 def _collect_all() -> tuple[list[Resource], dict[str, int]]:
     resources: list[Resource] = []
@@ -47,11 +81,29 @@ def _collect_all() -> tuple[list[Resource], dict[str, int]]:
 
 def run_scan() -> int:
     """Collect all sources, correlate, persist apps/resources/associations,
-    and return the new scan id."""
+    and return the new scan id.
+
+    Raises ScanInProgressError if another scan is already running in this process.
+    """
+    if not _scan_lock.acquire(blocking=False):
+        raise ScanInProgressError("a scan is already in progress")
+
     started = time.time()
+    scan_id: int | None = None
     conn = db.get_db()
     try:
-        scan_id = db.x(conn, "INSERT INTO scans (status) VALUES ('running')")
+        # Safety: any leftover 'running' rows from a prior crash block clarity
+        # in the UI even though inventory uses status='done' only.
+        conn.execute(
+            "UPDATE scans SET status = 'failed', finished = datetime('now'), "
+            "stats_json = ? WHERE status = 'running'",
+            (json.dumps({"abandoned": True, "reason": "superseded by new scan"}),),
+        )
+        conn.commit()
+
+        cur = conn.execute("INSERT INTO scans (status) VALUES ('running')")
+        scan_id = cur.lastrowid
+        conn.commit()
 
         resources, per_source_counts = _collect_all()
 
@@ -138,16 +190,24 @@ def run_scan() -> int:
             (json.dumps(stats), scan_id),
         )
         conn.commit()
-        return scan_id
+        return int(scan_id)
     except Exception:
         logger.exception("scanner: run_scan failed")
-        try:
-            conn.execute(
-                "UPDATE scans SET finished=datetime('now'), status='failed' WHERE id=?", (scan_id,)
-            )
-            conn.commit()
-        except Exception:
-            pass
+        if scan_id is not None:
+            try:
+                conn.execute(
+                    "UPDATE scans SET finished=datetime('now'), status='failed', "
+                    "stats_json=? WHERE id=?",
+                    (json.dumps({"error": "run_scan raised", "duration_seconds": round(time.time() - started, 1)}),
+                     scan_id),
+                )
+                conn.commit()
+            except Exception:
+                pass
         raise
     finally:
-        conn.close()
+        try:
+            conn.close()
+        except Exception:
+            pass
+        _scan_lock.release()

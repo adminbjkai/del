@@ -25,7 +25,14 @@
     {% set mappings = r.data.get('port_mappings') %}
     <tr>
       <td>{{ r.display or r.key }}</td>
-      <td data-filter-value="{{ r.data.get('state') }}"><span class="badge status-{{ r.data.get('state') }}">{{ r.data.get('state') }}</span>{% if r.data.get('health') %} <span class="badge">{{ r.data.get('health') }}</span>{% endif %}</td>
+      <td data-filter-value="{{ r.data.get('state') }}{% if r.data.get('health') %} {{ r.data.get('health') }}{% endif %}">
+        <span class="badge status-{{ r.data.get('state') }}">{{ r.data.get('state') or '—' }}</span>
+        {% if r.data.get('health') %}
+          <span class="badge {% if r.data.get('health') == 'healthy' %}badge-ok{% elif r.data.get('health') == 'unhealthy' %}badge-danger{% endif %}" title="Docker healthcheck">{{ r.data.get('health') }}</span>
+        {% else %}
+          <span class="muted" style="font-size:.75rem" title="No Docker healthcheck defined for this container">no healthcheck</span>
+        {% endif %}
+      </td>
       <td>{{ m.trunc(r.data.get('image')) }}</td>
       <td>{{ mappings | map(attribute='host') | list | join(', ') if mappings else '—' }}</td>
       <td>{{ mappings | map(attribute='container') | list | join(', ') if mappings else '—' }}</td>
@@ -139,7 +146,7 @@
       <td>{{ m.trunc(r.path or r.key, 60) }}</td>
       <td data-sort-value="{{ (r.data.get('size_kb') or 0) * 1000 }}">{{ human_size((r.data.get('size_kb') or 0) * 1000) if r.data.get('size_kb') else '—' }}</td>
       <td>{{ branch or '—' }}</td>
-      <td data-filter-value="{{ 'yes' if dirty else 'no' }}">{% if dirty %}<span class="badge badge-amber">dirty</span>{% elif dirty is not none %}clean{% else %}—{% endif %}</td>
+      <td data-filter-value="{% if dirty %}dirty{% elif dirty is not none %}clean{% else %}none{% endif %}">{% if dirty %}<span class="badge badge-amber" title="Uncommitted git changes">dirty</span>{% elif dirty is not none %}<span class="badge badge-ok" title="Git working tree is clean">clean</span>{% else %}<span class="muted" title="Not a git repo, or status unavailable">—</span>{% endif %}</td>
       <td>{{ m.owner_cell(r) }}</td>
     </tr>
     {% endfor %}

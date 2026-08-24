@@ -98,8 +98,8 @@ in `/apps/del/fern/docs.yml`), rendered by `del-docs.service`
    sudo systemctl restart del-docs.service
    ```
 3. Verify: `curl -sSL http://127.0.0.1:8072/docs/guides/operations | grep -c
-   '<some text you just added>'`, or check `/docs/...` through Nginx with
-   basic auth.
+   '<some text you just added>'`, or open `https://del.bjk.ai/docs/...`
+   (docs are not basic-auth protected).
 
 ## Rescan (refresh the application inventory)
 

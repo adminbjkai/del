@@ -18,9 +18,9 @@ When you build a removal plan you choose a **Backup mode**:
 
 | Mode | What it captures | When to use |
 |---|---|---|
-| **None** | Nothing. | Almost never — only for throwaway resources you are certain about. |
+| **None** (default) | Nothing. | Throwaway apps you are certain about; also the default for the "Complete removal" preset. Switch away from this when you may need a restore. |
 | **Config only** | Config files (nginx sites, systemd units, cron entries) before they're edited/removed. | Removals that touch no data (no volumes, no data directories). |
-| **Full (config + volumes)** | Config files **plus** tarred volume contents and bind-mount directories. | Any removal that deletes a named volume or a data directory. **Recommended.** |
+| **Full (config + volumes)** | Config files **plus** tarred volume contents and bind-mount directories. | Any removal that deletes a named volume or a data directory when you want recoverability. |
 
 <Callout intent="warning">
   If a plan deletes a volume or a bind-mounted data directory, choose **Full**.

@@ -33,9 +33,9 @@ via systemd, and journald logging.
 - **del-helper.service** — the privileged root daemon on the unix socket.
 - **del-docs.service** — serves the Fern-built documentation site (this repo's
   `fern/` sources) on 127.0.0.1:8072/8073, fronted by Nginx at `/docs` (and its
-  `/_next` static assets) behind HTTP basic auth, independent of the app's own
-  session auth. It is part of the DEL deployment but carries no privileged
-  access — it only serves static/rendered docs content.
+  `/_next` static assets) **without** HTTP basic auth (open documentation). The
+  app UI at `/` still requires DEL session login. Docs carry no privileged access
+  — they only serve static/rendered content.
 
 ## Process / privilege model
 
@@ -136,7 +136,33 @@ the helper; the helper re-validates each argument against its own rules regardle
 - sessions(token_hash, user_id, created, expires, ip)
 - scans(id, started, finished, status, stats_json)
 - applications(id, slug, name, status, kind, protected, manifest_path, first_seen, last_seen)
+  — `first_seen` / `last_seen` are scan IDs. The UI resolves them to `scans.started`
+  timestamps. **Installed** is computed at read time (not a column): earliest of
+  associated container `data_json.created`, directory `birthtime`/`ctime`/`mtime`,
+  else the first_seen scan time.
 - resources(id, type, key, display, path, state, data_json, first_seen scan, last_seen scan)
+  — directory resources include `mtime`/`ctime`/`birthtime` ISO timestamps in data_json;
+  containers include Docker `created`.
+
+### Display timezone (UI)
+
+All human-facing datetimes in the web UI are rendered in **America/New_York**
+(Eastern) as compact `MM-DD-YY H:MM AM/PM` (e.g. `05-13-26 7:31 AM`) — no
+timezone suffix. Storage remains UTC (sqlite `datetime('now')`, Docker
+`Created` with `Z`, filesystem ISO-Z). Naive timestamps read from SQLite are
+treated as UTC. Calendar day follows Eastern. Helpers: `format_dt`,
+`relative_dt`, `iso_sort` in `backend/del_app/web/routes.py`.
+
+### Live app gallery
+
+`GET /view-apps` is an authenticated, read-only projection of the inventory. A
+domain is eligible only when it belongs to an application and an **enabled**
+Nginx resource from the latest completed scan. DEL verifies each candidate over
+HTTPS (DNS, certificate, proxy route, and answering upstream); responses below
+500 are shown, while connection/TLS failures and 5xx responses are omitted.
+Checks run concurrently with a two-minute in-process cache, and `?refresh=1`
+bypasses that cache. The gallery does not write to SQLite: categories, stars,
+hidden cards, size/density, view mode, and drag order are browser-local settings.
 - associations(app_id, resource_id, confidence, ownership, shared, data_loss_risk,
   removal_eligible, recommended_action, evidence_json, source, approved_by_user, excluded)
 - plans(id, app_id, created, options_json, steps_json, status, hmac)

@@ -31,15 +31,28 @@ def _slugify(name: str) -> str:
 
 
 def _is_broad_root(path: str) -> bool:
-    """True for paths too broad to be ownership evidence (a container
-    bind-mounting /apps does not own every project under /apps)."""
-    try:
-        roots = set(get_settings().scan_roots)
-    except Exception:
-        roots = {"/apps", "/data/apps", "/opt", "/srv", "/var/www"}
-    broad = roots | {"/", "/home", "/etc", "/var", "/usr", "/data", "/root", "/tmp", "/mnt", "/media"}
+    """True for paths too broad to be ownership evidence.
+
+    A container bind-mounting /apps does not own every project under /apps.
+    Host-monitoring apps (netdata) also bind-mount /, /sys, /proc, /var/log,
+    /etc/passwd, docker.sock, etc. — those must never become dir_paths, or
+    Step 9 will attach every systemd unit whose ExecStart mentions them.
+    Only a path *under* a scan root (at least one component deep) counts as
+    app-owned; everything else is broad.
+    """
+    if not path:
+        return True
     p = path.rstrip("/") or "/"
-    return p in {r.rstrip("/") or "/" for r in broad}
+    try:
+        roots = [r.rstrip("/") or "/" for r in get_settings().scan_roots]
+    except Exception:
+        roots = ["/apps", "/data/apps", "/opt", "/srv", "/var/www"]
+    for root in roots:
+        if p == root:
+            return True  # the scan root itself is shared
+        if p.startswith(root + "/"):
+            return False  # /apps/netdata, /apps/netdata/conf, ...
+    return True
 
 
 def _level_for_confidence(confidence: int) -> str:
@@ -560,6 +573,16 @@ def build_apps(
             if enabled:
                 app.domains.add(sn)
 
+    def _exec_refers_to_dir(exec_start: str, dp: str) -> bool:
+        """Path-boundary match so /apps/foo does not hit /apps/foobar, and
+        a leftover broad path like /sys cannot match 'systemd'."""
+        if not exec_start or not dp or _is_broad_root(dp):
+            return False
+        d = dp.rstrip("/")
+        if len(d) < 2:
+            return False
+        return bool(re.search(r"(?:^|[\s=\"'])" + re.escape(d) + r"(?:/|[\s;\"']|$)", exec_start))
+
     # --- Step 9: systemd units: WorkingDirectory/ExecStart under app dir ----
     for unit in systemd_units:
         if unit.key in unit_slug:
@@ -572,11 +595,12 @@ def build_apps(
         wd = unit.data.get("working_directory")
         exec_start = unit.data.get("exec_start") or ""
         for slug, app in apps.items():
+            owned = [dp for dp in app.dir_paths if dp and not _is_broad_root(dp)]
             hit_path = None
-            if wd and any(wd == dp or wd.startswith(dp.rstrip("/") + "/") for dp in app.dir_paths):
+            if wd and any(wd == dp or wd.startswith(dp.rstrip("/") + "/") for dp in owned):
                 hit_path = wd
-            elif app.dir_paths and any(dp in exec_start for dp in app.dir_paths):
-                hit_path = next((dp for dp in app.dir_paths if dp in exec_start), None)
+            else:
+                hit_path = next((dp for dp in owned if _exec_refers_to_dir(exec_start, dp)), None)
             if hit_path:
                 app.add(
                     unit,

@@ -469,11 +469,17 @@ class Operations:
         if not isinstance(expected_exe, str) or not expected_exe:
             raise OpError("process_term requires expected_exe")
         exe_link = f"/proc/{pid}/exe"
+        # Already gone is success: systemd_stop (or a previous attempt) may
+        # have reaped the process. A dead pid must not halt the job.
+        if not os.path.exists(f"/proc/{pid}"):
+            return {"output": f"pid {pid} already absent", "changed": []}
         # read-only precondition: verify the pid still maps to the expected exe
         try:
             actual = os.path.realpath(os.readlink(exe_link))
         except OSError:
-            raise OpError(f"pid {pid} not running or /proc/{pid}/exe unreadable")
+            if not os.path.exists(f"/proc/{pid}"):
+                return {"output": f"pid {pid} already absent", "changed": []}
+            raise OpError(f"pid {pid} /proc/{pid}/exe unreadable")
         if actual != os.path.realpath(expected_exe):
             raise OpError(
                 f"pid {pid} exe mismatch: {actual!r} != expected {expected_exe!r}")

@@ -17,6 +17,7 @@ import hashlib
 import hmac as hmac_mod
 import json
 import os
+import re
 import sqlite3
 
 from del_app.auth import get_secret_key
@@ -103,10 +104,86 @@ def _approved_deletion_roots() -> list[str]:
         return ["/apps", "/data", "/srv", "/var/www", "/home/bjkai"]
 
 
+def _never_delete_roots() -> list[str]:
+    try:
+        with open("/apps/del/config/helper-policy.json") as f:
+            return json.load(f).get("never_delete", []) or []
+    except Exception:
+        return ["/apps/del"]
+
+
+def _scan_root_app_dir(path: str | None) -> str | None:
+    """If path sits under a scan root, return `{root}/{first-component}`.
+
+    Used as a planner safety belt: a systemd unit or process whose
+    WorkingDirectory/ExecStart/cwd resolves to `/apps/glmflix` must never be
+    included in a plan for a different app (e.g. netdata).
+    """
+    if not path or not isinstance(path, str):
+        return None
+    try:
+        roots = [r.rstrip("/") for r in get_settings().scan_roots]
+    except Exception:
+        roots = ["/apps", "/data/apps", "/opt", "/srv", "/var/www"]
+    for root in roots:
+        prefix = root + "/"
+        if path.startswith(prefix):
+            name = path[len(prefix):].split("/", 1)[0]
+            if name:
+                return f"{root}/{name}"
+    return None
+
+
+def _first_abs_path_in(text: str) -> str | None:
+    if not text:
+        return None
+    m = re.search(r"(/(?:apps|data|opt|srv|var/www)/[A-Za-z0-9_.-]+(?:/[^\s;]*)?)", text)
+    return m.group(1) if m else None
+
+
+def _owned_app_dirs(app_slug: str, assoc_rows: list) -> set[str]:
+    """Project directories this app is allowed to act on."""
+    dirs: set[str] = set()
+    try:
+        roots = [r.rstrip("/") for r in get_settings().scan_roots]
+    except Exception:
+        roots = ["/apps", "/data/apps", "/opt", "/srv", "/var/www"]
+    for root in roots:
+        dirs.add(f"{root}/{app_slug}")
+    for row in assoc_rows:
+        rtype = row["resource_type"]
+        path = row["resource_path"]
+        if rtype in ("directory", "compose_project", "git_repo") and path:
+            owned = _scan_root_app_dir(path)
+            if owned:
+                dirs.add(owned)
+    return dirs
+
+
+def _resource_foreign_to_app(data: dict, owned_dirs: set[str], *, cwd: str | None = None) -> bool:
+    """True only when we can prove this lives under a *different* project.
+
+    Unknown (no scan-root path) is not foreign — correlation already gated
+    the association; we only block the glmflix-in-a-netdata-plan case.
+    """
+    wd = data.get("working_directory")
+    exe = data.get("exec_start") or data.get("exe") or ""
+    candidate = (
+        _scan_root_app_dir(wd)
+        or _scan_root_app_dir(cwd)
+        or _scan_root_app_dir(exe if isinstance(exe, str) and exe.startswith("/") else None)
+        or _scan_root_app_dir(_first_abs_path_in(exe if isinstance(exe, str) else ""))
+    )
+    if candidate is None:
+        return False
+    return candidate not in owned_dirs
+
+
 def _is_safe_delete_path(path: str | None) -> bool:
     """A path is only deletable if absolute, resolves to a real filesystem
-    entry, is not a protected root, and (like the helper) resolves strictly
-    under an approved deletion root at least one component deep."""
+    entry, is not a protected root, is not on the never-delete list, and (like
+    the helper) resolves strictly under an approved deletion root at least one
+    component deep."""
     if not path or not os.path.isabs(path):
         return False
     real = os.path.realpath(path)
@@ -114,6 +191,10 @@ def _is_safe_delete_path(path: str | None) -> bool:
         return False
     if _is_protected_root(real) or _is_protected_root(path):
         return False
+    for nd in _never_delete_roots():
+        r = os.path.realpath(nd).rstrip("/")
+        if real == r or real.startswith(r + "/"):
+            return False
     for root in _approved_deletion_roots():
         r = root.rstrip("/")
         if real == r:  # the root itself is never deletable
@@ -282,12 +363,19 @@ def build_plan(app_slug: str, options: dict) -> Plan:
     # --- Stage: quiesce ---
     # timers first (so a stopped service is not immediately re-triggered),
     # then services; skip units whose files no longer exist on disk.
+    owned_dirs = _owned_app_dirs(app_slug, assoc_rows)
     systemd_rows = by_type.get("systemd_timer", []) + by_type.get("systemd_unit", [])
     live_systemd_rows = []
     for row in systemd_rows:
         unit = row["resource_key"]
         if not os.path.exists(os.path.join("/etc/systemd/system", unit)):
             warnings.append(f"{unit}: unit file already absent, skipping systemd steps")
+            continue
+        data = _data(row)
+        if _resource_foreign_to_app(data, owned_dirs):
+            preserved.append(unit)
+            warnings.append(
+                f"{unit}: WorkingDirectory/ExecStart is not under this app, skipping")
             continue
         live_systemd_rows.append(row)
         steps.append(PlanStep(
@@ -314,6 +402,11 @@ def build_plan(app_slug: str, options: dict) -> Plan:
             preserved.append(row["resource_key"])
             warnings.append(
                 f"{row['resource_key']}: process pid/exe unavailable, skipping termination")
+            continue
+        if _resource_foreign_to_app(data, owned_dirs, cwd=data.get("cwd")):
+            preserved.append(row["resource_key"])
+            warnings.append(
+                f"{row['resource_key']}: process cwd/exe is not under this app, skipping")
             continue
         steps.append(PlanStep(
             seq=seq.next(), stage="quiesce", operation="process_term",
