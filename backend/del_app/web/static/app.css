@@ -632,7 +632,7 @@ a.stat-card:hover { border-color: var(--accent); text-decoration: none; transfor
 
 .card, .panel {
   background: var(--bg-card); border: 1px solid var(--border-subtle, var(--border));
-  border-radius: 14px; padding: 1.25rem; margin-bottom: 1.5rem;
+  border-radius: var(--radius); padding: 1.25rem; margin-bottom: 1.5rem;
   box-shadow: var(--shadow-sm);
 }
 .card > h2, .panel > h2 { margin-top: 0; }
