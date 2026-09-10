@@ -4,9 +4,11 @@
 <div class="page-header">
   <h1>Settings</h1>
 </div>
+<p class="page-lede">Read-only snapshot of this host’s DEL config. Scanning is on demand (button below). Ask is read-only — it cannot plan or delete.</p>
 
 <section class="panel">
-  <h2>Configuration</h2>
+  <details class="sop-details" open>
+  <summary><h2>Configuration</h2></summary>
   <dl class="kv">
     <dt>Port</dt><dd>{{ settings.get('port') }}</dd>
     <dt>DB path</dt><dd>{{ settings.get('db_path') }}</dd>
@@ -16,6 +18,7 @@
     <dt>Protected apps</dt><dd>{{ settings.get('protected_apps', []) | join(', ') }}</dd>
     <dt>Session hours</dt><dd>{{ settings.get('session_hours') }}</dd>
   </dl>
+  </details>
 </section>
 
 <section class="panel" id="assistant-settings">

@@ -4,7 +4,17 @@ subtitle: Scan → apps → resources → orphans → Ask → plan. One primary 
 slug: guides/sop
 ---
 
-This is the loop on the dashboard (**How to use DEL**). Do not skip Ask on shared or weak rows. Do not delete from Orphans. Dry-run before LIVE.
+This page (`/docs/guides/sop`) is the source of truth for the operator loop. The dashboard repeats it inside **How to use DEL** — a `<details>` panel that is **open by default**. Do not skip Ask on shared or weak rows. Do not delete from Orphans. Dry-run before LIVE.
+
+Legend chips on the dashboard (same meanings as Vocabulary below):
+
+- **shared** = 2+ current apps
+- **probable** = strong owner
+- **possible** = weak
+- **unassigned** → Orphans
+- **Ask** = read-only
+
+Chrome: primary `.btn` is `min-height: 2.35rem`; `.panel` radius is 12px (slightly rounder than the old 8px). Compact `.btn-sm` in the How-to action group is still ~2rem.
 
 ```mermaid
 flowchart LR

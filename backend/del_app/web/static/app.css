@@ -26,10 +26,12 @@
   --ok: #34c98a;
   --ok-bg: #133026;
   --info-bg: #1c2733;
-  --radius: 10px;
+  --radius: 12px;
   --radius-sm: 8px;
-  --shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
-  --shadow-sm: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 8px 24px rgba(0, 0, 0, 0.18);
+  --shadow: 0 12px 36px rgba(0, 0, 0, 0.32);
+  --shadow-sm: 0 1px 0 rgba(255, 255, 255, 0.05) inset, 0 8px 24px rgba(0, 0, 0, 0.2);
+  --border-subtle: color-mix(in srgb, var(--border) 70%, var(--bg-card));
+  --ease: 140ms ease;
   --font: "Segoe UI", Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
@@ -629,8 +631,9 @@ a.stat-card:hover { border-color: var(--accent); text-decoration: none; transfor
 .stat-label { color: var(--text-muted); font-size: 0.85rem; margin-top: 0.25rem; }
 
 .panel {
-  background: var(--bg-card); border: 1px solid var(--border);
+  background: var(--bg-card); border: 1px solid var(--border-subtle, var(--border));
   border-radius: var(--radius); padding: 1.25rem; margin-bottom: 1.5rem;
+  box-shadow: var(--shadow-sm);
 }
 .panel > h2 { margin-top: 0; }
 .count-pill {
@@ -977,14 +980,18 @@ th.sort-desc::after { content: "\2193"; opacity: 1; }
 
 /* --- Buttons --- */
 .btn {
-  display: inline-block; padding: 0.5rem 1rem; border-radius: var(--radius);
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.35rem;
+  padding: 0.5rem 1rem; min-height: 2.35rem; border-radius: var(--radius);
   border: 1px solid var(--border); background: var(--bg-alt); color: var(--text);
-  cursor: pointer; font-size: 0.9rem;
+  cursor: pointer; font-size: 0.9rem; font-weight: 600; letter-spacing: 0.01em;
+  transition: background var(--ease, 140ms ease), border-color var(--ease, 140ms ease),
+    filter var(--ease, 140ms ease), transform var(--ease, 140ms ease);
 }
-.btn:hover { background: var(--border); text-decoration: none; }
-.btn-sm { padding: 0.25rem 0.6rem; font-size: 0.8rem; }
+.btn:hover { background: color-mix(in srgb, var(--accent) 12%, var(--bg-alt)); text-decoration: none; border-color: color-mix(in srgb, var(--accent) 40%, var(--border)); }
+.btn:active { transform: translateY(1px); }
+.btn-sm { padding: 0.28rem 0.65rem; min-height: 2rem; font-size: 0.8rem; }
 .btn-primary { background: var(--accent-bg); border-color: var(--accent-bg); color: #fff; }
-.btn-primary:hover { background: var(--accent-bg); filter: brightness(1.12); }
+.btn-primary:hover { background: var(--accent-bg); filter: brightness(1.1); border-color: var(--accent-hover); }
 .btn-danger { background: var(--danger-solid); border-color: var(--danger-solid); color: #fff; }
 .btn-danger:hover { background: var(--danger-solid); filter: brightness(1.12); }
 .btn-danger:disabled { opacity: 0.4; cursor: not-allowed; }
@@ -1812,9 +1819,31 @@ pre.output { background: var(--bg); border: 1px solid var(--border); border-radi
   padding: var(--space-4);
 }
 .sop-panel h2 {
-  margin: 0 0 var(--space-3);
+  margin: 0;
   font-size: var(--text-md);
+  display: inline;
 }
+.sop-details > summary {
+  list-style: none;
+  cursor: pointer;
+  color: var(--text);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  margin-bottom: var(--space-3);
+}
+.sop-details > summary::-webkit-details-marker { display: none; }
+.sop-details > summary::before {
+  content: "\25B8";
+  color: var(--accent);
+  font-size: 0.85em;
+}
+.sop-details[open] > summary::before { content: "\25BE"; }
+.legend-row {
+  display: flex; flex-wrap: wrap; gap: 0.4rem;
+  margin: 0 0 var(--space-4);
+}
+.legend-row .chip { font-size: var(--text-xs); }
 .sop-list {
   margin: 0;
   padding-left: 1.2rem;
