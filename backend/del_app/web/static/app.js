@@ -1401,6 +1401,30 @@
   // =========================================================================
   // Glossary: context filter (page + resource tab) + mobile sheet
   // =========================================================================
+  var GLOSSARY_COLLAPSE_KEY = "del.glossaryCollapsed";
+  var glossaryCollapseBtn = document.getElementById("glossary-collapse");
+  function setGlossaryCollapsed(collapsed) {
+    if (!layout) return;
+    if (window.matchMedia && window.matchMedia("(max-width: 1279px)").matches) {
+      layout.classList.remove("glossary-collapsed");
+      return;
+    }
+    layout.classList.toggle("glossary-collapsed", !!collapsed);
+    try { localStorage.setItem(GLOSSARY_COLLAPSE_KEY, collapsed ? "1" : "0"); } catch (e) {}
+    if (glossaryCollapseBtn) {
+      glossaryCollapseBtn.setAttribute("aria-label", collapsed ? "Expand glossary" : "Collapse glossary");
+      glossaryCollapseBtn.title = collapsed ? "Expand glossary" : "Collapse glossary";
+    }
+  }
+  try {
+    setGlossaryCollapsed(localStorage.getItem(GLOSSARY_COLLAPSE_KEY) === "1");
+  } catch (e) {}
+  if (glossaryCollapseBtn) {
+    glossaryCollapseBtn.addEventListener("click", function () {
+      setGlossaryCollapsed(!(layout && layout.classList.contains("glossary-collapsed")));
+    });
+  }
+
   var GLOSSARY_LABELS = {
     general: "General",
     "view-apps": "View Apps",
