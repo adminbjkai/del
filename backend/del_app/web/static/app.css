@@ -26,8 +26,11 @@
   --ok: #34c98a;
   --ok-bg: #133026;
   --info-bg: #1c2733;
-  --radius: 6px;
-  --font: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  --radius: 10px;
+  --radius-sm: 8px;
+  --shadow: 0 10px 30px rgba(0, 0, 0, 0.28);
+  --shadow-sm: 0 1px 0 rgba(255, 255, 255, 0.04) inset, 0 8px 24px rgba(0, 0, 0, 0.18);
+  --font: "Segoe UI", Inter, ui-sans-serif, system-ui, -apple-system, sans-serif;
   --mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
 
   /* Tone tokens: the single colour system behind every status-*, badge-*,
@@ -136,8 +139,12 @@
 
 html, body {
   margin: 0; padding: 0;
-  background: var(--bg); color: var(--text);
-  font-family: var(--font); font-size: 15.5px;
+  background:
+    radial-gradient(1200px 500px at 0% -10%, color-mix(in srgb, var(--accent) 14%, transparent), transparent 55%),
+    var(--bg);
+  color: var(--text);
+  font-family: var(--font); font-size: 15px;
+  letter-spacing: 0.005em;
   /* clip, not hidden: `hidden` computes overflow-y to auto and turns these into
      scroll containers, which silently kills every position:sticky below. */
   overflow-x: clip;
@@ -1572,3 +1579,178 @@ pre.output { background: var(--bg); border: 1px solid var(--border); border-radi
   a { color: #000 !important; text-decoration: underline; }
   .table, .table th, .table td { width: auto !important; max-width: none !important; }
 }
+
+/* =========================================================================
+   2026 shell refresh — denser chrome, chips, cards, density modes
+   ========================================================================= */
+.sidebar {
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-alt) 88%, var(--accent) 12%), var(--bg-alt));
+  padding: 0.85rem 0.7rem;
+}
+.brand {
+  font-size: 1.05rem;
+  letter-spacing: 0.14em;
+}
+.nav-links a {
+  border: 1px solid transparent;
+  padding: 0.48rem 0.7rem;
+  font-weight: 550;
+}
+.nav-links a:hover {
+  background: color-mix(in srgb, var(--bg-card) 80%, var(--accent) 20%);
+  border-color: color-mix(in srgb, var(--border) 70%, var(--accent) 30%);
+}
+.nav-links a.active {
+  box-shadow: var(--shadow-sm);
+}
+.content {
+  padding: 1.35rem 1.5rem 2rem;
+}
+.page-header {
+  align-items: center;
+  margin-bottom: 1rem;
+  padding-bottom: 0.85rem;
+  border-bottom: 1px solid color-mix(in srgb, var(--border) 80%, transparent);
+}
+.page-header h1 {
+  font-size: 1.45rem;
+  letter-spacing: -0.02em;
+  font-weight: 700;
+}
+.page-lede {
+  margin: 0 0 1rem;
+  max-width: 72ch;
+  color: var(--text-muted);
+  font-size: 0.92rem;
+  line-height: 1.45;
+}
+.stat-grid {
+  grid-template-columns: repeat(auto-fit, minmax(148px, 1fr));
+  gap: 0.75rem;
+}
+.stat-card {
+  border-radius: 14px;
+  padding: 1rem 1.05rem 0.95rem;
+  box-shadow: var(--shadow-sm);
+  background:
+    linear-gradient(180deg, color-mix(in srgb, var(--bg-card) 92%, white 8%), var(--bg-card));
+}
+a.stat-card:hover {
+  transform: translateY(-3px);
+  box-shadow: var(--shadow);
+}
+.stat-value {
+  font-size: 1.65rem;
+  letter-spacing: -0.03em;
+  font-variant-numeric: tabular-nums;
+}
+.panel {
+  border-radius: 14px;
+  box-shadow: var(--shadow-sm);
+}
+.tabbar {
+  gap: 0.35rem;
+  border-bottom: 0;
+  padding: 0.2rem;
+  background: var(--bg-alt);
+  border-radius: 999px;
+  display: flex;
+  overflow-x: auto;
+}
+.tabbar a {
+  border-radius: 999px;
+  white-space: nowrap;
+}
+.table-block {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 0.75rem 0.75rem 0.4rem;
+  box-shadow: var(--shadow-sm);
+}
+.table-toolbar {
+  gap: 0.5rem;
+}
+.table-filter {
+  flex: 1 1 16rem;
+  min-width: 12rem;
+  border-radius: 999px !important;
+  padding-left: 0.9rem !important;
+}
+.filter-chipbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem 1rem;
+  margin: 0 0 0.65rem;
+}
+.filter-chip-group {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.3rem;
+}
+.filter-chip-label {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-right: 0.15rem;
+}
+.filter-chip {
+  border: 1px solid var(--border);
+  background: var(--bg-alt);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 0.18rem 0.65rem;
+  font: inherit;
+  font-size: 0.78rem;
+  cursor: pointer;
+}
+.filter-chip:hover { border-color: var(--accent); }
+.filter-chip.is-on,
+.filter-chip[aria-pressed="true"] {
+  background: var(--accent-bg);
+  border-color: var(--accent-bg);
+  color: #fff;
+}
+.table thead th {
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  background: color-mix(in srgb, var(--bg-card) 88%, var(--bg-alt));
+}
+.table tbody tr:hover td {
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-card));
+}
+html[data-density="compact"] .table td,
+html[data-density="compact"] .table th {
+  padding-top: 0.28rem;
+  padding-bottom: 0.28rem;
+}
+html[data-density="compact"] .content { padding-top: 0.9rem; }
+html[data-density="compact"] .stat-card { padding: 0.7rem 0.8rem; }
+html[data-density="compact"] .panel { padding: 0.85rem; }
+.login-body {
+  background:
+    radial-gradient(900px 420px at 50% -20%, color-mix(in srgb, var(--accent) 22%, transparent), transparent 60%),
+    var(--bg);
+}
+.login-card {
+  width: min(380px, calc(100vw - 2rem));
+  border-radius: 18px;
+}
+.attention-list { list-style: none; padding: 0; margin: 0; }
+.attention-item {
+  display: flex; flex-wrap: wrap; gap: 0.35rem 0.85rem;
+  padding: 0.55rem 0;
+  border-bottom: 1px solid var(--border);
+}
+.attention-item:last-child { border-bottom: 0; }
+.cmdk-box {
+  border-radius: 16px;
+  overflow: hidden;
+  box-shadow: var(--shadow);
+}
+

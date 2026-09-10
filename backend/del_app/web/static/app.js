@@ -214,6 +214,26 @@
     search.setAttribute("aria-label", "Quick filter all columns");
     toolbar.appendChild(search);
 
+    var densityBtn = document.createElement("button");
+    densityBtn.type = "button";
+    densityBtn.className = "btn btn-sm table-density";
+    function currentDensity() {
+      return document.documentElement.getAttribute("data-density") === "compact" ? "compact" : "comfortable";
+    }
+    function setDensity(mode) {
+      document.documentElement.setAttribute("data-density", mode);
+      try { localStorage.setItem("del-density", mode); } catch (err) {}
+      densityBtn.textContent = mode === "compact" ? "Comfortable" : "Compact";
+      densityBtn.setAttribute("aria-pressed", mode === "compact" ? "true" : "false");
+    }
+    setDensity(currentDensity() === "compact" || (function () {
+      try { return localStorage.getItem("del-density") === "compact"; } catch (err) { return false; }
+    })() ? "compact" : "comfortable");
+    densityBtn.addEventListener("click", function () {
+      setDensity(currentDensity() === "compact" ? "comfortable" : "compact");
+    });
+    toolbar.appendChild(densityBtn);
+
     var clearBtn = document.createElement("button");
     clearBtn.type = "button";
     clearBtn.className = "btn btn-sm table-clear-filters";
@@ -416,6 +436,53 @@
       });
     });
 
+    var chipFilters = {};
+    var chipBar = document.createElement("div");
+    chipBar.className = "filter-chipbar";
+    chipBar.hidden = true;
+    wrap.insertBefore(chipBar, scroller);
+    var quickHeaders = /^(status|kind|mode|shared|protected|state|state\/health|orphan|dangling|health)$/i;
+    Array.prototype.forEach.call(headRow.cells, function (th, idx) {
+      var headerLabel = (th.textContent || "").replace(/▾.*/g, "").trim();
+      if (!quickHeaders.test(headerLabel)) return;
+      var values = {};
+      allRows.forEach(function (r) {
+        var cell = r.cells[idx];
+        if (!cell) return;
+        var v = (cell.getAttribute("data-filter-value") || cell.textContent || "").replace(/\s+/g, " ").trim();
+        if (!v || v === "—") return;
+        v.split(/\s+/).forEach(function (part) {
+          if (part && part !== "—") values[part] = true;
+        });
+      });
+      var keys = Object.keys(values).sort();
+      if (keys.length < 2 || keys.length > 12) return;
+      var group = document.createElement("div");
+      group.className = "filter-chip-group";
+      var glabel = document.createElement("span");
+      glabel.className = "filter-chip-label";
+      glabel.textContent = headerLabel;
+      group.appendChild(glabel);
+      keys.forEach(function (val) {
+        var chip = document.createElement("button");
+        chip.type = "button";
+        chip.className = "filter-chip";
+        chip.setAttribute("aria-pressed", "false");
+        chip.textContent = val;
+        chip.addEventListener("click", function () {
+          var set = chipFilters[idx] || new Set();
+          if (set.has(val)) set.delete(val); else set.add(val);
+          if (set.size === 0) delete chipFilters[idx]; else chipFilters[idx] = set;
+          chip.setAttribute("aria-pressed", set.has(val) ? "true" : "false");
+          chip.classList.toggle("is-on", set.has(val));
+          applyFilter(); render();
+        });
+        group.appendChild(chip);
+      });
+      chipBar.appendChild(group);
+      chipBar.hidden = false;
+    });
+
     var pageSel = document.createElement("select");
     pageSel.className = "table-pagesize";
     [25, 50, 100, 0].forEach(function (n) {
@@ -495,6 +562,16 @@
       var term = search.value.trim().toLowerCase();
       filtered = allRows.filter(function (r) {
         if (term && r.textContent.toLowerCase().indexOf(term) === -1) return false;
+        for (var chipCol in chipFilters) {
+          if (!Object.prototype.hasOwnProperty.call(chipFilters, chipCol)) continue;
+          var wanted = chipFilters[chipCol];
+          var rawChip = cellText(r, Number(chipCol));
+          var okChip = false;
+          wanted.forEach(function (v) {
+            if (rawChip.indexOf(String(v).toLowerCase()) !== -1) okChip = true;
+          });
+          if (!okChip) return false;
+        }
         for (var i = 0; i < colFilters.length; i++) {
           var f = colFilters[i];
           var text = cellText(r, f.col);
@@ -549,6 +626,11 @@
         f.op = "contains";
         f.val = "";
         f.selected = null;
+      });
+      Object.keys(chipFilters).forEach(function (k) { delete chipFilters[k]; });
+      wrap.querySelectorAll(".filter-chip.is-on").forEach(function (c) {
+        c.classList.remove("is-on");
+        c.setAttribute("aria-pressed", "false");
       });
       wrap.querySelectorAll(".th-filter-btn.is-active").forEach(function (b) {
         b.classList.remove("is-active");

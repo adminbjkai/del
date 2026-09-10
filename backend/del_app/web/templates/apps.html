@@ -14,11 +14,9 @@
     <button type="button" class="btn btn-sm" data-export-table="apps-table" title="Export the currently filtered rows as CSV">Export CSV</button>
   </div>
 </div>
-<p class="muted">Click a column header to sort. Filtering and pagination happen
-  instantly in your browser; use <code>?search=</code> in the URL for a deep link
-  that prefills the filter below. Press <kbd>/</kbd> to focus the filter.
-  <strong>Installed</strong> is the best available host signal (container created
-  date or project directory age), falling back to when DEL first discovered the app.</p>
+<p class="page-lede">Sort any column, use the chip filters for status/kind/protected,
+  or press <kbd>/</kbd> to search. Installed uses the host signal (container created
+  date or project directory age), then first discovery.</p>
 
 <table id="apps-table" class="table" data-enhanced data-empty="No applications found." data-search-placeholder="Filter apps…"{% if search %} data-prefill="{{ search }}"{% endif %}>
   <caption class="sr-only">Applications discovered by the latest scan, with status, install date, domains, ports and resource counts.</caption>
