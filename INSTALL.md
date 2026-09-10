@@ -124,7 +124,7 @@ systemctl status del-web.service del-helper.service
 ```
 
 `/healthz` needs no session (the unauthenticated routes are `/login`, `/healthz`,
-`/favicon.ico` and the four `/static/*` assets) and returns JSON `ok` from
+`/favicon.ico` and `/static/*`: app, assistant, theme, favicon, and vendored AG Grid) and returns JSON `ok` from
 `del-web` directly — it does not exercise the helper socket, so a healthy
 `/healthz` does not by itself confirm `del-helper` is reachable. Check that
 separately:

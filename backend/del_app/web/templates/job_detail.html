@@ -4,6 +4,7 @@
 <div class="page-header">
   <h1>Job #{{ job.get('id') }}</h1>
 </div>
+<p class="page-lede">This run of a removal plan. LIVE changes the host; dry-run does not. Shared = more than one current app, so those resources stay preserved. Protected apps never reach this page.</p>
 <div class="job-summary">
   <p class="muted">
     {% if job.get('app_slug') %}app: <a href="/apps/{{ job.get('app_slug') }}">{{ job.get('app_name') or job.get('app_slug') }}</a> · {% endif %}
@@ -72,7 +73,7 @@
 </section>
 {% else %}
 <div class="empty-state" id="job-no-steps">
-  <div class="empty-state-msg">No steps recorded yet.</div>
+  <div class="empty-state-msg">No steps recorded yet. Primary: wait for execute to start. Secondary: open Jobs if this run was not launched.</div>
 </div>
 {% endfor %}
 </div>

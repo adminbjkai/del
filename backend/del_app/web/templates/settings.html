@@ -27,11 +27,13 @@
     <dt>Model</dt><dd>{{ ast.get('model') or '—' }}</dd>
     <dt>Key source</dt><dd>{{ ast.get('key_source') or '—' }}</dd>
   </dl>
-  <form method="post" action="/assistant/test" class="mt-2" data-submit-guard="Testing…">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <button type="submit" class="btn"{% if not (ast.get('enabled') and ast.get('configured')) %} disabled title="Configure an API key first"{% endif %}>Test connection</button>
-    <a class="btn btn-ghost" href="/assistant">Open full assistant</a>
-  </form>
+  <div class="cluster mt-2">
+    <form method="post" action="/assistant/test" data-submit-guard="Testing…">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="btn btn-primary"{% if not (ast.get('enabled') and ast.get('configured')) %} disabled title="Configure an API key first"{% endif %}>Test connection</button>
+    </form>
+    <a class="btn" href="/assistant">Open full assistant</a>
+  </div>
   <p class="muted text-sm mt-2">
     Read-only chat over the inventory (Ollama Cloud <code>glm-5.3-flash</code>). It now includes
     per-resource owners and shared flags, and sits in the right-rail <strong>Ask</strong> tab on every page
@@ -40,7 +42,7 @@
   </p>
 </section>
 
-<section class="panel">
+<section class="panel" id="scan-now">
   <h2>Scanning</h2>
   <form method="post" action="/scan" data-submit-guard="Starting scan…">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">

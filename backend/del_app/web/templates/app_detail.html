@@ -15,28 +15,26 @@
 <p class="muted">slug: {{ app.get('slug') }} · status: {{ app.get('status') }}
   {% if app.get('protected') %}<span class="badge badge-blue">protected</span>{% endif %}
 </p>
-<p class="muted confidence-explainer">
-  Confidence and evidence below explain how DEL decided each resource belongs to this app —
-  <button type="button" class="link-button" data-glossary-open>see the glossary</button>.
-</p>
+<p class="page-lede">Owners here are current apps DEL attributes each resource to. Shared = more than one current app (kept if this app is removed). Confidence: probable is a strong claim, possible is weak — review possible before planning. Protected = no removal plan.</p>
 
 <div class="action-bar">
   {% if app.get('protected') %}
     <button class="btn btn-danger" disabled title="This app is protected and cannot be removed">Remove app now</button>
-    <span class="muted">Protected apps cannot be removed through DEL.</span>
+    <span class="muted">Protected: DEL will not build a removal plan.</span>
   {% elif removed %}
     <button class="btn btn-danger" disabled title="This app was not seen in the latest scan, so there is nothing left to remove">Remove app now</button>
     <span class="muted">Already gone: this app was not present in the latest scan, so removal is disabled.</span>
   {% else %}
+    <a class="btn btn-primary" href="/apps/{{ app.get('slug') }}/plan" title="Choose what to remove and review the plan before running it">Plan removal</a>
     <form method="post" action="/apps/{{ app.get('slug') }}/remove" class="inline-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <button type="submit" class="btn btn-danger"
               data-confirm="Remove {{ app.get('name', app.get('slug')) }} completely right now? This immediately builds a complete-removal plan (containers, images, named volumes, bind-mounted data, the project directory, and app networks) and runs it live — no review step. Resources shared with other apps are kept. This cannot be undone."
               title="Skip planning and permanently remove this app's containers, volumes, files and networks right now">Remove app now (skips review)</button>
     </form>
-    <a class="btn" href="/apps/{{ app.get('slug') }}/plan" title="Choose what to remove and review the plan before running it">Plan removal first…</a>
   {% endif %}
-  <a class="btn" href="/manifests/{{ app.get('slug') }}">Edit manifest</a>
+  <span class="muted text-sm">More</span>
+  <a class="btn btn-ghost" href="/manifests/{{ app.get('slug') }}">Edit manifest</a>
   {% if assistant_enabled() %}
   <a class="btn btn-ghost" href="/assistant?scope=app&amp;target={{ app.get('slug') | urlencode }}" title="Ask the read-only assistant about this application">Ask the assistant</a>
   {% endif %}
@@ -45,9 +43,7 @@
 {% set shared_items = sections.get('shared', []) %}
 {% if shared_items %}
 <div class="box box-warning">
-  <strong>{{ shared_items | length }} shared resource(s).</strong> These are used by
-  more than one application. Removing this app should preserve them — review carefully
-  before planning removal.
+  <strong>{{ shared_items | length }} shared resource(s).</strong> Shared means more than one current app uses them. They stay if you plan or remove this app — do not treat them as exclusive.
 </div>
 {% endif %}
 
@@ -93,7 +89,7 @@
   {% if items %}
   <div class="tabpanel panel" id="panel-{{ section_key }}" role="tabpanel" aria-labelledby="tab-{{ section_key }}" hidden>
     <h2>{{ section_title }} <span class="count-pill">{{ items | length }}</span></h2>
-    <table class="table" data-enhanced data-empty="Nothing found." data-page-size="25">
+    <table class="table" data-enhanced data-empty="No resources in this section. Primary: run a scan if inventory is stale. Secondary: open Overview." data-page-size="25">
       <caption class="sr-only">{{ section_title }} resources associated with this application.</caption>
       <thead><tr><th scope="col">Resource</th>{% if section_key == 'docker' %}<th scope="col">Host port(s)</th><th scope="col">Container port(s)</th>{% endif %}<th scope="col">Confidence</th><th scope="col">Risk</th><th scope="col">Removal</th><th scope="col" data-nosort>Evidence</th><th scope="col" data-nosort>Actions</th></tr></thead>
       <tbody>
@@ -141,7 +137,7 @@
   {% if associations %}
   <div class="tabpanel panel" id="panel-readiness" role="tabpanel" aria-labelledby="tab-readiness" hidden>
     <h2>Removal readiness <span class="count-pill">{{ associations | length }}</span></h2>
-    <table class="table" data-enhanced data-empty="No associated resources." data-page-size="25">
+    <table class="table" data-enhanced data-empty="No associated resources. Primary: run a scan, then return to this app." data-page-size="25">
       <caption class="sr-only">Every associated resource with its confidence, data-loss risk and removal eligibility.</caption>
       <thead><tr><th scope="col">Resource</th><th scope="col">Confidence</th><th scope="col">Risk</th><th scope="col">Removal</th></tr></thead>
       <tbody>

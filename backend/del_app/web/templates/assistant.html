@@ -14,6 +14,7 @@
     {% endif %}
   </div>
 </div>
+<p class="page-lede">Read-only questions about this inventory (owners, shared, probable vs possible, protected). Ask is also in the right rail on every other screen. Nothing here can change the host — plan and remove stay on the app.</p>
 
 {% if not assistant_on %}
 <div class="box box-info" id="assistant-disabled">
@@ -95,7 +96,7 @@
           </form>
         </li>
         {% else %}
-        <li class="muted text-sm" id="assistant-no-conversations">Nothing yet.</li>
+        <li class="muted text-sm" id="assistant-no-conversations">No conversations yet. Ask a question or pick a suggestion to start.</li>
         {% endfor %}
       </ul>
     </section>
@@ -109,7 +110,7 @@
         {% endfor %}
       {% else %}
         <div class="empty-state" id="assistant-empty">
-          <div class="empty-state-msg">Pick a scope, then ask a question or choose a suggestion. Answers come only from what DEL already knows about this host; nothing is changed.</div>
+          <div class="empty-state-msg">Pick a scope, then ask a question or choose a suggestion. Primary action is Ask; this never scans, plans, or removes.</div>
         </div>
       {% endif %}
     </div>

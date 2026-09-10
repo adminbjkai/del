@@ -8,12 +8,14 @@
 <div class="page-header">
   <h1>Resources</h1>
   <div class="page-actions">
-    <button type="button" class="btn btn-sm" data-export-table="resources-table" title="Export the currently filtered rows as CSV">Export CSV</button>
+    <span class="muted text-sm">Export / ask</span>
+    <button type="button" class="btn btn-sm btn-ghost" data-export-table="resources-table" title="Export the currently filtered rows as CSV">Export CSV</button>
     {% if ask_rows %}
     <a class="btn btn-sm btn-ghost" href="/assistant?scope=resource_type&amp;target={{ res_type }}" title="Ask the read-only assistant about all {{ res_label | lower }}">Ask the assistant</a>
     {% endif %}
   </div>
 </div>
+<p class="page-lede">Latest-scan resources by type. Owner app(s) = current claim; shared = more than one current app (never delete with a single app); unassigned = no probable owner (review on Orphans). Open an owner to see probable vs possible confidence. Protected apps have no removal plan.</p>
 
 <nav class="tabbar">
   {% for t in type_counts %}
@@ -25,7 +27,7 @@
 
 <h2>{{ res_label }} <span class="count-pill">{{ rows | length }}</span></h2>
 
-{% set empty = "No resources of this type in the latest scan." %}
+{% set empty = "No resources of this type in the latest scan. Primary: run a scan, then return here." %}
 
 {# ---------- container ---------- #}
 {% if res_type == 'container' %}

@@ -6,6 +6,7 @@
     <h1>Plan #{{ plan.get('id') }} · {{ app.get('name', app.get('slug')) }}</h1>
   </div>
   <p class="muted">status: <span class="badge status-{{ plan.get('status') }}">{{ plan.get('status') }}</span> · created <span class="dt">{{ format_dt(plan.get('created')) }}</span></p>
+  <p class="page-lede">Review steps, then execute dry-run first. LIVE runs real deletions. Shared = more than one current app, so those resources stay preserved. Protected apps cannot reach a plan.</p>
 
   <section class="panel box-danger">
     <h2>Execute</h2>
@@ -76,6 +77,7 @@
   <div class="page-header">
     <h1>Build removal plan · {{ app.get('name', app.get('slug')) }}</h1>
   </div>
+  <p class="page-lede">Choose what this app may lose, then build the plan. Shared resources (more than one current app) stay. Protected apps have no plan. Complete removal permanently deletes this app's exclusive data.</p>
   <form method="post" action="/apps/{{ app.get('slug') }}/plan" class="stacked-form" data-submit-guard="Building plan…">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 

@@ -4,9 +4,9 @@
   {% set apps = r.get('owners', []) %}
   {% if apps %}
     {% for a in apps %}<a href="/apps/{{ a.slug }}">{{ a.name }}</a>{% if not loop.last %}, {% endif %}{% endfor %}
-    {% if r.get('shared') %} <span class="badge badge-amber" title="Used by more than one app">shared</span>{% endif %}
+    {% if r.get('shared') %} <span class="badge badge-amber" title="Shared: more than one current app. Do not delete with a single app.">shared</span>{% endif %}
   {% else %}
-    <span class="badge badge-grey">unassigned</span>
+    <span class="badge badge-grey" title="No probable current owner — review on Orphans">unassigned</span>
   {% endif %}
 {%- endmacro %}
 

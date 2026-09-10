@@ -23,12 +23,12 @@ navigation:
         path: ./pages/guides/browsing.mdx
       - page: Understanding Confidence
         path: ./pages/guides/confidence.mdx
-      - page: Removing an Application
-        path: ./pages/guides/removing-an-application.mdx
       - page: Orphan Review
         path: ./pages/guides/orphans.mdx
       - page: Assistant
         path: ./pages/guides/assistant.mdx
+      - page: Removing an Application
+        path: ./pages/guides/removing-an-application.mdx
       - page: Backups & Restore
         path: ./pages/guides/backups.mdx
   - section: Administration

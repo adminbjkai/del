@@ -4,11 +4,16 @@ subtitle: Read-only inventory Q&A with suggested prompts
 slug: guides/assistant
 ---
 
-The **Assistant** at `/assistant` is a read-only chat over the latest DEL inventory.
-It uses **Ollama Cloud** (`glm-5.3-flash`). It cannot run commands, change the host,
-or build a removal plan. Plans still go through Applications → plan → job.
+The **Assistant** is a read-only chat over the latest DEL inventory: the full page
+at `/assistant`, and the **Ask** tab of the Help|Ask right rail on every other
+authenticated page (page-scoped defaults from the current route). It uses
+**Ollama Cloud** (`glm-5.3-flash`). It cannot run commands, change the host, or
+build a removal plan. Plans still go through Applications → plan → job.
 
 ## What you can ask
+
+Typical path: [scan](/guides/scanning) → [browse](/guides/browsing) →
+[orphans](/guides/orphans) → this assistant → [remove](/guides/removing-an-application).
 
 Pick a **scope**, then click a suggested question or type your own:
 
@@ -32,7 +37,7 @@ the assistant should say so rather than guess.
 
 ## Enablement
 
-1. Write the Ollama Cloud key to `/apps/del/config/ollama-api-key.txt` mode `600`.
+1. Write the Ollama Cloud key to `/apps/del/config/ollama-api-key.txt` mode `0600`.
 2. Keep `[assistant] enabled = true` in `config/del.toml` (default).
 3. `systemctl restart del-web`
 4. Settings → Assistant → **Test connection**

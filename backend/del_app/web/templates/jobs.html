@@ -4,10 +4,12 @@
 <div class="page-header">
   <h1>Jobs <span class="count-pill">{{ jobs | length }}</span></h1>
   <div class="page-actions">
-    <button type="button" class="btn btn-sm" data-export-table="jobs-table" title="Export the currently filtered rows as CSV">Export CSV</button>
+    <span class="muted text-sm">Export</span>
+    <button type="button" class="btn btn-sm btn-ghost" data-export-table="jobs-table" title="Export the currently filtered rows as CSV">Export CSV</button>
   </div>
 </div>
-<table id="jobs-table" class="table" data-enhanced data-empty="No jobs yet." data-search-placeholder="Filter jobs…">
+<p class="page-lede">Removal jobs — dry-run simulates; LIVE executes with safety gates. Shared resources stay preserved; protected apps never produce a plan. Open a job to watch steps; refused means a gate blocked the run.</p>
+<table id="jobs-table" class="table" data-enhanced data-empty="No jobs yet. Primary: open an app, Plan removal, then execute dry-run or LIVE." data-search-placeholder="Filter jobs…">
   <caption class="sr-only">Removal jobs with mode, status, duration and timestamps.</caption>
   <thead>
     <tr>

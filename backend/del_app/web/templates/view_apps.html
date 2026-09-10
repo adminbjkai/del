@@ -5,7 +5,7 @@
   <div>
     {# The count is what actually changes as filters run, so the live region lives here. #}
     <h1>View Apps <span class="count-pill" id="gallery-visible-count" role="status">{{ apps | length }}</span></h1>
-    <p class="muted gallery-lede">A launchpad for domains verified from the latest DEL scan and a live HTTPS check.</p>
+    <p class="muted gallery-lede">Launchpad of domains online in the latest scan and a live HTTPS check. This is not ownership or confidence — use Inventory for owners, shared, probable vs possible, and protected. Next: open a card, or Refresh health.</p>
   </div>
   <div class="page-actions">
     <span class="badge badge-ok">{{ apps | length }} online</span>
@@ -123,11 +123,11 @@
   </section>
   {% endfor %}
 </div>
-<div id="gallery-empty" class="gallery-empty panel" hidden>No online apps match these filters.</div>
+<div id="gallery-empty" class="gallery-empty panel" hidden>No online apps match these filters. Primary: Refresh health. Secondary: clear search or category.</div>
 {% else %}
 <div class="panel gallery-empty">
   <h2>No verified apps are online</h2>
-  <p class="muted">The latest completed scan has no enabled domain that passed the HTTPS health check. Run a scan or refresh health after correcting DNS, TLS, Nginx, or the upstream service.</p>
+  <p class="muted">The latest completed scan has no enabled domain that passed the HTTPS health check. Primary: run a scan, then Refresh health. Secondary: fix DNS, TLS, Nginx, or the upstream.</p>
 </div>
 {% endif %}
 {% endblock %}

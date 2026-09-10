@@ -21,7 +21,32 @@
   {% endif %}
 </div>
 
-<p class="page-lede">Host inventory at a glance. Jump into apps, orphans, or a scan from here.</p>
+<p class="page-lede">Host inventory at a glance. Work the loop below; jump from stats when something is already on fire.</p>
+
+<section class="panel sop-panel" id="how-to-use" aria-labelledby="sop-heading">
+  <h2 id="sop-heading">How to use DEL</h2>
+  <ol class="sop-list">
+    <li>Press <strong>Run scan now</strong> in this panel (or the same control under Recent scans / <a href="/settings#scan-now">Settings → Scanning</a>). Wait until the scan strip shows <span class="badge status-done">done</span>.</li>
+    <li>Open <a href="/apps">Applications</a>. Sort/filter on warnings and uncertain mappings before you touch a plan.</li>
+    <li>Open <a href="/resources/container">Resources → Containers</a>, then the other resource tabs. Check owner app(s) and shared flags.</li>
+    <li>Open <a href="/orphans">Orphans</a> (actionable view). Read “why listed” on the row before any delete.</li>
+    <li>Select the right-rail <strong>Ask</strong> tab (mobile: Ask FAB). Type in the composer — read-only; it cannot remove anything.</li>
+    <li>On an app page, build a removal plan. Confirm on <a href="/jobs">Jobs</a>: dry-run first, LIVE only if the plan matches what you intend.</li>
+  </ol>
+  <div class="cluster sop-actions">
+    <form method="post" action="/scan" data-submit-guard="Starting scan…">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="btn btn-primary">Run scan now</button>
+    </form>
+    <div class="btn-group" role="group" aria-label="Next screens">
+      <a class="btn btn-sm" href="/apps">Applications</a>
+      <a class="btn btn-sm" href="/resources/container">Resources</a>
+      <a class="btn btn-sm" href="/orphans">Orphans</a>
+      <a class="btn btn-sm" href="/jobs">Jobs</a>
+      <a class="btn btn-sm" href="/docs" target="_blank" rel="noopener">Docs</a>
+    </div>
+  </div>
+</section>
 
 <section class="panel" id="attention-panel">
   <h2>Needs attention</h2>
@@ -64,10 +89,13 @@
       {% endfor %}
     </tbody>
   </table>
-  <form method="post" action="/scan" class="scan-run-form" data-submit-guard="Starting scan…">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <button type="submit" class="btn btn-primary" id="run-scan-btn">Run scan now</button>
-  </form>
+  <div class="cluster scan-run-form">
+    <form method="post" action="/scan" data-submit-guard="Starting scan…">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="btn btn-primary" id="run-scan-btn">Run scan now</button>
+    </form>
+    <a class="btn" href="/settings#scan-now">Scan settings</a>
+  </div>
 </section>
 
 <section class="panel">

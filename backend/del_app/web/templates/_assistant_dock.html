@@ -46,10 +46,11 @@
     <label for="assistant-input" class="sr-only">Your question</label>
     <textarea id="assistant-input" rows="2" placeholder="Ask about this screen…" required></textarea>
     <div class="cluster assistant-composer-actions">
-      <button type="submit" class="btn btn-primary btn-sm" id="assistant-send">Ask</button>
-      <button type="button" class="btn btn-sm" id="assistant-stop" hidden>Stop</button>
+      <button type="submit" class="btn btn-primary" id="assistant-send">Ask</button>
+      <button type="button" class="btn" id="assistant-stop" hidden>Stop</button>
+      <a class="btn" href="/assistant">Full page</a>
     </div>
   </form>
-  <p class="muted text-xs mt-2"><a href="/assistant">Full assistant</a> · read-only</p>
+  <p class="muted text-xs mt-0">Read-only. Removal still goes through an app plan.</p>
   {% endif %}
 </div>

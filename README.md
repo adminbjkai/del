@@ -23,11 +23,12 @@ The admin UI itself defaults to a dark theme with a header toggle for light mode
 (persisted in browser local storage) and a `Ctrl`/`Cmd`+`K` command palette for
 jumping to any sidebar page or application.
 
-The **Assistant** at `/assistant` is a read-only Q&A over the latest inventory
-(Ollama Cloud `glm-5.3-flash`). Suggested prompts cover the whole server, one app,
-orphans, or images/containers/networks/volumes (including “is this shared / ok to
-delete?”). It cannot change anything; removal still uses the planner. See
-[docs/ASSISTANT.md](docs/ASSISTANT.md).
+The **Assistant** is a read-only Q&A over the latest inventory (Ollama Cloud
+`glm-5.3-flash`): a dedicated page at `/assistant` plus an **Ask** tab in the
+right-rail Help|Ask dock on every authenticated page. Suggested prompts cover
+the whole server, one app, orphans, or images/containers/networks/volumes
+(including “is this shared / ok to delete?”). It cannot change anything; removal
+still uses the planner. See [docs/ASSISTANT.md](docs/ASSISTANT.md).
 
 ## Quick facts
 
@@ -50,7 +51,7 @@ delete?”). It cannot change anything; removal still uses the planner. See
 | TLS | Nginx, existing `bjk.ai` wildcard cert |
 | Protection | DEL is flagged `protected=1`; the planner refuses to build a removal plan for it |
 | Inventory export | Self-contained, whole-server inventory dump (`/apps/del/miscwork/`, gitignored) served at `https://del.bjk.ai/miscwork.html` (and aliased at `/inventory`), the only basic-auth-protected location in the vhost (`auth_basic_user_file /etc/nginx/.del-docs-htpasswd`). `/docs` has no `auth_basic` at all |
-| Unauthenticated routes | `/login`, `/healthz`, `/favicon.ico`, and `/static/*` (`app.css`, `app.js`, `theme-init.js`, `favicon.svg`, `assistant.css`, `assistant.js`). Everything else — including `/app-icon/{domain}` and `/palette.json` — requires a session |
+| Unauthenticated routes | `/login`, `/healthz`, `/favicon.ico`, and `/static/*` (`app.css`, `app.js`, `theme-init.js`, `favicon.svg`, `assistant.css`, `assistant.js`, plus `/static/vendor/` AG Grid Community 32.3.3: `ag-grid.css`, `ag-theme-quartz.css`, `ag-grid-community.min.js`). Login (`login.html`) loads only `app.css` + `theme-init.js` + favicon — not AG Grid or assistant scripts. Everything else — including `/app-icon/{domain}` and `/palette.json` — requires a session |
 
 ## Quick start
 

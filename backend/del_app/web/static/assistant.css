@@ -109,18 +109,57 @@
 }
 
 /* Docked rail chat (every page except /assistant) */
-.assistant-dock { padding: 0 0.75rem 1rem; display: flex; flex-direction: column; min-height: 0; }
-.assistant-transcript-dock {
-  min-height: 7rem; max-height: 32vh; overflow: auto;
-  margin-top: 0.5rem; padding: 0.5rem;
-  border: 1px solid var(--border); border-radius: 8px;
-  background: var(--bg); font-size: 0.82rem;
+.assistant-dock {
+  padding: var(--space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  min-height: 0;
+  flex: 1;
 }
-.assistant-dock .assistant-composer textarea { min-height: 3.2rem; font-size: 0.85rem; }
+.assistant-dock .filter-chip-group { gap: var(--space-1); }
+.assistant-dock .filter-chip { font-size: var(--text-xs); padding: 0.15rem 0.5rem; }
+.assistant-dock .stack,
+.assistant-dock .stack-sm { margin-top: 0; }
+.assistant-transcript-dock {
+  flex: 1 1 auto;
+  min-height: 6rem;
+  max-height: none;
+  overflow: auto;
+  margin-top: 0;
+  padding: var(--space-2);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg);
+  font-size: var(--text-sm);
+}
+.assistant-dock .assistant-composer {
+  flex-shrink: 0;
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  margin: auto -0.75rem -0.75rem;
+  padding: var(--space-2) 0.75rem 0.75rem;
+  background: var(--bg-card);
+  border-top: 1px solid var(--border);
+}
+.assistant-dock .assistant-composer textarea {
+  min-height: 3.2rem;
+  max-height: 8rem;
+  font-size: var(--text-sm);
+  padding: 0.45rem 0.55rem;
+}
+.assistant-dock .assistant-composer-actions { justify-content: flex-start; }
+.assistant-dock #assistant-send { min-width: 4.75rem; }
+.assistant-dock .assistant-statusline { font-size: var(--text-xs); }
+@media (max-width: 1279px) {
+  .layout.ask-open .assistant-transcript-dock { max-height: 28vh; }
+}
 .assistant-fab {
   display: none;
-  right: max(1rem, env(safe-area-inset-right));
-  bottom: calc(max(1rem, env(safe-area-inset-bottom)) + 3.4rem);
-  background: var(--bg-card); color: var(--text);
+  right: calc(max(1rem, env(safe-area-inset-right)) + 4.75rem);
+  bottom: max(1rem, env(safe-area-inset-bottom));
+  background: var(--bg-card);
+  color: var(--text);
 }
 

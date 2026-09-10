@@ -117,8 +117,10 @@ is simply not there yet — install it per INSTALL.md before troubleshooting fur
 
 ## Assistant (inventory Q&A)
 
-Read-only chat at `/assistant` using Ollama Cloud `glm-5.3-flash`. It cannot
-run helper ops or start removal jobs.
+Read-only chat at `/assistant` and in the right-rail **Ask** tab on every
+authenticated page, using Ollama Cloud `glm-5.3-flash`. It cannot run helper
+ops or start removal jobs. Key file `/apps/del/config/ollama-api-key.txt`
+must be mode `0600` (refused if wider).
 
 Enable:
 

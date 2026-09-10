@@ -5,11 +5,12 @@
 <div class="page-header">
   <h1>Orphan candidates <span class="count-pill">{{ total }}</span></h1>
   <div class="page-actions">
+    <span class="muted text-sm">Filter / ask</span>
     {% if show_all %}
-      <a class="btn btn-sm" href="/orphans">Actionable only</a>
+      <a class="btn btn-sm btn-ghost" href="/orphans">Actionable only</a>
       <span class="badge badge-amber">showing all unassociated</span>
     {% else %}
-      <a class="btn btn-sm" href="/orphans?show=all">Show system &amp; expected too</a>
+      <a class="btn btn-sm btn-ghost" href="/orphans?show=all">Show system &amp; expected too</a>
     {% endif %}
     {% if assistant_enabled() %}
     <a class="btn btn-sm btn-ghost" href="/assistant?scope=orphans" title="Ask the read-only assistant to review the orphan list">Ask the assistant</a>
@@ -17,31 +18,19 @@
   </div>
 </div>
 
-<div class="box box-info">
-  <p class="mt-0 mb-2"><strong>What this page is:</strong> resources from the
-  latest completed scan that have <em>no application association</em>.</p>
-  <p class="mt-0 mb-2"><strong>Default view = Actionable only</strong>
-  ({{ counts.get('actionable', 0) }}): real review/cleanup candidates — custom units,
-  unused volumes/images, enabled nginx without an app, project dirs with no owner, etc.</p>
-  <p class="mt-0"><strong>Not shown by default:</strong>
-    <span class="badge">System</span> {{ counts.get('system', 0) }}
-    (OS/vendor units, SSH/Samba ports, distro cron/timers, Docker built-ins) ·
-    <span class="badge badge-grey">Expected</span> {{ counts.get('expected', 0) }}
-    (parked nginx configs, images still declared by a stopped compose project).
-    Total unassociated: {{ unfiltered_total }}. Review-only — no delete actions here.
-  </p>
-</div>
+<p class="page-lede">Resources in the latest scan with no probable current owner (unassigned). Shared never appears here — that means more than one current app. Review Why listed; do not delete from this page. Protected apps are unrelated to this list.</p>
+<p class="muted">Actionable {{ counts.get('actionable', 0) }} · System {{ counts.get('system', 0) }} · Expected {{ counts.get('expected', 0) }} · unassociated {{ unfiltered_total }}.</p>
 
 {% for g in grouped %}
 <section class="panel">
   <div class="page-header">
     <h2><a href="/resources/{{ g.type }}">{{ g.label }}</a> <span class="count-pill">{{ g.rows | length }}</span></h2>
     <div class="page-actions">
-      <button type="button" class="btn btn-sm" data-export-table="orphans-{{ g.type }}-table" title="Export the currently filtered rows as CSV">Export CSV</button>
+      <button type="button" class="btn btn-sm btn-ghost" data-export-table="orphans-{{ g.type }}-table" title="Export the currently filtered rows as CSV">Export CSV</button>
     </div>
   </div>
   <p class="muted">{{ g.explainer }}</p>
-  <table id="orphans-{{ g.type }}-table" class="table" data-enhanced data-empty="No orphaned {{ g.label|lower }}." data-page-size="25">
+  <table id="orphans-{{ g.type }}-table" class="table" data-enhanced data-empty="No orphaned {{ g.label|lower }} in this view. Primary: run a scan. Secondary: show system and expected too." data-page-size="25">
     <caption class="sr-only">Unassociated {{ g.label|lower }} from the latest scan, with why each one is listed.</caption>
     <thead>
       <tr>
@@ -84,11 +73,10 @@
 {% else %}
 <p class="muted">
   {% if show_all %}
-    No unassociated resources in the latest scan.
+    No unassociated resources in the latest scan. Primary: run a scan, then return here.
   {% else %}
-    No <strong>actionable</strong> orphan candidates. Use
-    <a href="/orphans?show=all">Show system &amp; expected too</a> to inspect
-    host infrastructure that is unassociated by design.
+    No <strong>actionable</strong> orphan candidates. Primary: run a scan if the inventory is stale. Secondary:
+    <a href="/orphans?show=all">Show system &amp; expected too</a> for host infrastructure that is unassociated by design.
   {% endif %}
 </p>
 {% endfor %}

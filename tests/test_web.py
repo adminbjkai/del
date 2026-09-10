@@ -472,7 +472,8 @@ def test_shell_has_glossary_sidebar_and_collapse_controls(authed_client):
     assert 'id="glossary-fab"' in resp.text
     assert 'id="sidebar-collapse"' in resp.text
     assert 'id="nav-toggle"' in resp.text
-    assert "Glossary" in resp.text
+    assert "Help" in resp.text
+    assert 'id="rail-tab-ask"' in resp.text
     # Apps-context glossary terms
     assert "Warnings" in resp.text
     assert "Protected" in resp.text

@@ -72,9 +72,8 @@ Eastern time as compact `MM-DD-YY H:MM AM/PM`), **Domains**
 **Warnings** (an amber badge when non-zero), and **Protected** (a blue badge for apps
 DEL will refuse to remove, such as DEL itself).
 
-Use **Show removed too** / **Show live only** at the top of the page (or
-`?show=removed` in the URL) to include apps that no longer appear in the latest
-completed scan. **Export CSV** downloads the currently filtered/visible rows.
+Page actions sit in a header group next to the title: **Show removed too** /
+**Show live only** (or `?show=removed`) and **Export CSV** (currently filtered rows).
 
 <Callout intent="info">
   By default, **Applications** only shows apps present in the **latest completed
@@ -101,28 +100,27 @@ The header has two controls that work on every page:
   from `GET /palette.json`). Arrow keys move the selection, **Enter** opens it,
   **Esc** closes the dialog.
 
-## Glossary rail
+## Help|Ask rail
 
-On wide screens a **Glossary** panel sits on the right and explains the labels for
-**whatever page or resource tab you’re on** (it updates with the tab). Entries cover
-Status, Warnings, Protected, State/health, Dangling, Orphan classes, Shared,
-Dirty/clean, and more. On phone and tablet, open it with the floating **Glossary**
-button (bottom-right).
+On wide screens a right rail has **Help** (page glossary) and **Ask** (read-only
+assistant, scoped to this screen). Help covers Status, Warnings, Protected,
+State/health, Dangling, Orphan classes, Shared (“used by more than one app — do not
+delete when removing one owner”), and more. Small screens: floating **Help** and
+**Ask** buttons.
 
 ## Table controls
 
-Data tables use a single vanilla JS/CSS table engine (no external library, no
-CDN) with a light theme that matches DEL. Controls are client-side only:
+Inventory tables use **AG Grid Community 32.3.3** vendored at `/static/vendor/`
+(CSP `self`, no CDN), with a vanilla toolbar+table fallback if the script fails.
+Both paths get a **`.table-toolbar`**: quick filter, **Clear all filters**, and a
+status line. Vanilla also adds density (compact/comfortable) and, below 900px,
+**Show all columns**. Client-side only:
 
 - **Sort** — click a column header.
-- **Quick filter** — top box matches **all columns**. Press **`/`** to focus it.
-- **Per-column filters** — click the floating control under a header for an
-  Excel-style panel: **checkbox list of existing values** (select all / clear /
-  search values) plus text operators (**contains**, **does not contain**, equals,
-  starts with, ends with, …).
-- **Clear all filters** — one button resets every column filter and the quick filter.
-- **Pagination** — page size selector in the grid footer.
-- **CSV export** — on Applications, exports the **currently filtered** rows.
+- **Quick filter** — toolbar box matches **all columns**. Press **`/`** to focus it.
+- **Per-column filters** — AG Grid header filters, or the vanilla Excel-style popover.
+- **Clear all filters** — resets column filters and the quick filter.
+- **CSV export** — Applications header action exports the **currently filtered** rows.
 - **Deep links** — `/apps?search=…` prefills the quick filter.
 
 ## The Resources view
@@ -142,9 +140,8 @@ common to almost every type:
 - **Owner app(s)** — which application(s) DEL attributes the resource to, each a link
   to that app. Resources DEL couldn't attribute to a current, confident owner show an
   `unassigned` badge (these are the [orphans](/guides/orphans)).
-- **Shared** — an amber **shared** badge marks a resource associated with **more than
-  one** application. Shared resources are protected: removing one app's plan will
-  never silently delete something another app still depends on.
+- **Shared** — amber **shared** badge: used by more than one app. Removing one owner
+  must not delete that resource.
 
 ## The Application detail page
 
@@ -177,13 +174,11 @@ For each associated resource you see:
 - an **Actions** cell with **approve**, **exclude**, and **mark shared** — see
   [approving resources](#approving-and-excluding-resources).
 
-At the top of the page, non-protected apps show two removal entry points —
-**Remove app now**, a one-click button that runs a complete removal live
-behind a single confirm dialog, and **Plan removal…**, which opens the
-step-by-step [removal plan](/guides/removing-an-application) builder with a
-preview and dry-run — plus **Edit manifest**, which lets you correct DEL's
-correlation by hand. Protected apps show a single disabled, greyed-out
-**Plan removal** button instead of either.
+The detail **action bar** groups: **Remove app now (skips review)** (live complete
+removal behind one confirm; shared resources are kept), **Plan removal first…**
+(step-by-step [plan](/guides/removing-an-application)), **Edit manifest**, and
+**Ask the assistant**. Protected or already-removed apps show a disabled **Remove
+app now** instead of the live/plan pair.
 
 The **Readiness** tab lists every association for the app in one flat,
 sortable/filterable table — the same Confidence/Risk/Removal columns as the other

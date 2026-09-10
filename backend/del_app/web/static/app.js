@@ -129,8 +129,9 @@
   }
 
   // =========================================================================
-  // Tables: single vanilla engine (sort, per-column Excel-style filter popover,
-  // resize-by-drag, quick filter, pagination, CSV export). No external assets.
+  // Tables: AG Grid Community when window.agGrid.createGrid is available,
+  // otherwise the vanilla engine (sort, Excel-style filter popover, resize,
+  // quick filter, pagination, CSV export).
   // =========================================================================
   // Single mobile breakpoint, shared by JS and the CSS @media rules below 900px.
   var MOBILE_MAX = 900;
@@ -170,9 +171,32 @@
     if (e.key === "Escape" && openColPopover) closeColPopover();
   });
 
+  // Steal the page-level CSV button into the table toolbar so search / filters
+  // / clear / export / pagination sit in one place. Secondary control only
+  // (never btn-primary — the quick-filter is the single primary control).
+  function stealExportButton(table) {
+    var id = table && table.id;
+    if (!id) return null;
+    var btn = null;
+    document.querySelectorAll("[data-export-table]").forEach(function (el) {
+      if (!btn && el.getAttribute("data-export-table") === id) btn = el;
+    });
+    if (!btn || btn.getAttribute("data-del-toolbar-export") === "1") return null;
+    var info = { el: btn, parent: btn.parentNode, next: btn.nextSibling };
+    btn.classList.remove("btn-primary");
+    if (!/\bbtn\b/.test(btn.className)) btn.className = (btn.className + " btn btn-sm").trim();
+    btn.setAttribute("data-del-toolbar-export", "1");
+    return info;
+  }
+  function restoreStolenNode(info) {
+    if (!info || !info.el || !info.parent) return;
+    info.parent.insertBefore(info.el, info.next);
+    info.el.removeAttribute("data-del-toolbar-export");
+  }
+
   // Vanilla table engine (sort, per-column Excel-style filter, quick filter,
-  // resize, pagination, CSV export). This is the only table path on all
-  // viewports; it used to be the small-screen fallback for AG Grid.
+  // resize, pagination, CSV export). Used when AG Grid is missing or createGrid
+  // throws; also the path for environments without the vendored script.
   function enhanceTableVanilla(table) {
     var tbody = table.tBodies[0];
     var headRow = table.tHead ? table.tHead.rows[0] : null;
@@ -201,7 +225,6 @@
     var status = document.createElement("div");
     status.className = "table-status";
     status.setAttribute("role", "status");
-    wrap.appendChild(status);
 
     var emptyMsg = document.createElement("div");
     emptyMsg.className = "empty-state";
@@ -525,6 +548,9 @@
     pager.appendChild(prevBtn);
     pager.appendChild(nextBtn);
     toolbar.appendChild(pager);
+    toolbar.appendChild(status);
+    var stolenExport = stealExportButton(table);
+    if (stolenExport) toolbar.appendChild(stolenExport.el);
 
     var sortCol = -1, sortDir = "asc", page = 0, filtered = allRows.slice();
 
@@ -719,16 +745,27 @@
     render();
   }
 
+  function applyAgThemeClass(host) {
+    var isDark = document.documentElement.getAttribute("data-theme") !== "light";
+    host.classList.remove("ag-theme-quartz", "ag-theme-quartz-dark");
+    host.classList.add(isDark ? "ag-theme-quartz-dark" : "ag-theme-quartz");
+    host.classList.add("del-ag-grid");
+  }
+
   function enhanceTableAgGrid(table) {
     var ag = window.agGrid;
     if (!ag || typeof ag.createGrid !== "function") return false;
+    if (table._delGridApi) return true;
     var tbody = table.tBodies[0];
     var headRow = table.tHead ? table.tHead.rows[0] : null;
     if (!tbody || !headRow) return false;
 
+    var origParent = table.parentNode;
+    var origNext = table.nextSibling;
+
     var wrap = document.createElement("div");
     wrap.className = "table-block ag-host-wrap";
-    table.parentNode.insertBefore(wrap, table);
+    origParent.insertBefore(wrap, table);
 
     var toolbar = document.createElement("div");
     toolbar.className = "table-toolbar";
@@ -744,16 +781,41 @@
     clearBtn.className = "btn btn-sm table-clear-filters";
     clearBtn.textContent = "Clear all filters";
     toolbar.appendChild(clearBtn);
+    var stolenExport = stealExportButton(table);
+    if (stolenExport) toolbar.appendChild(stolenExport.el);
+    var pageSel = document.createElement("select");
+    pageSel.className = "table-pagesize";
+    pageSel.setAttribute("aria-label", "Rows per page");
+    [25, 50, 100, 250].forEach(function (n) {
+      var o = document.createElement("option");
+      o.value = String(n);
+      o.textContent = String(n);
+      pageSel.appendChild(o);
+    });
+    toolbar.appendChild(pageSel);
+    var pager = document.createElement("div");
+    pager.className = "table-pager";
+    var prevBtn = document.createElement("button");
+    prevBtn.type = "button";
+    prevBtn.className = "btn btn-sm";
+    prevBtn.textContent = "‹ Prev";
+    var nextBtn = document.createElement("button");
+    nextBtn.type = "button";
+    nextBtn.className = "btn btn-sm";
+    nextBtn.textContent = "Next ›";
+    pager.appendChild(prevBtn);
+    pager.appendChild(nextBtn);
+    toolbar.appendChild(pager);
     var status = document.createElement("div");
     status.className = "table-status";
     status.setAttribute("role", "status");
     toolbar.appendChild(status);
 
     var host = document.createElement("div");
-    var dark = document.documentElement.getAttribute("data-theme") !== "light";
-    host.className = "ag-theme-quartz" + (dark ? "-dark" : "") + " del-ag-grid";
+    applyAgThemeClass(host);
     wrap.appendChild(host);
 
+    var NUM_RE = /^-?\d+(\.\d+)?$/;
     var columnDefs = [];
     var rowData = [];
     Array.prototype.forEach.call(headRow.cells, function (th, idx) {
@@ -761,15 +823,22 @@
       var numeric = false;
       Array.prototype.forEach.call(tbody.rows, function (tr) {
         var cell = tr.cells[idx];
-        if (cell && cell.getAttribute("data-sort-value") && /^-?\d+(\.\d+)?$/.test(cell.getAttribute("data-sort-value"))) numeric = true;
+        var sv = cell && cell.getAttribute("data-sort-value");
+        if (sv && NUM_RE.test(sv)) numeric = true;
       });
       columnDefs.push({
         colId: "c" + idx,
         field: "c" + idx,
         headerName: header || ("Col " + (idx + 1)),
         filter: numeric ? "agNumberColumnFilter" : "agTextColumnFilter",
-        filterParams: numeric ? { buttons: ["reset", "apply"], closeOnApply: true } : {
-          filterOptions: ["contains", "notContains", "equals", "notEqual", "startsWith", "endsWith", "blank", "notBlank"],
+        menuTabs: ["filterMenuTab", "generalMenuTab", "columnsMenuTab"],
+        filterParams: numeric ? {
+          filterOptions: ["equals", "notEqual", "lessThan", "greaterThan", "inRange", "blank", "notBlank"],
+          defaultOption: "equals",
+          buttons: ["reset", "apply"],
+          closeOnApply: true,
+        } : {
+          filterOptions: ["contains", "notContains", "equals", "startsWith", "endsWith", "blank"],
           defaultOption: "contains",
           buttons: ["reset", "apply"],
           closeOnApply: true,
@@ -779,6 +848,9 @@
           var sb = nodeB && nodeB.data ? nodeB.data["s" + idx] : b;
           if (sa == null) sa = "";
           if (sb == null) sb = "";
+          if (typeof sa === "number" && typeof sb === "number") return sa - sb;
+          if (typeof sa === "number") return -1;
+          if (typeof sb === "number") return 1;
           if (sa < sb) return -1;
           if (sa > sb) return 1;
           return 0;
@@ -797,65 +869,111 @@
         var cell = tr.cells[idx];
         var text = cell ? (cell.getAttribute("data-filter-value") || cell.textContent || "").replace(/\s+/g, " ").trim() : "";
         var sortRaw = cell ? cell.getAttribute("data-sort-value") : "";
-        var sortVal = sortRaw && /^-?\d+(\.\d+)?$/.test(sortRaw) ? parseFloat(sortRaw) : (text || "").toLowerCase();
-        row["c" + idx] = text === "—" ? "" : text;
+        var sortVal = sortRaw && NUM_RE.test(sortRaw) ? parseFloat(sortRaw) : (text || "").toLowerCase();
+        var filterVal = text === "—" ? "" : text;
+        // Original <td> stays in the hidden table with data-sort-value /
+        // data-filter-value / data-priority intact; snapshot them on the row
+        // so export and comparators never depend on AG Grid dropping attrs.
+        row["c" + idx] = (sortRaw && NUM_RE.test(sortRaw)) ? parseFloat(sortRaw) : filterVal;
         row["s" + idx] = sortVal;
         row["h" + idx] = cell ? cell.innerHTML : "";
+        row["ds" + idx] = cell ? cell.getAttribute("data-sort-value") : null;
+        row["df" + idx] = cell ? cell.getAttribute("data-filter-value") : null;
+        row["dp" + idx] = cell ? cell.getAttribute("data-priority") : null;
       });
       rowData.push(row);
     });
 
     var pageSize = parseInt(table.getAttribute("data-page-size") || "50", 10);
-    if (!pageSize || pageSize < 0) pageSize = 50;
-    var api = ag.createGrid(host, {
-      columnDefs: columnDefs,
-      rowData: rowData,
-      defaultColDef: {
-        sortable: true,
-        filter: true,
-        floatingFilter: true,
-        resizable: true,
-        minWidth: 72,
-        flex: 1,
-        wrapText: false,
-        autoHeaderHeight: true,
-      },
-      animateRows: false,
-      pagination: true,
-      paginationPageSize: pageSize,
-      paginationPageSizeSelector: [25, 50, 100, 250],
-      rowBuffer: 8,
-      suppressCellFocus: false,
-      enableCellTextSelection: true,
-      ensureDomOrder: true,
-      headerHeight: 36,
-      floatingFiltersHeight: 36,
-      rowHeight: document.documentElement.getAttribute("data-density") === "compact" ? 28 : 36,
-      overlayNoRowsTemplate: "<div class=\"empty-state-msg\">" +
-        (table.getAttribute("data-empty") || "No rows match the current filter.") + "</div>",
-      onFilterChanged: function () { updateStatus(); },
-      onSortChanged: function () { updateStatus(); },
-      onPaginationChanged: function () { updateStatus(); },
-    });
+    if (!pageSize || pageSize < 1) pageSize = 50;
+    var compact = table.getAttribute("data-density") === "compact" ||
+      document.documentElement.getAttribute("data-density") === "compact";
+    var api;
+    try {
+      api = ag.createGrid(host, {
+        columnDefs: columnDefs,
+        rowData: rowData,
+        defaultColDef: {
+          sortable: true,
+          filter: true,
+          floatingFilter: true,
+          resizable: true,
+          minWidth: 72,
+          flex: 1,
+          wrapText: false,
+          autoHeight: false,
+          suppressHeaderMenuButton: false,
+        },
+        columnMenu: "legacy",
+        suppressMenuHide: true,
+        animateRows: false,
+        pagination: true,
+        paginationPageSize: pageSize,
+        suppressPaginationPanel: true,
+        rowBuffer: 10,
+        suppressCellFocus: false,
+        enableCellTextSelection: true,
+        ensureDomOrder: true,
+        enterNavigatesVertically: true,
+        enterNavigatesVerticallyAfterEdit: true,
+        headerHeight: compact ? 28 : 36,
+        floatingFiltersHeight: compact ? 28 : 36,
+        rowHeight: compact ? 28 : 36,
+        overlayNoRowsTemplate: "<div class=\"empty-state-msg\">" +
+          (table.getAttribute("data-empty") || "No rows match the current filter.") + "</div>",
+        onFilterChanged: function () { updateStatus(); },
+        onSortChanged: function () { updateStatus(); },
+        onPaginationChanged: function () { updateStatus(); },
+      });
+    } catch (err) {
+      restoreStolenNode(stolenExport);
+      if (wrap.parentNode) wrap.parentNode.removeChild(wrap);
+      if (table.parentNode !== origParent) {
+        origParent.insertBefore(table, origNext);
+      }
+      table.style.display = "";
+      table._delGridApi = null;
+      return false;
+    }
+    if (!api) {
+      restoreStolenNode(stolenExport);
+      if (wrap.parentNode) wrap.parentNode.removeChild(wrap);
+      table.style.display = "";
+      return false;
+    }
 
+    pageSel.value = String(pageSize);
     function updateStatus() {
-      var model = api.paginationGetRowCount ? null : null;
-      var shown = api.getDisplayedRowCount ? api.getDisplayedRowCount() : 0;
       var total = rowData.length;
-      var filtered = api.getDisplayedRowCount();
-      try {
-        filtered = api.getModel().getTopLevelRowCount ? api.getDisplayedRowCount() : filtered;
-      } catch (e) {}
       var afterFilter = total;
-      try { afterFilter = api.getDisplayedRowCount(); } catch (e2) {}
-      status.textContent = afterFilter + " of " + total;
+      try {
+        afterFilter = 0;
+        api.forEachNodeAfterFilter(function () { afterFilter++; });
+      } catch (e2) {
+        try { afterFilter = api.getDisplayedRowCount(); } catch (e3) {}
+      }
+      var page = 0, pageCount = 1, pageSz = pageSize;
+      try {
+        page = api.paginationGetCurrentPage();
+        pageCount = Math.max(1, api.paginationGetTotalPages());
+        pageSz = api.paginationGetPageSize();
+      } catch (e4) {}
+      var start = afterFilter === 0 ? 0 : page * pageSz + 1;
+      var end = Math.min((page + 1) * pageSz, afterFilter);
+      status.textContent = start + "–" + end + " of " + afterFilter +
+        (afterFilter !== total ? " (filtered from " + total + ")" : "");
+      prevBtn.disabled = page <= 0;
+      nextBtn.disabled = page + 1 >= pageCount;
+      pager.hidden = afterFilter <= pageSz && page === 0;
     }
     function themeSync() {
-      var isDark = document.documentElement.getAttribute("data-theme") !== "light";
-      host.classList.toggle("ag-theme-quartz-dark", isDark);
-      host.classList.toggle("ag-theme-quartz", !isDark);
+      applyAgThemeClass(host);
     }
-    new MutationObserver(themeSync).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+    if (table._delThemeObs) {
+      try { table._delThemeObs.disconnect(); } catch (e) {}
+    }
+    table._delThemeObs = new MutationObserver(themeSync);
+    table._delThemeObs.observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
 
     search.addEventListener("input", function () {
       api.setGridOption("quickFilterText", search.value);
@@ -867,6 +985,14 @@
       api.setFilterModel(null);
       updateStatus();
     });
+    pageSel.addEventListener("change", function () {
+      var n = parseInt(pageSel.value, 10) || 50;
+      api.setGridOption("paginationPageSize", n);
+      api.paginationGoToFirstPage();
+      updateStatus();
+    });
+    prevBtn.addEventListener("click", function () { api.paginationGoToPreviousPage(); });
+    nextBtn.addEventListener("click", function () { api.paginationGoToNextPage(); });
     var prefill = table.getAttribute("data-prefill");
     if (prefill) {
       search.value = prefill;
@@ -888,6 +1014,7 @@
 
   function enhanceTable(table) {
     if (!table || table.getAttribute("data-enhanced-ready")) return;
+    if (table.classList.contains("job-steps")) return;
     if (!table.tHead || !table.tBodies.length) return;
     table.setAttribute("data-enhanced-ready", "1");
     if (enhanceTableAgGrid(table)) return;

@@ -10,7 +10,7 @@ served at https://del.bjk.ai behind Nginx, bound only to localhost.
 |---|---|---|
 | Language | Python 3.10 (system python3, venv) | Already on host; excellent for sysadmin tooling; typed with dataclasses/pydantic |
 | Web framework | FastAPI + Uvicorn | Typed request/response models, async, small footprint |
-| Templates/UI | Jinja2 server-rendered + vanilla JS + single CSS file | No Node toolchain; fully self-contained (CSP-friendly, no CDN); dark theme by default with a light-theme toggle (`data-theme`, persisted in `localStorage`) |
+| Templates/UI | Jinja2 server-rendered + vanilla JS + `app.css` plus assistant and vendored AG Grid styles | No Node toolchain; fully self-contained (CSP `script-src 'self'`, no CDN); dark theme by default with a light-theme toggle (`data-theme`, persisted in `localStorage`) |
 | Database | SQLite (WAL mode) via sqlite3 + migration runner | Single admin user; zero-ops; file lives in /apps/del/database/del.db |
 | Privileged layer | del-helper: separate root daemon on a unix socket | Strict allowlist; web app never runs shell as root |
 | Deployment | Host systemd units (del-web.service, del-helper.service, del-docs.service) | See below |
@@ -189,17 +189,20 @@ being uncompromised.
 
 Server-rendered Jinja2 (`base.html` shell + one template per route, `_macros.html`
 for shared markup like the confidence meter, `_glossary.html` for the glossary rail
-and its mobile sheet) plus static assets, all served unauthenticated (`/login`
-needs the shell assets too): `app.css` (single stylesheet), `app.js` (single script, no
-external assets — the CSP is `script-src 'self'` with no `'unsafe-inline'`),
-`theme-init.js` (~9 lines, loaded from `<head>` before first paint — reads
+and its mobile sheet, `_assistant_dock.html` for the Ask tab) plus static assets.
+`base.html` (authenticated pages) loads `app.css`, vendored AG Grid Community 32.3.3
+(`ag-grid.css`, `ag-theme-quartz.css`, `ag-grid-community.min.js` at `/static/vendor/`),
+`assistant.css` / `assistant.js`, `theme-init.js`, `app.js`, and a CSRF meta tag
+(`<meta name="csrf-token">`). `login.html` does **not** load AG Grid or assistant
+assets. All of those files are still served unauthenticated under `/static/*`
+(CSP `script-src 'self'`, no `'unsafe-inline'`, no CDN).
+`theme-init.js` (~9 lines, in `<head>` before first paint) reads
 `localStorage['del.theme']`, falls back to `prefers-color-scheme`, and sets
-`data-theme` on `<html>` so there is no flash of the wrong theme; kept as its own
-file rather than an inline `<script>` because the CSP forbids inline scripts),
-`favicon.svg`, and the Assistant pair `assistant.css` / `assistant.js` (loaded only
-on `/assistant`). The Assistant is a **read-only** inventory chat (`docs/ASSISTANT.md`):
-Ollama Cloud `glm-5.3-flash`, no helper or planner access, suggested prompts per
-scope (general / app / orphans / resource type / resource).
+`data-theme` on `<html>` so there is no flash of the wrong theme.
+The Assistant is a **read-only** inventory chat (`docs/ASSISTANT.md`): Ollama Cloud
+`glm-5.3-flash`, no helper or planner access, suggested prompts per scope
+(general / app / orphans / resource type / resource). It lives on `/assistant`
+and as the Ask tab of the Help|Ask right rail on every other authenticated page.
 
 `app.js` is one file exposing a `window.DEL` namespace plus several page-scoped
 blocks, all guarded by `if (element) { … }` so a script this size can run
@@ -210,16 +213,14 @@ unconditionally on every page:
 - `DEL.theme` (`get`/`set`/`toggle`) — the dark/light switch wired to the header
   button; `base.html`/`theme-init.js` already set `data-theme` before this runs, so
   this only handles the click and persists the choice back to `localStorage`.
-- `DEL.assistant` (on `/assistant` only, `assistant.js`) — scope chips, suggested
-  prompts, NDJSON streaming ask, conversation list. Cannot mutate inventory.
-- The table engine (`enhanceTableVanilla`, applied to every `table[data-enhanced]`)
-  — the single implementation for sorting (type-aware: numbers, sizes, durations,
-  ISO dates), a per-column Excel-style filter popover (checkbox value list +
-  contains/equals/starts-with/… text operators), a global quick filter (`/`
-  focuses it), drag-to-resize columns, pagination with a page-size selector, CSV
-  export of the current filtered/sorted rows, and — on screens ≤900px — hiding
-  `data-priority="low"` columns behind a "Show all columns" toggle. This replaced a
-  client-side AG Grid Community 32.3.3 bundle vendored at `/static/vendor/` (CSP `self`, no CDN), with the previous vanilla table engine kept as a fallback if the script fails to load.
+- `DEL.assistant` (`assistant.js` on all authenticated pages) — scope chips, suggested
+  prompts, NDJSON streaming ask, conversation list; binds `#assistant-page` or
+  `#assistant-dock`. Cannot mutate inventory.
+- The table engine (`enhanceTable` on every `table[data-enhanced]`) — AG Grid
+  Community 32.3.3 vendored at `/static/vendor/` (CSP `self`, no CDN) when
+  `window.agGrid` loads, with a `.table-toolbar` (quick filter, Clear all filters,
+  status); otherwise `enhanceTableVanilla` (same toolbar plus density and, ≤900px,
+  "Show all columns"; sort, Excel-style filter popover, `/` focus, CSV export).
 - `DEL.tabs.init(root)` — an accessible tablist (roving tabindex, arrow keys,
   `aria-selected`) applied to every `.tabs` block, used by the application detail
   page's Overview/Docker/systemd/Nginx/Scheduled/Processes/Files/Shared/Readiness

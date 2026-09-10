@@ -7,10 +7,9 @@ containers, networks and volumes — using a hosted language model
 it has no tools, no helper access, and no route that mutates state. Its job is to
 help a human decide; the decision and the removal still go through DEL's planner.
 
-This document is the design contract. `docs/ARCHITECTURE.md`, `docs/INTERFACES.md`,
-`SECURITY.md`, `OPERATIONS.md`, `README.md` and the Fern page
-`fern/pages/guides/assistant.mdx` must agree with it; when the code changes, this
-file changes first.
+This document is the design contract. `docs/ARCHITECTURE.md`, `SECURITY.md`,
+`OPERATIONS.md`, `README.md` and the Fern page `fern/pages/guides/assistant.mdx`
+must agree with it; when the code changes, this file changes first.
 
 ## Goals and non-goals
 
@@ -53,8 +52,8 @@ backend/del_app/
     static_routes.py         serves assistant.js and assistant.css (unauthenticated,
                              same as the other static assets)
     templates/assistant.html NEW page
-    templates/base.html      gains `{% block head %}` and `{% block scripts %}`
-    static/assistant.js      DEL.assistant module (page-only script)
+    templates/base.html      Help|Ask right rail; csrf-token meta; loads assistant.js on every authenticated page
+    static/assistant.js      DEL.assistant module (page + right-rail dock)
     static/assistant.css     assistant-only styles (tokens from app.css)
 tests/
   test_assistant.py          provider parsing, context builders, prompt library, store,
@@ -125,7 +124,7 @@ The key is never written to the database, the audit log, journald, or a template
 
 | scope | target | context block contains |
 |---|---|---|
-| `general` | — | last completed scan (id, finished), app count by status/kind, resource counts by type, disk usage, actionable-orphan count, the app list (slug, name, kind, status, protected, domains, ports, resource count, warning count) |
+| `general` | — | last completed scan (id, finished), app count by status/kind, resource counts by type, disk usage, actionable-orphan count, a **shared / multi-owner resources** section (`_shared_resource_rows`: n>1 owners or `shared` flag), then the app list (slug, name, kind, status, protected, domains, ports, resource count, warning count) |
 | `app` | app slug | application row, manifest presence, domains/ports, then every association: resource type/key/display/path/state, confidence + level, ownership, shared, data_loss_risk, removal_eligible, recommended_action, up to 3 evidence statements |
 | `orphans` | — | the orphan candidate list exactly as `/orphans` computes it: type, key, display, path, state, size where known, classification bucket/label/reason; counts per bucket |
 | `resource_type` | `container` \| `image` \| `network` \| `volume` | every resource of that type in the latest scan with its owners (slug list), `shared`, state, size/dangling/containers_using/driver as available, plus whether it appears in the orphan list |
@@ -269,6 +268,10 @@ The new JSON-POST + `X-CSRF-Token` convention is documented in `SECURITY.md`
 
 ## UI
 
+- Global **Help|Ask** right rail on every authenticated page (`base.html`):
+  Help is the glossary; Ask embeds `_assistant_dock.html` except on `/assistant`
+  itself (full page there). Page-scoped defaults come from the current route
+  (app, orphans, resource type/row). Mobile **Ask** FAB opens the rail.
 - Sidebar nav entry "Assistant" (after Orphans), palette page entry, glossary
   context `assistant`.
 - `/assistant` layout: left column (scope chips: General / Application / Orphans /
@@ -281,7 +284,7 @@ The new JSON-POST + `X-CSRF-Token` convention is documented in `SECURITY.md`
   badge), and a composer (textarea, Ctrl/Cmd+Enter sends, Stop button aborts the
   fetch via `AbortController`).
 - Disabled state: page renders a `box-info` panel with the exact enablement steps
-  (key file path, mode, restart command) and no composer.
+  (key file path, mode `0600`, restart command) and no composer.
 - Deep links: "Ask the assistant" buttons on `/apps/<slug>` (page actions),
   `/orphans` (page actions), `/resources/<type>` (page actions → resource_type) and
   per-row for docker types (→ `resource`, `target=<type>:<key>`).
@@ -289,7 +292,9 @@ The new JSON-POST + `X-CSRF-Token` convention is documented in `SECURITY.md`
   the Test connection form.
 - No inline scripts or handlers (nginx CSP `script-src 'self'`). `assistant.js`
   registers `window.DEL.assistant = { init }` and self-initialises on
-  `#assistant-page`. Styles use only app.css tokens.
+  `#assistant-page` or `#assistant-dock`. CSRF for JSON posts is the `csrf-token`
+  meta in `base.html`. Read-only: no helper, no planner, no inventory writes.
+  Key file `/apps/del/config/ollama-api-key.txt` is mode `0600` (refused if wider).
 
 ## Security and privacy
 
@@ -331,7 +336,7 @@ rows are written for asks without message text.
 AC7 `/assistant` renders enabled and disabled states; deep-link buttons exist on
 app detail, orphans, resources pages; base.html blocks added; no inline scripts.
 AC8 Docs updated: ARCHITECTURE (components, data model, frontend namespace),
-INTERFACES (routes), SECURITY (CSRF header, file permissions, never logged, threat
-model), OPERATIONS (enable/disable/test), INSTALL (key file), README (feature +
-quick facts), fern `guides/assistant.mdx` + `docs.yml` nav; all agree with the code.
+SECURITY (CSRF header, file permissions, never logged, threat model), OPERATIONS
+(enable/disable/test), INSTALL (key file), README (feature + quick facts), fern
+`guides/assistant.mdx` + `docs.yml` nav; all agree with the code.
 AC9 Full pytest suite green; pyflakes clean on `del_app` and `tests`.

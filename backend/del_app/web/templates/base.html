@@ -93,7 +93,7 @@
 
       <aside class="glossary-rail" id="glossary-rail" aria-label="Help and assistant">
         <button type="button" id="glossary-collapse" class="btn btn-sm icon-btn glossary-collapse-btn"
-                aria-label="Collapse glossary" title="Collapse glossary">›</button>
+                aria-label="Collapse help" title="Collapse help">›</button>
         <div class="rail-tabs" role="tablist" aria-label="Right panel">
           <button type="button" class="rail-tab is-active" id="rail-tab-help" data-rail-tab="help" role="tab" aria-selected="true">Help</button>
           <button type="button" class="rail-tab" id="rail-tab-ask" data-rail-tab="ask" role="tab" aria-selected="false">Ask</button>
@@ -112,7 +112,7 @@
 
   {# Mobile glossary FAB + bottom sheet #}
   <button type="button" class="glossary-fab" id="glossary-fab" aria-controls="glossary-sheet" aria-expanded="false">
-    Glossary
+    Help
   </button>
   <button type="button" class="glossary-fab assistant-fab" id="assistant-fab" aria-controls="glossary-rail">
     Ask
@@ -121,8 +121,8 @@
     <div class="glossary-sheet-backdrop" id="glossary-sheet-backdrop"></div>
     <div class="glossary-sheet-panel" role="dialog" aria-modal="true" aria-labelledby="glossary-sheet-title">
       <div class="glossary-sheet-bar">
-        <strong id="glossary-sheet-title">Glossary</strong>
-        <button type="button" class="btn btn-sm" id="glossary-sheet-close" aria-label="Close glossary">Close</button>
+        <strong id="glossary-sheet-title">Help</strong>
+        <button type="button" class="btn btn-sm" id="glossary-sheet-close" aria-label="Close help">Close</button>
       </div>
       <div class="glossary-sheet-body">
         {% include "_glossary.html" %}
