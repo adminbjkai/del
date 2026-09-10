@@ -97,6 +97,63 @@ def plan_build(
     return RedirectResponse(url=f"/plans/{plan_id}", status_code=303)
 
 
+@router.post("/apps/{slug}/remove")
+def app_remove_now(
+    slug: str,
+    request: Request,
+    user: User = Depends(auth.require_user),
+    csrf_token: str = Form(""),
+) -> Response:
+    """One-click complete removal: build a plan with every removal option
+    on (all named volumes approved), then run it live immediately. The
+    browser shows a single native confirm before submitting."""
+    if not _require_csrf(request, csrf_token):
+        return _csrf_response()
+    if jobs is None or planner is None:  # pragma: no cover
+        return JSONResponse({"error": "jobs engine unavailable"}, status_code=503)
+
+    conn = get_db()
+    try:
+        rows = _rows(q(conn, "SELECT * FROM applications WHERE slug = ?", (slug,)))
+        if not rows:
+            raise HTTPException(status_code=404, detail=f"no such application: {slug}")
+        if rows[0].get("protected"):
+            return JSONResponse({"error": "protected apps cannot be removed"}, status_code=403)
+        volumes = _rows(
+            q(
+                conn,
+                """
+                SELECT r.key AS key FROM resources r
+                JOIN associations a ON a.resource_id = r.id
+                JOIN applications ap ON ap.id = a.app_id
+                WHERE ap.slug = ? AND r.type = 'volume'
+                """,
+                (slug,),
+            )
+        )
+    finally:
+        conn.close()
+
+    options = {
+        "remove_named_volumes": True,
+        "approved_volumes": [v["key"] for v in volumes],
+        "remove_images": "exclusive",
+        "remove_bind_data": True,
+        "remove_repo": True,
+        "remove_networks": True,
+        "backup": "none",
+    }
+    plan = planner.build_plan(slug, options)
+    plan_id = planner.persist_plan(plan)
+    auditlog.audit(user.id, "plan.build", slug, {"options": options, "plan_id": plan_id, "one_click": True})
+
+    phrase = getattr(jobs, "CONFIRM_VOLUMES_PHRASE", "y")
+    job_id = jobs.create_job(plan_id, "live", user.id)
+    jobs.execute_job(job_id, confirm_phrase=phrase)
+    auditlog.audit(user.id, "job.execute", f"plan#{plan_id}", {"mode": "live", "one_click": True})
+    return RedirectResponse(url=f"/jobs/{job_id}", status_code=303)
+
+
 def _load_plan_dict(plan_id: int) -> dict | None:
     """Load a persisted, HMAC-verified plan for display, via planner's
     load_plan (best-effort verification: falls back to the unverified

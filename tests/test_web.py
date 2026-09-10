@@ -1642,3 +1642,101 @@ def test_csrf_rejected_on_manifest_submit(authed_client, settings_env):
 def test_csrf_rejected_on_scan(authed_client, settings_env):
     resp = authed_client.post("/scan", data={"csrf_token": "bogus"})
     assert resp.status_code == 403
+
+
+# ---------------------------------------------------------------------------
+# One-click complete removal (POST /apps/{slug}/remove)
+# ---------------------------------------------------------------------------
+
+def _seed_app(slug: str, protected: int = 0) -> None:
+    from del_app.db import get_db, x
+
+    conn = get_db()
+    try:
+        x(
+            conn,
+            "INSERT INTO applications (slug, name, status, kind, protected) VALUES (?,?,?,?,?)",
+            (slug, slug.title(), "running", "compose", protected),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def test_remove_now_builds_full_plan_and_runs_live(authed_client, monkeypatch, settings_env):
+    _seed_app("oneclick")
+    calls = {}
+
+    class _FakePlanner:
+        PlanError = Exception
+        PlanNotFoundError = Exception
+
+        def build_plan(self, slug, options):
+            calls["build"] = (slug, options)
+            return _FakePlan(id=None, app_slug=slug, steps=[])
+
+        def persist_plan(self, plan):
+            return 41
+
+    class _FakeJobs:
+        CONFIRM_VOLUMES_PHRASE = "y"
+
+        def create_job(self, plan_id, mode, user_id):
+            calls["create_job"] = (plan_id, mode, user_id)
+            return 77
+
+        def execute_job(self, job_id, confirm_phrase=None):
+            calls["execute_job"] = (job_id, confirm_phrase)
+
+    monkeypatch.setattr(plans_jobs, "planner", _FakePlanner())
+    monkeypatch.setattr(plans_jobs, "jobs", _FakeJobs())
+
+    csrf = _with_csrf(authed_client)
+    resp = authed_client.post(
+        "/apps/oneclick/remove", data={"csrf_token": csrf}, follow_redirects=False
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/jobs/77"
+    slug, options = calls["build"]
+    assert slug == "oneclick"
+    assert options["remove_named_volumes"] is True
+    assert options["remove_images"] == "exclusive"
+    assert options["remove_bind_data"] is True
+    assert options["remove_repo"] is True
+    assert options["remove_networks"] is True
+    assert calls["create_job"] == (41, "live", 1)
+    assert calls["execute_job"] == (77, "y")
+
+
+def test_remove_now_refuses_protected_app(authed_client, monkeypatch, settings_env):
+    _seed_app("keepme", protected=1)
+
+    class _Boom:
+        def __getattr__(self, name):
+            raise AssertionError(f"{name} must not be called for a protected app")
+
+    monkeypatch.setattr(plans_jobs, "planner", _Boom())
+    monkeypatch.setattr(plans_jobs, "jobs", _Boom())
+    csrf = _with_csrf(authed_client)
+    resp = authed_client.post("/apps/keepme/remove", data={"csrf_token": csrf})
+    assert resp.status_code == 403
+
+
+def test_remove_now_404s_for_unknown_app(authed_client, settings_env):
+    csrf = _with_csrf(authed_client)
+    resp = authed_client.post("/apps/nope/remove", data={"csrf_token": csrf})
+    assert resp.status_code == 404
+
+
+def test_csrf_rejected_on_remove_now(authed_client, settings_env):
+    _seed_app("oneclick2")
+    resp = authed_client.post("/apps/oneclick2/remove", data={})
+    assert resp.status_code == 403
+
+
+def test_app_detail_shows_remove_now_button(authed_client, settings_env):
+    _seed_app("oneclick3")
+    resp = authed_client.get("/apps/oneclick3")
+    assert resp.status_code == 200
+    assert 'action="/apps/oneclick3/remove"' in resp.text
+    assert "Remove app now" in resp.text
