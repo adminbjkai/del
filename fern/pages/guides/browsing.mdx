@@ -138,8 +138,9 @@ server names, config path, upstream ports, and an **ssl** badge. Two columns are
 common to almost every type:
 
 - **Owner app(s)** — which application(s) DEL attributes the resource to, each a link
-  to that app. Resources DEL couldn't attribute to a current, confident owner show an
-  `unassigned` badge (these are the [orphans](/guides/orphans)).
+  to that app. An `unassigned` chip means **no association rows** (no owner chips).
+  That is stricter than [Orphans](/guides/orphans): Orphans is **no probable (≥60)
+  current owner** — a row can still have possible/weak claims and appear there.
 - **Shared** — amber **shared** badge: used by more than one app. Removing one owner
   must not delete that resource.
 

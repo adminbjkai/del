@@ -11,10 +11,10 @@ Legend chips on the dashboard (same meanings as Vocabulary below):
 - **shared** = 2+ current apps
 - **probable** = strong owner
 - **possible** = weak
-- **unassigned** → Orphans
+- **no probable owner → Orphans** (unassigned chips = no association rows, stricter)
 - **Ask** = read-only
 
-Chrome: primary `.btn` is `min-height: 2.35rem`; `.panel` radius is 12px (slightly rounder than the old 8px). Compact `.btn-sm` in the How-to action group is still ~2rem.
+Chrome: primary `.btn` is `min-height: 2.35rem`; `.panel` radius is 14px. Compact `.btn-sm` in the How-to action group is still ~2rem.
 
 ```mermaid
 flowchart LR
@@ -46,7 +46,7 @@ flowchart LR
     </Frame>
   </Step>
   <Step title="Resources">
-    [Resources → Containers](https://del.bjk.ai/resources/container), then the other tabs. Owner chips are current apps. **Shared** = more than one current app — do not delete with a single app. Unassigned chips go to Orphans.
+    [Resources → Containers](https://del.bjk.ai/resources/container), then the other tabs. Owner chips are current apps. **Shared** = more than one current app — do not delete with a single app. `unassigned` chips mean no association rows; Orphans is no probable owner.
     <Frame caption="Volumes with owners — the same ownership model as Ask.">
       <img src="../../assets/11-resources-volume.png" alt="Resources volumes" />
     </Frame>
@@ -83,8 +83,8 @@ flowchart LR
   <Accordion title="Ownership = possible">
     A different field from the confidence band. Weak **ownership enum**, not “possible confidence.”
   </Accordion>
-  <Accordion title="Unassigned / orphan">
-    No probable current owner. Listed on Orphans. Not “Docker volume unused” and not “safe to delete here.”
+  <Accordion title="Unassigned vs Orphans">
+    **unassigned** chip = no association rows. **Orphans** page = no probable (≥60) current owner (possible/weak claims may still exist). Not “Docker volume unused” and not “safe to delete here.”
   </Accordion>
   <Accordion title="Protected">
     App flag. DEL will not build a removal plan (example: DEL itself).
