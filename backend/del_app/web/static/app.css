@@ -584,20 +584,47 @@ a.stat-card:hover { border-color: var(--accent); text-decoration: none; transfor
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 1.1rem;
-  height: 1.1rem;
+  width: 1.35rem;
+  height: 1.35rem;
   margin-left: 0.25rem;
   padding: 0;
-  border: 0;
-  background: none;
+  border: 1px solid transparent;
+  background: var(--bg-alt);
   color: var(--text-muted);
   cursor: pointer;
-  font-size: 0.7rem;
-  border-radius: 3px;
+  font-size: 0.85rem;
+  border-radius: 4px;
   vertical-align: middle;
 }
 .th-filter-btn:hover { color: var(--text); background: var(--border); }
-.th-filter-btn.is-active { color: var(--accent-hover); }
+.th-filter-btn.is-active {
+  color: #fff;
+  background: var(--accent-bg);
+  border-color: var(--accent-bg);
+}
+.col-filter-pop-title {
+  font-weight: 700;
+  font-size: 0.82rem;
+}
+.col-filter-exclude {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+.active-filter-pills {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  margin: 0 0 0.5rem;
+}
+.gallery-search-wrap {
+  display: flex;
+  gap: 0.4rem;
+  align-items: center;
+  flex: 1 1 18rem;
+}
 .th-resizer {
   position: absolute;
   top: 0; right: 0; bottom: 0;

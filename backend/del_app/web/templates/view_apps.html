@@ -18,6 +18,12 @@
 <section class="gallery-toolbar" aria-label="App gallery controls">
   <label class="gallery-search-wrap">
     <span class="sr-only">Search apps</span>
+    <select id="gallery-search-op" class="gallery-select" aria-label="Search operator">
+      <option value="contains">contains</option>
+      <option value="notContains">does not contain</option>
+      <option value="equals">equals</option>
+      <option value="startsWith">starts with</option>
+    </select>
     <input id="gallery-search" class="gallery-input" type="search" placeholder="Search apps or domains…" autocomplete="off">
   </label>
   <label>

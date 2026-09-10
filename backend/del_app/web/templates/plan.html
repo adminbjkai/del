@@ -38,7 +38,7 @@
     {% for stage, steps in plan.get('stages', {}).items() %}
     <h3>{{ stage }} ({{ steps|length }})</h3>
     <div class="table-scroll">
-    <table class="table">
+    <table class="table" data-enhanced data-empty="No steps in this stage." data-page-size="50">
       <caption class="sr-only">Planned {{ stage }} steps with danger level and reversibility.</caption>
       <thead><tr><th scope="col">#</th><th scope="col">Operation</th><th scope="col">Description</th><th scope="col">Danger</th><th scope="col">Reversible</th></tr></thead>
       <tbody>

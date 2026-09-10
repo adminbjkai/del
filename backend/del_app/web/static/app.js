@@ -188,6 +188,11 @@
     toolbar.className = "table-toolbar";
     wrap.appendChild(toolbar);
 
+    var filterPills = document.createElement("div");
+    filterPills.className = "active-filter-pills";
+    filterPills.hidden = true;
+    wrap.appendChild(filterPills);
+
     var scroller = document.createElement("div");
     scroller.className = "table-scroll";
     wrap.appendChild(scroller);
@@ -289,17 +294,19 @@
       filterBtn.setAttribute("aria-label", "Filter " + headerLabel);
       filterBtn.setAttribute("aria-haspopup", "dialog");
       filterBtn.setAttribute("aria-expanded", "false");
-      filterBtn.innerHTML = '<span aria-hidden="true">▾</span>';
+      filterBtn.innerHTML = '<span aria-hidden="true">⧩</span>';
       th.appendChild(filterBtn);
 
-      var state = { op: "contains", val: "", selected: null, col: idx };
+      var state = { op: "contains", val: "", selected: null, exclude: false, col: idx, label: headerLabel };
       colFilters.push(state);
 
       function isActive() {
-        return !!(state.val.trim()) || state.selected !== null;
+        var numeric = state.op.indexOf("gt") === 0 || state.op.indexOf("lt") === 0;
+        return !!(state.val.trim()) || state.selected !== null || state.op === "blank" || state.op === "notBlank" || (numeric && state.val.trim());
       }
       function updateBtn() {
         filterBtn.classList.toggle("is-active", isActive());
+        filterBtn.title = isActive() ? "Filter on (click to edit)" : "Filter this column like Excel";
       }
 
       function openPopover() {
@@ -311,8 +318,9 @@
         pop.setAttribute("role", "dialog");
         pop.setAttribute("aria-label", "Filter " + headerLabel);
         pop.innerHTML =
+          '<div class="col-filter-pop-title">Filter “' + escapeHtml(headerLabel) + '”</div>' +
           '<div class="col-filter-pop-head">' +
-          '<label>Text' +
+          '<label>Show rows where this column' +
           '<select class="col-filter-op" aria-label="Filter operator for ' + escapeHtml(headerLabel) + '">' +
           '<option value="contains">contains</option>' +
           '<option value="notContains">does not contain</option>' +
@@ -320,18 +328,23 @@
           '<option value="notEqual">does not equal</option>' +
           '<option value="startsWith">starts with</option>' +
           '<option value="endsWith">ends with</option>' +
+          '<option value="gt">greater than</option>' +
+          '<option value="gte">greater than or equal</option>' +
+          '<option value="lt">less than</option>' +
+          '<option value="lte">less than or equal</option>' +
           '<option value="blank">is empty</option>' +
           '<option value="notBlank">is not empty</option>' +
           "</select>" +
-          '<input type="text" class="col-filter-text" placeholder="Type to match…" aria-label="Filter text for ' + escapeHtml(headerLabel) + '">' +
+          '<input type="text" class="col-filter-text" placeholder="Type a value…" aria-label="Filter text for ' + escapeHtml(headerLabel) + '">' +
           "</label></div>" +
+          '<label class="col-filter-exclude"><input type="checkbox" class="col-filter-exclude-cb"> Exclude selected values</label>' +
           '<div class="col-filter-actions">' +
-          '<button type="button" class="btn btn-sm col-filter-all">Select all</button>' +
-          '<button type="button" class="btn btn-sm col-filter-none">Clear</button>' +
+          '<button type="button" class="btn btn-sm col-filter-all">(Select All)</button>' +
+          '<button type="button" class="btn btn-sm col-filter-none">Clear list</button>' +
           "</div>" +
-          '<input type="search" class="col-filter-search" placeholder="Search values…" aria-label="Search values for ' + escapeHtml(headerLabel) + '">' +
+          '<input type="search" class="col-filter-search" placeholder="Search values in this column…" aria-label="Search values for ' + escapeHtml(headerLabel) + '">' +
           '<div class="col-filter-list" role="group" aria-label="Values"></div>' +
-          '<div class="col-filter-close-row"><button type="button" class="btn btn-sm col-filter-done">Done</button></div>';
+          '<div class="col-filter-close-row"><button type="button" class="btn btn-sm btn-primary col-filter-done">Apply</button></div>';
 
         var opEl = pop.querySelector(".col-filter-op");
         var textEl = pop.querySelector(".col-filter-text");
@@ -339,6 +352,8 @@
         var listEl = pop.querySelector(".col-filter-list");
         opEl.value = state.op;
         textEl.value = state.val;
+        var excludeEl = pop.querySelector(".col-filter-exclude-cb");
+        if (excludeEl) excludeEl.checked = !!state.exclude;
         var needsText = function () { return opEl.value !== "blank" && opEl.value !== "notBlank"; };
         textEl.disabled = !needsText();
 
@@ -358,7 +373,7 @@
               if (state.selected === null) state.selected = new Set(valueList);
               if (cb.checked) state.selected.add(v); else state.selected.delete(v);
               if (state.selected.size === valueList.length) state.selected = null;
-              applyFilter(); render(); updateBtn();
+              applyFilter(); render(); updateBtn(); updateFilterPills();
             });
             var span = document.createElement("span");
             span.textContent = labelText;
@@ -377,19 +392,22 @@
         renderList();
 
         pop.querySelector(".col-filter-all").addEventListener("click", function () {
-          state.selected = null; renderList(); applyFilter(); render(); updateBtn();
+          state.selected = null; renderList(); applyFilter(); render(); updateBtn(); updateFilterPills();
         });
         pop.querySelector(".col-filter-none").addEventListener("click", function () {
-          state.selected = new Set(); renderList(); applyFilter(); render(); updateBtn();
+          state.selected = new Set(); renderList(); applyFilter(); render(); updateBtn(); updateFilterPills();
+        });
+        if (excludeEl) excludeEl.addEventListener("change", function () {
+          state.exclude = excludeEl.checked; applyFilter(); render(); updateBtn(); updateFilterPills();
         });
         opEl.addEventListener("change", function () {
           state.op = opEl.value;
           textEl.disabled = !needsText();
           if (textEl.disabled) { textEl.value = ""; state.val = ""; }
-          applyFilter(); render(); updateBtn();
+          applyFilter(); render(); updateBtn(); updateFilterPills();
         });
         textEl.addEventListener("input", function () {
-          state.val = textEl.value; applyFilter(); render(); updateBtn();
+          state.val = textEl.value; applyFilter(); render(); updateBtn(); updateFilterPills();
         });
         searchEl.addEventListener("input", renderList);
         pop.querySelector(".col-filter-done").addEventListener("click", closeColPopover);
@@ -558,6 +576,41 @@
       return true;
     }
 
+    function cellNum(r, col) {
+      var cell = r.cells[col];
+      if (!cell) return NaN;
+      var s = cell.getAttribute("data-sort-value");
+      if (s == null || s === "") s = (cell.textContent || "").replace(/,/g, "").trim();
+      return parseFloat(s);
+    }
+
+    function updateFilterPills() {
+      filterPills.innerHTML = "";
+      var any = false;
+      colFilters.forEach(function (f) {
+        var parts = [];
+        if (f.op === "blank" || f.op === "notBlank") parts.push(f.op === "blank" ? "is empty" : "is not empty");
+        else if (f.val.trim()) parts.push(f.op + " “" + f.val.trim() + "”");
+        if (f.selected !== null) parts.push((f.exclude ? "exclude " : "") + f.selected.size + " values");
+        if (!parts.length) return;
+        any = true;
+        var pill = document.createElement("button");
+        pill.type = "button";
+        pill.className = "filter-chip is-on";
+        pill.textContent = (f.label || ("Col " + (f.col + 1))) + ": " + parts.join(", ") + " ×";
+        pill.setAttribute("aria-label", "Clear filter on " + (f.label || "column"));
+        pill.addEventListener("click", function () {
+          f.op = "contains"; f.val = ""; f.selected = null; f.exclude = false;
+          wrap.querySelectorAll(".th-filter-btn.is-active").forEach(function (b) { /* refreshed below */ });
+          var btns = wrap.querySelectorAll(".th-filter-btn");
+          if (btns[f.col]) btns[f.col].classList.remove("is-active");
+          applyFilter(); render(); updateFilterPills();
+        });
+        filterPills.appendChild(pill);
+      });
+      filterPills.hidden = !any;
+    }
+
     function applyFilter() {
       var term = search.value.trim().toLowerCase();
       filtered = allRows.filter(function (r) {
@@ -580,10 +633,22 @@
             var raw = (text === "—" ? "" : text);
             var hit = false;
             f.selected.forEach(function (v) { if (String(v).toLowerCase() === raw) hit = true; });
-            if (!hit) return false;
+            if (f.exclude) { if (hit) return false; }
+            else if (!hit) return false;
           }
           var op = f.op;
           var val = f.val;
+          if (op === "gt" || op === "gte" || op === "lt" || op === "lte") {
+            if (!val.trim()) continue;
+            var n = cellNum(r, f.col);
+            var cmp = parseFloat(val);
+            if (isNaN(cmp) || isNaN(n)) return false;
+            if (op === "gt" && !(n > cmp)) return false;
+            if (op === "gte" && !(n >= cmp)) return false;
+            if (op === "lt" && !(n < cmp)) return false;
+            if (op === "lte" && !(n <= cmp)) return false;
+            continue;
+          }
           if (op !== "blank" && op !== "notBlank" && !val.trim()) continue;
           if (!matchOp(text, op, val.trim())) return false;
         }
@@ -612,6 +677,7 @@
       var msg = shownFrom + "–" + end + " of " + total;
       if (total !== allRows.length) msg += " (filtered from " + allRows.length + ")";
       status.textContent = msg;
+      updateFilterPills();
       var hasPages = size > 0 && total > size;
       pager.hidden = !hasPages;
       prevBtn.disabled = page <= 0;
@@ -626,6 +692,7 @@
         f.op = "contains";
         f.val = "";
         f.selected = null;
+        f.exclude = false;
       });
       Object.keys(chipFilters).forEach(function (k) { delete chipFilters[k]; });
       wrap.querySelectorAll(".filter-chip.is-on").forEach(function (c) {
@@ -653,10 +720,17 @@
   }
 
   function enhanceTable(table) {
+    if (!table || table.getAttribute("data-enhanced-ready")) return;
+    if (!table.tHead || !table.tBodies.length) return;
+    table.setAttribute("data-enhanced-ready", "1");
     enhanceTableVanilla(table);
   }
 
   document.querySelectorAll("table[data-enhanced]").forEach(enhanceTable);
+  document.querySelectorAll("table.table").forEach(function (table) {
+    if (table.classList.contains("job-steps")) return;
+    enhanceTable(table);
+  });
 
   // =========================================================================
   // Keyboard: "/" focuses the first quick-filter
@@ -891,6 +965,7 @@
   if (appGallery) {
     var galleryCards = Array.prototype.slice.call(appGallery.querySelectorAll(".app-launch-card"));
     var gallerySearch = document.getElementById("gallery-search");
+    var gallerySearchOp = document.getElementById("gallery-search-op");
     var galleryCategory = document.getElementById("gallery-category");
     var gallerySort = document.getElementById("gallery-sort");
     var galleryWidth = document.getElementById("gallery-card-width");
@@ -996,7 +1071,15 @@
         if (categoryFilter && categoryFilter !== "__favorites" && cardCategory(card) !== categoryFilter) return false;
         if (query) {
           var text = (card.getAttribute("data-name") + " " + card.getAttribute("data-domain") + " " + cardCategory(card)).toLowerCase();
-          if (text.indexOf(query) === -1) return false;
+          var op = gallerySearchOp ? gallerySearchOp.value : "contains";
+          var hit = text.indexOf(query) !== -1;
+          if (op === "notContains") { if (hit) return false; }
+          else if (op === "equals") { if (text.trim() !== query) return false; }
+          else if (op === "startsWith") {
+            var name = (card.getAttribute("data-name") || "").toLowerCase();
+            var domain = (card.getAttribute("data-domain") || "").toLowerCase();
+            if (name.indexOf(query) !== 0 && domain.indexOf(query) !== 0) return false;
+          } else if (!hit) return false;
         }
         return true;
       });
@@ -1083,6 +1166,7 @@
       target.parentNode.insertBefore(draggedCard, before ? target : target.nextSibling);
     });
     if (gallerySearch) gallerySearch.addEventListener("input", renderGallery);
+    if (gallerySearchOp) gallerySearchOp.addEventListener("change", renderGallery);
     if (galleryCategory) galleryCategory.addEventListener("change", renderGallery);
     if (gallerySort) gallerySort.addEventListener("change", function () {
       galleryPrefs.sort = gallerySort.value; saveGalleryPrefs(); renderGallery();
