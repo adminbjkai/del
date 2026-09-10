@@ -385,6 +385,9 @@ def test_general_context(settings_env):
     assert "apps_by_kind: compose=2" in b.text
     assert "resources_by_type: container=1, image=2, volume=2, network=1, nginx_site=1" in b.text
     assert "actionable_orphans: 2" in b.text
+    assert "shared_or_multi_owner_resources:" in b.text
+    assert "## Shared resources (multi-owner)" in b.text
+    assert "image sha256:1111" in b.text and "owners=" in b.text
     assert "disk_usage:" in b.text and "4096 bytes" in b.text
     line = next(ln for ln in b.text.splitlines() if ln.startswith("- web-owner"))
     assert "domains=web.example.com" in line

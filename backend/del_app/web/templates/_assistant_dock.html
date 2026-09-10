@@ -1,0 +1,55 @@
+{# Compact assistant for the right rail. IDs match the full page so
+   assistant.js inits this surface when #assistant-page is absent. #}
+<div class="assistant-dock" id="assistant-dock"
+     data-scope="{{ dock_scope }}"
+     data-target="{{ dock_target }}"
+     data-resource-type="{{ dock_rtype }}"
+     data-conversation=""
+     data-model="{{ (assistant_status or {}).get('model') or '' }}">
+  {% if not assistant_on %}
+  <p class="muted text-sm mt-0">Assistant is off. Enable it in <a href="/settings#assistant-settings">Settings</a>.</p>
+  {% else %}
+  <div class="filter-chip-group" role="group" aria-label="Scope">
+    <button type="button" class="filter-chip assistant-scope-chip" data-scope="general" aria-pressed="{{ 'true' if dock_scope == 'general' else 'false' }}">General</button>
+    <button type="button" class="filter-chip assistant-scope-chip" data-scope="app" aria-pressed="{{ 'true' if dock_scope == 'app' else 'false' }}">App</button>
+    <button type="button" class="filter-chip assistant-scope-chip" data-scope="orphans" aria-pressed="{{ 'true' if dock_scope == 'orphans' else 'false' }}">Orphans</button>
+    <button type="button" class="filter-chip assistant-scope-chip" data-scope="resource_type" aria-pressed="{{ 'true' if dock_scope == 'resource_type' else 'false' }}">Type</button>
+    <button type="button" class="filter-chip assistant-scope-chip" data-scope="resource" aria-pressed="{{ 'true' if dock_scope == 'resource' else 'false' }}">One</button>
+  </div>
+  <div class="stack mt-2" id="assistant-target-wrap" hidden>
+    <label class="text-sm" for="assistant-rtype" id="assistant-rtype-wrap" hidden>Type
+      <select id="assistant-rtype" class="assistant-select">
+        <option value="container">Containers</option>
+        <option value="image">Images</option>
+        <option value="network">Networks</option>
+        <option value="volume">Volumes</option>
+      </select>
+    </label>
+    <label class="text-sm" for="assistant-target-search" id="assistant-search-wrap" hidden>Find
+      <input type="search" id="assistant-target-search" class="assistant-select" placeholder="Filter…" autocomplete="off">
+    </label>
+    <label class="text-sm" for="assistant-target"><span id="assistant-target-label">Target</span>
+      <select id="assistant-target" class="assistant-select"
+              data-apps="[]"
+              data-rtypes='[{"value":"container","label":"Containers"},{"value":"image","label":"Images"},{"value":"network","label":"Networks"},{"value":"volume","label":"Volumes"}]'
+              data-resources="[]"></select>
+    </label>
+  </div>
+  <div class="stack-sm mt-2" id="assistant-prompts"></div>
+  <div class="assistant-transcript assistant-transcript-dock" id="assistant-transcript" aria-live="polite"></div>
+  <div class="assistant-statusline muted text-xs" id="assistant-statusline">
+    <span class="mono" id="assistant-model">{{ (assistant_status or {}).get('model') or '' }}</span>
+    <span class="badge badge-amber" id="assistant-truncated" hidden>truncated</span>
+    <span id="assistant-usage"></span>
+  </div>
+  <form class="assistant-composer" id="assistant-form">
+    <label for="assistant-input" class="sr-only">Your question</label>
+    <textarea id="assistant-input" rows="2" placeholder="Ask about this screen…" required></textarea>
+    <div class="cluster assistant-composer-actions">
+      <button type="submit" class="btn btn-primary btn-sm" id="assistant-send">Ask</button>
+      <button type="button" class="btn btn-sm" id="assistant-stop" hidden>Stop</button>
+    </div>
+  </form>
+  <p class="muted text-xs mt-2"><a href="/assistant">Full assistant</a> · read-only</p>
+  {% endif %}
+</div>

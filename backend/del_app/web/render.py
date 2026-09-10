@@ -41,6 +41,20 @@ def _csrf_seed(request: Request) -> tuple[str, str | None]:
     return auth.csrf_token(raw), raw
 
 
+def _dock_from_path(path: str) -> dict:
+    """Default assistant-dock scope from the page the operator is on."""
+    scope, target, rtype = "general", "", ""
+    parts = [p for p in path.split("/") if p]
+    if path.startswith("/apps/") and "/plan" not in path and len(parts) >= 2:
+        scope, target = "app", parts[1]
+    elif path.startswith("/orphans"):
+        scope = "orphans"
+    elif path.startswith("/resources/") and len(parts) >= 2:
+        scope = "resource_type"
+        target = rtype = parts[1]
+    return {"dock_scope": scope, "dock_target": target, "dock_rtype": rtype}
+
+
 def _render(name: str, request: Request, response: Response, **extra) -> HTMLResponse:
     csrf_token, seed = _csrf_seed(request)
     ctx = {
@@ -48,7 +62,19 @@ def _render(name: str, request: Request, response: Response, **extra) -> HTMLRes
         "error": request.query_params.get("error"),
         "csrf_token": csrf_token,
     }
+    ctx.update(_dock_from_path(request.url.path))
     ctx.update(extra)
+    if "assistant_status" not in ctx:
+        try:
+            from del_app.assistant import status as assistant_status_fn
+            st = dict(assistant_status_fn())
+            st.pop("api_key", None)
+            ctx["assistant_status"] = st
+        except Exception:
+            ctx["assistant_status"] = {"enabled": False, "configured": False}
+    if "assistant_on" not in ctx:
+        st = ctx.get("assistant_status") or {}
+        ctx["assistant_on"] = bool(st.get("enabled") and st.get("configured"))
     rendered = templates.TemplateResponse(request, name, ctx)
     if seed is not None:
         # Same cookie name as the real session, so it needs the same flags —

@@ -8,7 +8,11 @@
   <title>{% block title %}DEL{% endblock %} · DEL</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/app.css">
+  <link rel="stylesheet" href="/static/vendor/ag-grid.css">
+  <link rel="stylesheet" href="/static/vendor/ag-theme-quartz.css">
+  <link rel="stylesheet" href="/static/assistant.css">
   <script src="/static/theme-init.js"></script>
+  <meta name="csrf-token" content="{{ csrf_token }}">
   {% block head %}{% endblock %}
 </head>
 {% set path = request.url.path %}
@@ -87,10 +91,21 @@
         {% block content %}{% endblock %}
       </main>
 
-      <aside class="glossary-rail" id="glossary-rail" aria-label="Glossary">
+      <aside class="glossary-rail" id="glossary-rail" aria-label="Help and assistant">
         <button type="button" id="glossary-collapse" class="btn btn-sm icon-btn glossary-collapse-btn"
                 aria-label="Collapse glossary" title="Collapse glossary">›</button>
-        {% include "_glossary.html" %}
+        <div class="rail-tabs" role="tablist" aria-label="Right panel">
+          <button type="button" class="rail-tab is-active" id="rail-tab-help" data-rail-tab="help" role="tab" aria-selected="true">Help</button>
+          <button type="button" class="rail-tab" id="rail-tab-ask" data-rail-tab="ask" role="tab" aria-selected="false">Ask</button>
+        </div>
+        <div class="rail-panel" id="rail-panel-help" data-rail-panel="help">
+          {% include "_glossary.html" %}
+        </div>
+        {% if not path.startswith('/assistant') %}
+        <div class="rail-panel" id="rail-panel-ask" data-rail-panel="ask" hidden>
+          {% include "_assistant_dock.html" %}
+        </div>
+        {% endif %}
       </aside>
     </div>
   </div>
@@ -98,6 +113,9 @@
   {# Mobile glossary FAB + bottom sheet #}
   <button type="button" class="glossary-fab" id="glossary-fab" aria-controls="glossary-sheet" aria-expanded="false">
     Glossary
+  </button>
+  <button type="button" class="glossary-fab assistant-fab" id="assistant-fab" aria-controls="glossary-rail">
+    Ask
   </button>
   <div class="glossary-sheet" id="glossary-sheet" hidden>
     <div class="glossary-sheet-backdrop" id="glossary-sheet-backdrop"></div>
@@ -125,7 +143,9 @@
     </div>
   </dialog>
 
+  <script src="/static/vendor/ag-grid-community.min.js"></script>
   <script src="/static/app.js"></script>
+  <script src="/static/assistant.js"></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

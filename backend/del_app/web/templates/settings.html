@@ -30,11 +30,13 @@
   <form method="post" action="/assistant/test" class="mt-2" data-submit-guard="Testing…">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
     <button type="submit" class="btn"{% if not (ast.get('enabled') and ast.get('configured')) %} disabled title="Configure an API key first"{% endif %}>Test connection</button>
-    <a class="btn btn-ghost" href="/assistant">Open assistant</a>
+    <a class="btn btn-ghost" href="/assistant">Open full assistant</a>
   </form>
   <p class="muted text-sm mt-2">
-    Read-only advisory chat over the inventory (Ollama Cloud). Enable it by placing the API key in
-    <code>/apps/del/config/ollama-api-key.txt</code> (mode 0600) and restarting <code>del-web</code>.
+    Read-only chat over the inventory (Ollama Cloud <code>glm-5.3-flash</code>). It now includes
+    per-resource owners and shared flags, and sits in the right-rail <strong>Ask</strong> tab on every page
+    (desktop) or the Ask button on small screens. Key file:
+    <code>/apps/del/config/ollama-api-key.txt</code> (mode 0600).
   </p>
 </section>
 

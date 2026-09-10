@@ -219,7 +219,7 @@ unconditionally on every page:
   focuses it), drag-to-resize columns, pagination with a page-size selector, CSV
   export of the current filtered/sorted rows, and — on screens ≤900px — hiding
   `data-priority="low"` columns behind a "Show all columns" toggle. This replaced a
-  vendored AG Grid bundle that duplicated the same behaviour.
+  client-side AG Grid Community 32.3.3 bundle vendored at `/static/vendor/` (CSP `self`, no CDN), with the previous vanilla table engine kept as a fallback if the script fails to load.
 - `DEL.tabs.init(root)` — an accessible tablist (roving tabindex, arrow keys,
   `aria-selected`) applied to every `.tabs` block, used by the application detail
   page's Overview/Docker/systemd/Nginx/Scheduled/Processes/Files/Shared/Readiness

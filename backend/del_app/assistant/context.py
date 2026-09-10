@@ -247,6 +247,33 @@ def _risk_rank(shared: bool, risk: str | None, owners: int = 1) -> tuple:
 # builders
 # ---------------------------------------------------------------------------
 
+def _shared_resource_rows(conn, latest: int | None) -> list[dict]:
+    """Resources claimed by more than one current app, or flagged shared."""
+    if latest is None:
+        return []
+    return _rows(
+        q(
+            conn,
+            """
+            SELECT r.type, r.key, r.display, r.path, r.state,
+                   GROUP_CONCAT(DISTINCT ap.slug) AS slugs,
+                   COUNT(DISTINCT a.app_id) AS n,
+                   MAX(a.shared) AS flagged_shared
+            FROM associations a
+            JOIN resources r ON r.id = a.resource_id
+            JOIN applications ap ON ap.id = a.app_id
+            WHERE a.excluded = 0
+              AND r.last_seen = ?
+              AND ap.last_seen = ?
+            GROUP BY r.id
+            HAVING n > 1 OR flagged_shared = 1
+            ORDER BY n DESC, r.type, r.key
+            """,
+            (latest, latest),
+        )
+    )
+
+
 def build_general(conn, budget: int) -> ContextBundle:
     latest = _latest_scan_id(conn)
     apps = _apps_in_scan(conn, latest)
@@ -260,6 +287,7 @@ def build_general(conn, budget: int) -> ContextBundle:
     orphans = _orphan_rows(conn, latest)
     actionable = sum(1 for o in orphans if o["bucket"] == "actionable")
     agg = _app_aggregates(conn, [a["id"] for a in apps], latest)
+    shared_rows = _shared_resource_rows(conn, latest)
 
     lines = [
         _scan_line(conn, latest),
@@ -269,9 +297,21 @@ def build_general(conn, budget: int) -> ContextBundle:
         "resources_by_type: " + (", ".join(f"{c['type']}={c['count']}" for c in counts) or "none"),
         f"disk_usage: {_human_bytes(disk)} ({disk} bytes; directories + volumes)",
         f"actionable_orphans: {actionable}",
+        f"shared_or_multi_owner_resources: {len(shared_rows)}",
         "",
-        "## Applications",
+        f"## Shared resources (multi-owner): {len(shared_rows)}",
     ]
+    if not shared_rows:
+        lines.append("(none — no resource is claimed by more than one current app)")
+    else:
+        for r in shared_rows:
+            slugs = r.get("slugs") or "-"
+            lines.append(
+                f"- {r['type']} {r['key']} | display={r.get('display') or '-'} | "
+                f"owners={r.get('n')} [{slugs}] | state={r.get('state') or '-'} | "
+                f"flagged_shared={'true' if r.get('flagged_shared') else 'false'}"
+            )
+    lines += ["", "## Applications"]
     for a in sorted(apps, key=lambda r: (r.get("name") or r.get("slug") or "").lower()):
         g = agg.get(a["id"], {})
         parts = [
@@ -295,6 +335,7 @@ def build_general(conn, budget: int) -> ContextBundle:
         "resource_counts": {c["type"]: c["count"] for c in counts},
         "disk_usage_bytes": disk,
         "actionable_orphans": actionable,
+        "shared_or_multi_owner": len(shared_rows),
     }
     return ContextBundle("general", None, "Whole server", facts, text, truncated)
 

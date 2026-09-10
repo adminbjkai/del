@@ -56,6 +56,25 @@ def static_theme_init() -> FileResponse:
     )
 
 
+_VENDOR_TYPES = {
+    "ag-grid-community.min.js": "application/javascript",
+    "ag-grid.css": "text/css",
+    "ag-theme-quartz.css": "text/css",
+    "AG-GRID-LICENSE.txt": "text/plain",
+}
+
+
+@router.get("/static/vendor/{name}")
+def static_vendor(name: str) -> FileResponse:
+    media = _VENDOR_TYPES.get(name)
+    if not media:
+        return Response(status_code=404)
+    return FileResponse(
+        STATIC_DIR / "vendor" / name, media_type=media,
+        headers={"Cache-Control": _STATIC_CACHE},
+    )
+
+
 @router.get("/static/favicon.svg")
 def static_favicon() -> FileResponse:
     return FileResponse(

@@ -240,7 +240,7 @@ The original full attacker/vector/mitigation table lives in `docs/server-audit.m
   templates still carry inline `style=""` attributes (tightening it means moving
   those to classes first); and `img-src data:`, for the inline SVG data URI used in
   some views. Everything else is `'self'` — the client-side tables are a vanilla
-  JS/CSS implementation (the vendored AG Grid bundle has been removed), there are
+  JS/CSS implementation (AG Grid Community is vendored under `/static/vendor/`, no CDN), there are
   no CDN scripts or web fonts, and app icons are proxied through `/app-icon/`
   rather than loaded from a third-party origin, so no external asset origin is
   needed. `script-src 'self'` with no `'unsafe-inline'` is also why the pre-paint

@@ -15,5 +15,5 @@ api_key_file = "/apps/del/config/ollama-api-key.txt"
 timeout_seconds = 120
 temperature = 0.2
 think = "low"
-context_budget_chars = 24000
+context_budget_chars = 36000
 history_messages = 12

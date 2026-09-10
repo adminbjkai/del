@@ -452,6 +452,51 @@ a:hover { color: var(--accent-hover); text-decoration: underline; }
   margin: 0.65rem auto 0;
   transform: rotate(180deg);
 }
+.rail-tabs {
+  display: flex;
+  gap: 0.3rem;
+  padding: 2.35rem 0.65rem 0.45rem;
+  flex-shrink: 0;
+}
+.layout.glossary-collapsed .rail-tabs,
+.layout.glossary-collapsed .rail-panel { display: none; }
+.rail-tab {
+  flex: 1;
+  border: 1px solid var(--border);
+  background: var(--bg-alt);
+  color: var(--text-muted);
+  border-radius: 999px;
+  padding: 0.28rem 0.4rem;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 650;
+  cursor: pointer;
+}
+.rail-tab.is-active {
+  background: var(--accent-bg);
+  border-color: var(--accent-bg);
+  color: #fff;
+}
+.rail-panel {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+}
+@media (max-width: 1279px) {
+  .layout.ask-open .glossary-rail {
+    display: flex !important;
+    position: fixed;
+    left: 0; right: 0; bottom: 0; top: auto;
+    width: 100%;
+    height: min(72vh, 640px);
+    z-index: 61;
+    border-left: 0;
+    border-top: 1px solid var(--border);
+    border-radius: 18px 18px 0 0;
+    background: var(--bg-card);
+  }
+  .assistant-fab { display: inline-flex; align-items: center; }
+}
 
 /* Mobile glossary FAB + sheet */
 .glossary-fab {
@@ -1755,6 +1800,21 @@ a.stat-card:hover {
   border-radius: 999px;
   white-space: nowrap;
 }
+.del-ag-grid {
+  width: 100%;
+  height: min(70vh, 740px);
+  --ag-background-color: var(--bg-card);
+  --ag-header-background-color: var(--bg-alt);
+  --ag-odd-row-background-color: color-mix(in srgb, var(--bg-alt) 55%, var(--bg-card));
+  --ag-row-hover-color: color-mix(in srgb, var(--accent) 12%, var(--bg-card));
+  --ag-border-color: var(--border);
+  --ag-foreground-color: var(--text);
+  --ag-header-foreground-color: var(--text-muted);
+  --ag-font-family: var(--font);
+  --ag-font-size: 13px;
+}
+.del-ag-grid .ag-cell-inner a { color: var(--accent); }
+.del-ag-grid .ag-header-cell-filtered { color: var(--accent); }
 .table-block {
   background: var(--bg-card);
   border: 1px solid var(--border);

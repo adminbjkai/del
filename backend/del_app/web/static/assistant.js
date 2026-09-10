@@ -100,6 +100,7 @@
     var transcript = $("assistant-transcript");
     var form = $("assistant-form");
     var input = $("assistant-input");
+    if (!form || !input || !transcript) return;
     var sendBtn = $("assistant-send");
     var stopBtn = $("assistant-stop");
     var truncatedBadge = $("assistant-truncated");
@@ -220,7 +221,7 @@
       transcript.innerHTML = "";
       truncatedBadge.hidden = true;
       usageEl.textContent = "";
-      if (window.history && window.history.replaceState) {
+      if (root.id === "assistant-page" && window.history && window.history.replaceState) {
         var qs = "?scope=" + encodeURIComponent(state.scope) +
           (state.target ? "&target=" + encodeURIComponent(state.target) : "");
         window.history.replaceState(null, "", "/assistant" + qs);
@@ -433,5 +434,7 @@
   window.DEL = window.DEL || {};
   window.DEL.assistant = { init: init, renderMarkdown: renderMarkdown };
   var page = document.getElementById("assistant-page");
+  var dock = document.getElementById("assistant-dock");
   if (page) init(page);
+  else if (dock) init(dock);
 })();

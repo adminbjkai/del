@@ -719,10 +719,178 @@
     render();
   }
 
+  function enhanceTableAgGrid(table) {
+    var ag = window.agGrid;
+    if (!ag || typeof ag.createGrid !== "function") return false;
+    var tbody = table.tBodies[0];
+    var headRow = table.tHead ? table.tHead.rows[0] : null;
+    if (!tbody || !headRow) return false;
+
+    var wrap = document.createElement("div");
+    wrap.className = "table-block ag-host-wrap";
+    table.parentNode.insertBefore(wrap, table);
+
+    var toolbar = document.createElement("div");
+    toolbar.className = "table-toolbar";
+    wrap.appendChild(toolbar);
+    var search = document.createElement("input");
+    search.type = "text";
+    search.className = "table-filter";
+    search.placeholder = table.getAttribute("data-search-placeholder") || "Quick filter…";
+    search.setAttribute("aria-label", "Quick filter all columns");
+    toolbar.appendChild(search);
+    var clearBtn = document.createElement("button");
+    clearBtn.type = "button";
+    clearBtn.className = "btn btn-sm table-clear-filters";
+    clearBtn.textContent = "Clear all filters";
+    toolbar.appendChild(clearBtn);
+    var status = document.createElement("div");
+    status.className = "table-status";
+    status.setAttribute("role", "status");
+    toolbar.appendChild(status);
+
+    var host = document.createElement("div");
+    var dark = document.documentElement.getAttribute("data-theme") !== "light";
+    host.className = "ag-theme-quartz" + (dark ? "-dark" : "") + " del-ag-grid";
+    wrap.appendChild(host);
+
+    var columnDefs = [];
+    var rowData = [];
+    Array.prototype.forEach.call(headRow.cells, function (th, idx) {
+      var header = (th.textContent || "").replace(/[\u25be\u21e9]/g, "").trim();
+      var numeric = false;
+      Array.prototype.forEach.call(tbody.rows, function (tr) {
+        var cell = tr.cells[idx];
+        if (cell && cell.getAttribute("data-sort-value") && /^-?\d+(\.\d+)?$/.test(cell.getAttribute("data-sort-value"))) numeric = true;
+      });
+      columnDefs.push({
+        colId: "c" + idx,
+        field: "c" + idx,
+        headerName: header || ("Col " + (idx + 1)),
+        filter: numeric ? "agNumberColumnFilter" : "agTextColumnFilter",
+        filterParams: numeric ? { buttons: ["reset", "apply"], closeOnApply: true } : {
+          filterOptions: ["contains", "notContains", "equals", "notEqual", "startsWith", "endsWith", "blank", "notBlank"],
+          defaultOption: "contains",
+          buttons: ["reset", "apply"],
+          closeOnApply: true,
+        },
+        comparator: function (a, b, nodeA, nodeB) {
+          var sa = nodeA && nodeA.data ? nodeA.data["s" + idx] : a;
+          var sb = nodeB && nodeB.data ? nodeB.data["s" + idx] : b;
+          if (sa == null) sa = "";
+          if (sb == null) sb = "";
+          if (sa < sb) return -1;
+          if (sa > sb) return 1;
+          return 0;
+        },
+        cellRenderer: function (params) {
+          var span = document.createElement("span");
+          span.className = "ag-cell-inner";
+          span.innerHTML = (params.data && params.data["h" + idx]) || "";
+          return span;
+        },
+      });
+    });
+    Array.prototype.forEach.call(tbody.rows, function (tr) {
+      var row = { _tr: tr };
+      Array.prototype.forEach.call(headRow.cells, function (_th, idx) {
+        var cell = tr.cells[idx];
+        var text = cell ? (cell.getAttribute("data-filter-value") || cell.textContent || "").replace(/\s+/g, " ").trim() : "";
+        var sortRaw = cell ? cell.getAttribute("data-sort-value") : "";
+        var sortVal = sortRaw && /^-?\d+(\.\d+)?$/.test(sortRaw) ? parseFloat(sortRaw) : (text || "").toLowerCase();
+        row["c" + idx] = text === "—" ? "" : text;
+        row["s" + idx] = sortVal;
+        row["h" + idx] = cell ? cell.innerHTML : "";
+      });
+      rowData.push(row);
+    });
+
+    var pageSize = parseInt(table.getAttribute("data-page-size") || "50", 10);
+    if (!pageSize || pageSize < 0) pageSize = 50;
+    var api = ag.createGrid(host, {
+      columnDefs: columnDefs,
+      rowData: rowData,
+      defaultColDef: {
+        sortable: true,
+        filter: true,
+        floatingFilter: true,
+        resizable: true,
+        minWidth: 72,
+        flex: 1,
+        wrapText: false,
+        autoHeaderHeight: true,
+      },
+      animateRows: false,
+      pagination: true,
+      paginationPageSize: pageSize,
+      paginationPageSizeSelector: [25, 50, 100, 250],
+      rowBuffer: 8,
+      suppressCellFocus: false,
+      enableCellTextSelection: true,
+      ensureDomOrder: true,
+      headerHeight: 36,
+      floatingFiltersHeight: 36,
+      rowHeight: document.documentElement.getAttribute("data-density") === "compact" ? 28 : 36,
+      overlayNoRowsTemplate: "<div class=\"empty-state-msg\">" +
+        (table.getAttribute("data-empty") || "No rows match the current filter.") + "</div>",
+      onFilterChanged: function () { updateStatus(); },
+      onSortChanged: function () { updateStatus(); },
+      onPaginationChanged: function () { updateStatus(); },
+    });
+
+    function updateStatus() {
+      var model = api.paginationGetRowCount ? null : null;
+      var shown = api.getDisplayedRowCount ? api.getDisplayedRowCount() : 0;
+      var total = rowData.length;
+      var filtered = api.getDisplayedRowCount();
+      try {
+        filtered = api.getModel().getTopLevelRowCount ? api.getDisplayedRowCount() : filtered;
+      } catch (e) {}
+      var afterFilter = total;
+      try { afterFilter = api.getDisplayedRowCount(); } catch (e2) {}
+      status.textContent = afterFilter + " of " + total;
+    }
+    function themeSync() {
+      var isDark = document.documentElement.getAttribute("data-theme") !== "light";
+      host.classList.toggle("ag-theme-quartz-dark", isDark);
+      host.classList.toggle("ag-theme-quartz", !isDark);
+    }
+    new MutationObserver(themeSync).observe(document.documentElement, { attributes: true, attributeFilter: ["data-theme"] });
+
+    search.addEventListener("input", function () {
+      api.setGridOption("quickFilterText", search.value);
+      updateStatus();
+    });
+    clearBtn.addEventListener("click", function () {
+      search.value = "";
+      api.setGridOption("quickFilterText", "");
+      api.setFilterModel(null);
+      updateStatus();
+    });
+    var prefill = table.getAttribute("data-prefill");
+    if (prefill) {
+      search.value = prefill;
+      api.setGridOption("quickFilterText", prefill);
+    }
+    table._delGridApi = api;
+    table._delFilteredRows = function () {
+      var out = [];
+      api.forEachNodeAfterFilterAndSort(function (node) {
+        if (node.data && node.data._tr) out.push(node.data._tr);
+      });
+      return out;
+    };
+    table.style.display = "none";
+    wrap.appendChild(table);
+    updateStatus();
+    return true;
+  }
+
   function enhanceTable(table) {
     if (!table || table.getAttribute("data-enhanced-ready")) return;
     if (!table.tHead || !table.tBodies.length) return;
     table.setAttribute("data-enhanced-ready", "1");
+    if (enhanceTableAgGrid(table)) return;
     enhanceTableVanilla(table);
   }
 
@@ -1422,6 +1590,36 @@
   if (glossaryCollapseBtn) {
     glossaryCollapseBtn.addEventListener("click", function () {
       setGlossaryCollapsed(!(layout && layout.classList.contains("glossary-collapsed")));
+    });
+  }
+
+  var RAIL_TAB_KEY = "del.rightRailTab";
+  function setRailTab(tab) {
+    tab = tab === "ask" ? "ask" : "help";
+    document.querySelectorAll(".rail-tab").forEach(function (btn) {
+      var on = btn.getAttribute("data-rail-tab") === tab;
+      btn.classList.toggle("is-active", on);
+      btn.setAttribute("aria-selected", on ? "true" : "false");
+    });
+    document.querySelectorAll("[data-rail-panel]").forEach(function (panel) {
+      panel.hidden = panel.getAttribute("data-rail-panel") !== tab;
+    });
+    if (layout) layout.classList.toggle("ask-open", tab === "ask");
+    try { localStorage.setItem(RAIL_TAB_KEY, tab); } catch (e) {}
+    if (tab === "ask") setGlossaryCollapsed(false);
+  }
+  document.querySelectorAll(".rail-tab").forEach(function (btn) {
+    btn.addEventListener("click", function () { setRailTab(btn.getAttribute("data-rail-tab")); });
+  });
+  try {
+    var savedTab = localStorage.getItem(RAIL_TAB_KEY);
+    if (savedTab === "ask" && document.getElementById("rail-panel-ask")) setRailTab("ask");
+  } catch (e) {}
+  var askFab = document.getElementById("assistant-fab");
+  if (askFab) {
+    askFab.addEventListener("click", function () {
+      setRailTab("ask");
+      if (layout) layout.classList.add("ask-open");
     });
   }
 
