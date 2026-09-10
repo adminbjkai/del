@@ -33,9 +33,24 @@ preserved rather than deleted. See
   <img src="../assets/02-dashboard.png" alt="DEL dashboard" />
 </Frame>
 
+<Tabs>
+  <Tab title="Operator">
+    Work the [operator loop](/guides/sop): scan, apps, resources, orphans (review only), Ask, then **Plan removal**. Dry-run before LIVE.
+  </Tab>
+  <Tab title="Ask">
+    Read-only. Quotes every current owner from inventory context. Cannot plan or delete. Page-aware prompts live in the right rail.
+  </Tab>
+  <Tab title="Admin">
+    Units `del-web`, `del-helper`, `del-docs`. Helper is root on a unix socket with 22 allowlisted ops. See [Architecture](/reference/architecture).
+  </Tab>
+</Tabs>
+
 ## Where to next
 
 <CardGroup cols={2}>
+  <Card title="Operator loop" href="/guides/sop">
+    SOP with screenshots, diagrams, and the vocabulary outline.
+  </Card>
   <Card title="Logging In" href="/guides/logging-in">
     Sign in and find your way around the interface.
   </Card>
@@ -75,7 +90,7 @@ preserved rather than deleted. See
 | Backups | `/apps/del/backups/` |
 | Admin CLI | `/apps/del/scripts/del-admin` (`create-admin`, `change-password`, `migrate`, `rescan`, `backup-db`) |
 | Protection | DEL is flagged `protected` — the planner refuses to build a removal plan for it |
-| Unauthenticated routes | `/login`, `/healthz`, `/favicon.ico`, and the four `/static/*` assets. Everything else needs a session |
+| Unauthenticated routes | `/login`, `/healthz`, `/favicon.ico`, and `/static/*` (`app.css`, `app.js`, `theme-init.js`, `favicon.svg`, `assistant.css`, `assistant.js`, vendored AG Grid). Everything else needs a session |
 
 DEL is read-only against the host in everything except an operator-approved,
 executed removal job. Scanning, browsing, and plan-building never change anything on

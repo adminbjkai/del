@@ -12,6 +12,18 @@ reading a removal plan safely.
 
 ## The confidence levels
 
+<AccordionGroup>
+  <Accordion title="confirmed (≥95) and high (≥80)">
+    Strong evidence. Eligible for a removal plan when exclusive. Manifest entries display as confirmed.
+  </Accordion>
+  <Accordion title="probable (≥60)">
+    Strong enough to **count as an owner** (hides the resource from Orphans). **Never auto-removed** — stays Preserved unless you raise it via a manifest.
+  </Accordion>
+  <Accordion title="possible (≥30)">
+    Weak confidence band. Not an owner. Always blocked from removal. Different from ownership enum `possible`.
+  </Accordion>
+</AccordionGroup>
+
 <Frame caption="The four confidence levels and what each one means for removal.">
   <img src="../../assets/infographic-confidence.png" alt="Confidence levels: confirmed and high are eligible, probable needs approval, possible is blocked" />
 </Frame>

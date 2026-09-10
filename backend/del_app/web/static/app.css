@@ -1448,6 +1448,9 @@ pre.output { background: var(--bg); border: 1px solid var(--border); border-radi
 @media (max-width: 480px) {
   .stat-grid { grid-template-columns: 1fr 1fr; }
   .content { padding-left: 0.6rem; padding-right: 0.6rem; }
+  .page-actions, .sop-actions { flex-direction: column; align-items: stretch; }
+  .page-actions .btn, .sop-actions .btn, .sop-actions .btn-group { width: 100%; }
+  .sop-actions .btn-group { display: flex; flex-wrap: wrap; }
   .login-card { width: min(100% - 1.25rem, 360px); margin: 0.65rem; }
   .table th, .table td { font-size: 0.8rem; padding: 0.4rem 0.5rem; }
   .gallery-toolbar > * { flex: 1 1 100%; }

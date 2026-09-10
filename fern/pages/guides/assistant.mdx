@@ -12,16 +12,25 @@ build a removal plan. Plans still go through Applications → plan → job.
 
 ## What you can ask
 
-Typical path: [scan](/guides/scanning) → [browse](/guides/browsing) →
-[orphans](/guides/orphans) → this assistant → [remove](/guides/removing-an-application).
+Typical path is the [operator loop](/guides/sop): scan → apps → resources →
+orphans → this assistant → [remove](/guides/removing-an-application).
 
-Pick a **scope**, then click a suggested question or type your own:
+Pick a **scope**, then click a suggested question (label + description) or type your own:
 
-- **General** — whole-server summary, stale apps, shared resources
-- **Application** — one app's pieces, blast radius, what to back up
-- **Orphans** — whether unattributed leftovers look safe to review
-- **Resource type** — images, containers, networks, or volumes as a class
-- **Resource** — one image/container/network/volume: owners, shared flag, delete caution
+<AccordionGroup>
+  <Accordion title="General">
+    Whole-server summary, stale apps, shared resources, complete owner index (every volume/image/network/container), protected apps.
+  </Accordion>
+  <Accordion title="Application">
+    Pieces, blast radius, backups, `all_owners` / `also_owners` on shared rows, go/no-go if protected.
+  </Accordion>
+  <Accordion title="Orphans">
+    Review-only. Cluster, lowest-risk to investigate next, possible correlation misses. Never delete from `/orphans`.
+  </Accordion>
+  <Accordion title="Resource type / resource">
+    Images, containers, networks, volumes as a class, or one key: owners, shared, data-loss. Never “safe to delete” if shared.
+  </Accordion>
+</AccordionGroup>
 
 Suggested prompts are the same library for every operator. Deep links from an app
 page, Orphans, or a Resources row pre-select the matching scope.

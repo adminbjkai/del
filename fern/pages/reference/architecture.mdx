@@ -8,6 +8,20 @@ DEL is a self-hosted administrative application for discovering, reviewing, and
 completely uninstalling applications from this server (bjkai-2tb-ubuntu). It is
 served at https://del.bjk.ai behind Nginx, bound only to localhost.
 
+Operator path: [scan → apps → resources → orphans → Ask → plan](/guides/sop).
+
+```mermaid
+flowchart LR
+  S[Scan] --> I[SQLite inventory]
+  I --> UI[Apps / Resources / Orphans]
+  UI --> Ask[Ask rail]
+  I --> Ask
+  UI --> P[Plan builder]
+  P --> D[Dry-run job]
+  D --> L[LIVE job]
+  L --> H[del-helper root socket]
+```
+
 ## Stack
 
 | Layer | Choice | Rationale |

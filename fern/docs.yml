@@ -8,11 +8,15 @@ navbar-links:
     text: Live app
     href: https://del.bjk.ai
 
+css: ./assets/docs.css
+
 navigation:
   - section: Getting Started
     contents:
       - page: Overview
         path: ./pages/overview.mdx
+      - page: Operator loop
+        path: ./pages/guides/sop.mdx
       - page: Logging In
         path: ./pages/guides/logging-in.mdx
   - section: Using DEL
@@ -64,3 +68,4 @@ colors:
 
 layout:
   searchbar-placement: header
+  page-width: wide

@@ -1,0 +1,28 @@
+/* Mobile-first extras on top of Fern chrome. Keep tap targets large; never clip diagrams. */
+
+img,
+figure img,
+.fern-image {
+  max-width: 100%;
+  height: auto;
+}
+
+@media (max-width: 768px) {
+  table {
+    display: block;
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  pre, code {
+    overflow-x: auto;
+    max-width: 100%;
+  }
+
+  /* Fern side nav is a drawer on small screens; keep page padding usable. */
+  main {
+    padding-left: 1rem;
+    padding-right: 1rem;
+  }
+}

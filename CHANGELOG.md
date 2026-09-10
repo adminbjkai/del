@@ -1,5 +1,12 @@
 # Changelog
 
+## 2026.9.10 docs
+
+Operator-loop docs page (steps, mermaid, screenshots, collapsible vocabulary).
+Overview tabs. Architecture loop diagram. Assistant/confidence accordions.
+Mobile CSS for Fern and the app SOP/actions. Unauthenticated `/static/*` claim
+matches the files that actually ship.
+
 ## 2026.9.10
 
 Ask can name every current owner. App-scope context now includes
