@@ -11,7 +11,7 @@
     <span class="muted text-sm">Export / ask</span>
     <button type="button" class="btn btn-sm btn-ghost" data-export-table="resources-table" title="Export the currently filtered rows as CSV">Export CSV</button>
     {% if ask_rows %}
-    <a class="btn btn-sm btn-ghost" href="/assistant?scope=resource_type&amp;target={{ res_type }}" title="Ask the read-only assistant about all {{ res_label | lower }}">Ask the assistant</a>
+    <a class="btn btn-sm btn-ghost" href="/assistant?scope=resource_type&amp;target={{ res_type }}" data-ask-scope="resource_type" data-ask-target="{{ res_type }}" title="Ask the read-only assistant about all {{ res_label | lower }}">Ask the assistant</a>
     {% endif %}
   </div>
 </div>

@@ -74,7 +74,7 @@
       <h2 class="text-md">Suggested questions</h2>
       <div class="stack-sm" id="assistant-prompts">
         {% for p in prompts %}
-        <button type="button" class="assistant-prompt" data-prompt-id="{{ p.id }}" data-text="{{ p.text }}" title="{{ p.description or p.text }}">{{ p.label }}</button>
+        <button type="button" class="assistant-prompt" data-prompt-id="{{ p.id }}" data-text="{{ p.text }}" title="{{ p.description or p.text }}"><span class="assistant-prompt-label">{{ p.label }}</span>{% if p.description %}<span class="assistant-prompt-desc">{{ p.description }}</span>{% endif %}</button>
         {% else %}
         <div class="muted text-sm">No suggestions for this scope.</div>
         {% endfor %}

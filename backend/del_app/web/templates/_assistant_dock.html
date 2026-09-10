@@ -35,7 +35,7 @@
               data-resources="[]"></select>
     </label>
   </div>
-  <div class="stack-sm mt-2" id="assistant-prompts"></div>
+  <div class="stack-sm mt-2" id="assistant-prompts" aria-label="Suggested questions"></div>
   <div class="assistant-transcript assistant-transcript-dock" id="assistant-transcript" aria-live="polite"></div>
   <div class="assistant-statusline muted text-xs" id="assistant-statusline">
     <span class="mono" id="assistant-model">{{ (assistant_status or {}).get('model') or '' }}</span>
