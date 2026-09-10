@@ -36,7 +36,7 @@
         {% if r.data.get('health') %}
           <span class="badge {% if r.data.get('health') == 'healthy' %}badge-ok{% elif r.data.get('health') == 'unhealthy' %}badge-danger{% endif %}" title="Docker healthcheck">{{ r.data.get('health') }}</span>
         {% else %}
-          <span class="muted" style="font-size:.75rem" title="No Docker healthcheck defined for this container">no healthcheck</span>
+          <span class="muted text-xs" title="No Docker healthcheck defined for this container">no healthcheck</span>
         {% endif %}
       </td>
       <td>{{ m.trunc(r.data.get('image')) }}</td>

@@ -40,6 +40,30 @@ class ScanInProgressError(RuntimeError):
     """Raised when run_scan is called while another scan is already running."""
 
 
+def scan_state() -> dict:
+    """Return the state of the currently in-process running scan, if any.
+
+    Uses the same in-process lock as run_scan(): if it's held, a scan is
+    running in this process and the newest 'running' row in the scans table
+    describes it. Returns {"running": False, "scan_id": None, "started": None}
+    when no scan is running.
+    """
+    running = _scan_lock.locked()
+    if not running:
+        return {"running": False, "scan_id": None, "started": None}
+    conn = db.get_db()
+    try:
+        rows = db.q(
+            conn,
+            "SELECT id, started FROM scans WHERE status = 'running' ORDER BY id DESC LIMIT 1",
+        )
+    finally:
+        conn.close()
+    if not rows:
+        return {"running": True, "scan_id": None, "started": None}
+    return {"running": True, "scan_id": rows[0]["id"], "started": rows[0]["started"]}
+
+
 def abandon_stale_scans(reason: str = "abandoned: process restart or crash mid-scan") -> int:
     """Mark every scan still status='running' as failed.
 

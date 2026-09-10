@@ -1,13 +1,9 @@
 {% extends "base.html" %}
 {% import "_macros.html" as m %}
 {% block title %}{{ app.get('name', app.get('slug')) }}{% endblock %}
-{% macro confidence_badge(a) -%}
-  {% set lvl = a.get('level') or 'possible' %}
-  <span class="badge badge-confidence-{{ lvl }}" title="confidence {{ a.get('confidence') }}">{{ lvl }}</span>
-{%- endmacro %}
 {% block content %}
 {% if removed %}
-<div class="flash flash-info" role="status" style="margin-bottom:1rem">
+<div class="flash flash-info mb-4" role="status">
   This application was <strong>not present in the latest scan</strong> — it has been removed
   (or is no longer discoverable). This page shows its last-known state for history/audit.
   Resources listed here no longer exist unless marked preserved in its final removal job.
@@ -18,6 +14,10 @@
 </div>
 <p class="muted">slug: {{ app.get('slug') }} · status: {{ app.get('status') }}
   {% if app.get('protected') %}<span class="badge badge-blue">protected</span>{% endif %}
+</p>
+<p class="muted confidence-explainer">
+  Confidence and evidence below explain how DEL decided each resource belongs to this app —
+  <button type="button" class="link-button" data-glossary-open>see the glossary</button>.
 </p>
 
 <div class="action-bar">
@@ -30,28 +30,6 @@
   <a class="btn" href="/manifests/{{ app.get('slug') }}">Edit manifest</a>
 </div>
 
-<section class="panel">
-  <h2>Overview</h2>
-  <dl class="kv">
-    <dt>Kind</dt><dd>{{ app.get('kind') or '—' }}</dd>
-    <dt>Domains</dt><dd>{{ m.domain_links(app.get('domains')) }}</dd>
-    <dt>Installed</dt>
-    <dd title="Best available host signal (container created / project directory age), else first discovery">
-      <span class="dt">{{ format_dt(app.get('installed_at')) }}</span>
-    </dd>
-    <dt>First seen by DEL</dt>
-    <dd title="Scan #{{ app.get('first_seen') or '—' }}">
-      <span class="dt">{{ format_dt(app.get('first_seen_at')) }}</span>
-    </dd>
-    <dt>Last seen by DEL</dt>
-    <dd title="Scan #{{ app.get('last_seen') or '—' }}">
-      <span class="dt">{{ format_dt(app.get('last_seen_at')) }}</span>
-    </dd>
-    <dt>Manifest</dt><dd>{{ app.get('manifest_path') or '—' }}</dd>
-    <dt>Resources</dt><dd>{{ associations | length }}</dd>
-  </dl>
-</section>
-
 {% set shared_items = sections.get('shared', []) %}
 {% if shared_items %}
 <div class="box box-warning">
@@ -61,12 +39,48 @@
 </div>
 {% endif %}
 
-{% for section_key, section_title in [('docker', 'Docker'), ('systemd', 'systemd'), ('nginx', 'Nginx'), ('scheduled', 'Scheduled'), ('processes', 'Processes'), ('files', 'Files / Storage'), ('shared', 'Shared resources')] %}
-{% set items = sections.get(section_key, []) %}
-<section class="panel">
-  <details {% if items %}open{% endif %}>
-    <summary><strong>{{ section_title }}</strong> <span class="count-pill">{{ items | length }}</span></summary>
+{% set section_defs = [('docker', 'Docker'), ('systemd', 'systemd'), ('nginx', 'Nginx'), ('scheduled', 'Scheduled'), ('processes', 'Processes'), ('files', 'Files / Storage'), ('shared', 'Shared resources')] %}
+<div class="tabs" id="app-detail-tabs">
+  <div class="tablist" role="tablist" aria-label="Application detail">
+    <button type="button" class="tab" id="tab-overview" role="tab" aria-controls="panel-overview" aria-selected="false">Overview</button>
+    {% for section_key, section_title in section_defs %}
+    {% set items = sections.get(section_key, []) %}
     {% if items %}
+    <button type="button" class="tab" id="tab-{{ section_key }}" role="tab" aria-controls="panel-{{ section_key }}" aria-selected="false">{{ section_title }} <span class="count-pill">{{ items | length }}</span></button>
+    {% endif %}
+    {% endfor %}
+    {% if associations %}
+    <button type="button" class="tab" id="tab-readiness" role="tab" aria-controls="panel-readiness" aria-selected="false">Readiness <span class="count-pill">{{ associations | length }}</span></button>
+    {% endif %}
+  </div>
+
+  <div class="tabpanel panel" id="panel-overview" role="tabpanel" aria-labelledby="tab-overview" hidden>
+    <h2>Overview</h2>
+    <dl class="kv">
+      <dt>Kind</dt><dd>{{ app.get('kind') or '—' }}</dd>
+      <dt>Domains</dt><dd>{{ m.domain_links(app.get('domains')) }}</dd>
+      <dt>Installed</dt>
+      <dd title="Best available host signal (container created / project directory age), else first discovery">
+        <span class="dt">{{ format_dt(app.get('installed_at')) }}</span>
+      </dd>
+      <dt>First seen by DEL</dt>
+      <dd title="Scan #{{ app.get('first_seen') or '—' }}">
+        <span class="dt">{{ format_dt(app.get('first_seen_at')) }}</span>
+      </dd>
+      <dt>Last seen by DEL</dt>
+      <dd title="Scan #{{ app.get('last_seen') or '—' }}">
+        <span class="dt">{{ format_dt(app.get('last_seen_at')) }}</span>
+      </dd>
+      <dt>Manifest</dt><dd>{{ app.get('manifest_path') or '—' }}</dd>
+      <dt>Resources</dt><dd>{{ associations | length }}</dd>
+    </dl>
+  </div>
+
+  {% for section_key, section_title in section_defs %}
+  {% set items = sections.get(section_key, []) %}
+  {% if items %}
+  <div class="tabpanel panel" id="panel-{{ section_key }}" role="tabpanel" aria-labelledby="tab-{{ section_key }}" hidden>
+    <h2>{{ section_title }} <span class="count-pill">{{ items | length }}</span></h2>
     <table class="table" data-enhanced data-empty="Nothing found." data-page-size="25">
       <caption class="sr-only">{{ section_title }} resources associated with this application.</caption>
       <thead><tr><th scope="col">Resource</th>{% if section_key == 'docker' %}<th scope="col">Host port(s)</th><th scope="col">Container port(s)</th>{% endif %}<th scope="col">Confidence</th><th scope="col">Risk</th><th scope="col">Removal</th><th scope="col" data-nosort>Evidence</th><th scope="col" data-nosort>Actions</th></tr></thead>
@@ -75,14 +89,14 @@
         <tr>
           <td>{{ a.get('resource_display') or a.get('resource_key') }}{% if a.get('shared') %} <span class="badge badge-amber">shared</span>{% endif %}
             {% set rk = a.get('resource_key') %}
-            {% if rk and rk.startswith('/') and rk != a.get('resource_display') %}<div class="muted mono" style="font-size:0.8em">{{ rk }}</div>{% endif %}
+            {% if rk and rk.startswith('/') and rk != a.get('resource_display') %}<div class="muted mono text-xs">{{ rk }}</div>{% endif %}
           </td>
           {% if section_key == 'docker' %}
           {% set mappings = a.get('port_mappings') %}
           <td>{{ mappings | map(attribute='host') | list | join(', ') if mappings else '—' }}</td>
           <td>{{ mappings | map(attribute='container') | list | join(', ') if mappings else '—' }}</td>
           {% endif %}
-          <td data-filter-value="{{ a.get('level') }}" data-sort-value="{{ a.get('confidence') }}">{{ confidence_badge(a) }}</td>
+          <td data-filter-value="{{ a.get('level') }}" data-sort-value="{{ a.get('confidence') }}">{{ m.confidence(a) }}</td>
           <td data-filter-value="{{ a.get('data_loss_risk') }}">{{ a.get('data_loss_risk') or '—' }}</td>
           <td data-filter-value="{{ a.get('removal_eligible') }}">{{ a.get('removal_eligible') or '—' }}</td>
           <td>
@@ -108,31 +122,31 @@
         {% endfor %}
       </tbody>
     </table>
-    {% else %}
-    <p class="muted">Nothing found.</p>
-    {% endif %}
-  </details>
-</section>
-{% endfor %}
+  </div>
+  {% endif %}
+  {% endfor %}
 
-<section class="panel">
-  <h2>Removal readiness <span class="count-pill">{{ associations | length }}</span></h2>
-  <table class="table" data-enhanced data-empty="No associated resources." data-page-size="25">
-    <caption class="sr-only">Every associated resource with its confidence, data-loss risk and removal eligibility.</caption>
-    <thead><tr><th scope="col">Resource</th><th scope="col">Confidence</th><th scope="col">Risk</th><th scope="col">Removal</th></tr></thead>
-    <tbody>
-      {% for a in associations %}
-      <tr class="{% if a.get('data_loss_risk') == 'data' %}row-danger{% endif %}">
-        <td><span class="badge" style="font-size:0.72em;vertical-align:middle">{{ a.get('resource_type') }}</span> {{ a.get('resource_display') or a.get('resource_key') }}
-          {% set rk = a.get('resource_key') %}
-          {% if rk and rk.startswith('/') and rk != a.get('resource_display') %}<div class="muted mono" style="font-size:0.8em">{{ rk }}</div>{% endif %}
-        </td>
-        <td data-filter-value="{{ a.get('level') }}" data-sort-value="{{ a.get('confidence') }}">{{ confidence_badge(a) }}</td>
-        <td data-filter-value="{{ a.get('data_loss_risk') }}">{{ a.get('data_loss_risk') or '—' }}</td>
-        <td data-filter-value="{{ a.get('removal_eligible') }}">{{ a.get('removal_eligible') or '—' }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</section>
+  {% if associations %}
+  <div class="tabpanel panel" id="panel-readiness" role="tabpanel" aria-labelledby="tab-readiness" hidden>
+    <h2>Removal readiness <span class="count-pill">{{ associations | length }}</span></h2>
+    <table class="table" data-enhanced data-empty="No associated resources." data-page-size="25">
+      <caption class="sr-only">Every associated resource with its confidence, data-loss risk and removal eligibility.</caption>
+      <thead><tr><th scope="col">Resource</th><th scope="col">Confidence</th><th scope="col">Risk</th><th scope="col">Removal</th></tr></thead>
+      <tbody>
+        {% for a in associations %}
+        <tr class="{% if a.get('data_loss_risk') == 'data' %}row-danger{% endif %}">
+          <td><span class="badge badge-sm align-middle">{{ a.get('resource_type') }}</span> {{ a.get('resource_display') or a.get('resource_key') }}
+            {% set rk = a.get('resource_key') %}
+            {% if rk and rk.startswith('/') and rk != a.get('resource_display') %}<div class="muted mono text-xs">{{ rk }}</div>{% endif %}
+          </td>
+          <td data-filter-value="{{ a.get('level') }}" data-sort-value="{{ a.get('confidence') }}">{{ m.confidence(a) }}</td>
+          <td data-filter-value="{{ a.get('data_loss_risk') }}">{{ a.get('data_loss_risk') or '—' }}</td>
+          <td data-filter-value="{{ a.get('removal_eligible') }}">{{ a.get('removal_eligible') or '—' }}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+  {% endif %}
+</div>
 {% endblock %}

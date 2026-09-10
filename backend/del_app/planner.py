@@ -51,6 +51,10 @@ class PlanError(Exception):
     integrity verification (tamper guard)."""
 
 
+class PlanNotFoundError(PlanError):
+    """Raised when a requested plan id does not exist."""
+
+
 def _level_from_confidence(confidence: int, source: str | None) -> str:
     """Map a numeric confidence + source to a confidence level per
     docs/ARCHITECTURE.md "Confidence scoring"."""
@@ -75,6 +79,27 @@ def _data(row: sqlite3.Row) -> dict:
         return json.loads(raw)
     except (TypeError, json.JSONDecodeError):
         return {}
+
+
+def _check_stage_order(steps: list[PlanStep]) -> None:
+    """Raise PlanError if step stages are not non-decreasing per STAGE_ORDER.
+
+    STAGE_ORDER is documented as authoritative (docs/ARCHITECTURE.md); a plan
+    whose steps regress to an earlier stage (e.g. a remove_files step before a
+    quiesce step) would execute host mutations out of the safe order.
+    """
+    rank = {stage: i for i, stage in enumerate(STAGE_ORDER)}
+    last = -1
+    for step in steps:
+        r = rank.get(step.stage)
+        if r is None:
+            raise PlanError(f"unknown plan stage: {step.stage!r} (seq={step.seq})")
+        if r < last:
+            raise PlanError(
+                f"plan step seq={step.seq} stage={step.stage!r} violates STAGE_ORDER "
+                f"(follows a later stage)"
+            )
+        last = r
 
 
 def _canonical_steps_json(steps: list[PlanStep]) -> str:
@@ -502,6 +527,41 @@ def build_plan(app_slug: str, options: dict) -> Plan:
     # --- Stage: remove_runtime ---
     compose_rows = by_type.get("compose_project", [])
     if compose_rows:
+        # compose_down's label sweep (`docker ps -aq --filter
+        # label=com.docker.compose.project=<name>`) is host-wide by project
+        # NAME, not by directory. If another app's compose project resolves
+        # to the same name under a different path, warn the operator before
+        # execution so they know that sweep may also hit the other app's
+        # containers.
+        conn_collision = get_db()
+        try:
+            other_compose_rows = q(
+                conn_collision,
+                """
+                SELECT ap.slug AS app_slug, r.path AS resource_path,
+                       r.data_json AS data_json
+                FROM associations a
+                JOIN resources r ON r.id = a.resource_id
+                JOIN applications ap ON ap.id = a.app_id
+                WHERE r.type = 'compose_project' AND ap.slug != ?
+                """,
+                (app_slug,),
+            )
+        finally:
+            conn_collision.close()
+        for row in compose_rows:
+            this_name = _compose_project_name(row, _data(row), app_slug)
+            this_path = row["resource_path"]
+            for orow in other_compose_rows:
+                other_data = _data(orow)
+                other_name = _compose_project_name(orow, other_data, orow["app_slug"])
+                if other_name == this_name and orow["resource_path"] != this_path:
+                    warnings.append(
+                        f"compose project name '{this_name}' collision: {this_path} "
+                        f"(this app) and {orow['resource_path']} (app '{orow['app_slug']}') "
+                        f"share the same docker-compose project label; compose_down's "
+                        f"host-wide label sweep may remove the other app's containers too"
+                    )
         for row in compose_rows:
             data = _data(row)
             steps.append(PlanStep(
@@ -691,6 +751,8 @@ def build_plan(app_slug: str, options: dict) -> Plan:
         for d in data.get("domains", []):
             manual_followup.append(f"Remove DNS record for {d}")
 
+    _check_stage_order(steps)
+
     plan = Plan(
         app_slug=app_slug,
         options=options,
@@ -713,6 +775,8 @@ def persist_plan(plan: Plan, conn: sqlite3.Connection | None = None) -> int:
         if not app_rows:
             raise PlanError(f"no such application: {plan.app_slug}")
         app_id = app_rows[0]["id"]
+
+        _check_stage_order(plan.steps)
 
         steps_json = _canonical_steps_json(plan.steps)
         digest = compute_hmac(plan.steps)
@@ -755,7 +819,7 @@ def load_plan(plan_id: int, conn: sqlite3.Connection | None = None) -> tuple[Pla
             (plan_id,),
         )
         if not rows:
-            raise PlanError(f"no such plan: {plan_id}")
+            raise PlanNotFoundError(f"no such plan: {plan_id}")
         row = rows[0]
         steps_data = json.loads(row["steps_json"])
         steps = [PlanStep(**s) for s in steps_data]

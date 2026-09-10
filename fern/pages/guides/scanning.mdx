@@ -19,9 +19,12 @@ right after logging in for the first time, and any time the host has changed.
 
 <Tabs>
   <Tab title="From the UI">
-    Click **Run scan now** on the **Dashboard** (or on the **Settings** page). A new
-    row appears in *Recent scans*; when its status flips to `done`, the inventory is
-    up to date. Both buttons issue an authenticated, CSRF-protected `POST /scan`.
+    Click **Run scan now** on the **Dashboard** (or on the **Settings** page). Both
+    buttons issue an authenticated, CSRF-protected `POST /scan`, which starts the
+    scan on a background thread and redirects immediately (you're not left waiting
+    on the request). A new row appears in *Recent scans*; poll `GET /scan/status`
+    (or just reload) to see when its status flips to `done`. If a scan is already
+    running, `POST /scan` redirects with an error instead of starting a second one.
   </Tab>
   <Tab title="From the CLI">
     ```bash

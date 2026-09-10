@@ -16,6 +16,10 @@ change DEL inventory or removal data. Card icons are proxied through DEL's own
 `/app-icon/{domain}` route rather than loaded from each app's origin, so an app
 behind HTTP basic auth cannot pop a credential prompt over the gallery.
 
+The admin UI itself defaults to a dark theme with a header toggle for light mode
+(persisted in browser local storage) and a `Ctrl`/`Cmd`+`K` command palette for
+jumping to any sidebar page or application.
+
 ## Quick facts
 
 | Item | Value |
@@ -37,7 +41,7 @@ behind HTTP basic auth cannot pop a credential prompt over the gallery.
 | TLS | Nginx, existing `bjk.ai` wildcard cert |
 | Protection | DEL is flagged `protected=1`; the planner refuses to build a removal plan for it |
 | Inventory export | Self-contained, whole-server inventory dump (`/apps/del/miscwork/`, gitignored) served at `https://del.bjk.ai/miscwork.html` (and aliased at `/inventory`), the only basic-auth-protected location in the vhost (`auth_basic_user_file /etc/nginx/.del-docs-htpasswd`). `/docs` has no `auth_basic` at all |
-| Unauthenticated routes | `/login`, `/healthz`, `/favicon.ico`, and the four `/static/*` assets (`app.css`, `app.js`, `ag-grid-community.min.js`, `favicon.svg`). Everything else — including `/app-icon/{domain}` — requires a session |
+| Unauthenticated routes | `/login`, `/healthz`, `/favicon.ico`, and the four `/static/*` assets (`app.css`, `app.js`, `theme-init.js`, `favicon.svg`). Everything else — including `/app-icon/{domain}` and `/palette.json` — requires a session |
 
 ## Quick start
 
@@ -94,8 +98,16 @@ If you are reading the committed repo, do not go looking for them:
 | `PROGRESS.md` | Scratch working notes for whatever change is in flight; finished ones are moved into `reports/<date>/` |
 | `miscwork/` | Build scripts and output for the whole-server inventory export served at `/miscwork.html` |
 
+### Documentation structure
+
+`fern/pages/**` mirrors the root/`docs/` markdown for the published Fern site
+at `/docs`; update both together when a fact changes. The `reports/` table
+above is intentional audit history, not stale content — leave it as-is.
+
 ## Tests
 
 ```bash
 cd /apps/del/backend && ../.venv/bin/python -m pytest ../tests/ -q
 ```
+
+237 passed, 1 skipped as of this writing.

@@ -259,6 +259,63 @@ def test_path_delete_already_absent_is_idempotent_success(tmp_policy):
     assert res["changed"] == []
 
 
+def test_recheck_realpath_accepts_unchanged_path(tmp_policy, tmp_path):
+    target = tmp_path / "stable"
+    target.mkdir()
+    V.recheck_realpath(str(target), os.path.realpath(str(target)))  # must not raise
+
+
+def test_recheck_realpath_rejects_swapped_symlink(tmp_policy, tmp_path):
+    real_a = tmp_path / "a"
+    real_b = tmp_path / "b"
+    real_a.mkdir()
+    real_b.mkdir()
+    link = tmp_path / "link"
+    link.symlink_to(real_a)
+    expected = os.path.realpath(str(link))
+    assert expected == str(real_a)
+
+    # attacker swaps the symlink target after validation resolved it
+    link.unlink()
+    link.symlink_to(real_b)
+
+    with pytest.raises(V.ValidationError):
+        V.recheck_realpath(str(link), expected)
+
+
+def test_path_delete_refuses_when_symlink_swapped_after_validation(tmp_policy, tmp_path, monkeypatch):
+    """Simulates a TOCTOU attack: the approved-root entry is a symlink whose
+    target is swapped to point outside the approved root AFTER
+    ops.path_delete's own initial validation but BEFORE the destructive rm.
+    (ops.path_delete revalidates from scratch on every call, so an attacker
+    has to win the race inside a single call — this pins the re-check that
+    closes exactly that window.)
+    """
+    approved = tmp_policy["approved_deletion_roots"][0]
+    victim = os.path.join(approved, "victim")
+    inside_approved = os.path.join(approved, "inside-approved")
+    os.makedirs(tmp_path / "outside", exist_ok=True)
+    os.makedirs(inside_approved, exist_ok=True)
+    os.symlink(inside_approved, victim)
+
+    real_validate = V.validate_path_for_deletion
+
+    def swap_then_validate(path, policy, must_exist=True):
+        result = real_validate(path, policy, must_exist=must_exist)
+        # Attacker wins the race right after validation returns.
+        os.remove(victim)
+        os.symlink(str(tmp_path / "outside"), victim)
+        return result
+
+    monkeypatch.setattr(H.V, "validate_path_for_deletion", swap_then_validate)
+
+    ops = H.Operations(tmp_policy)
+    with pytest.raises(V.ValidationError):
+        ops.path_delete({"path": victim}, dry_run=False)
+    # The swapped-to directory must survive: the rm never ran.
+    assert os.path.isdir(tmp_path / "outside")
+
+
 def test_cron_rm_already_absent_is_idempotent_success(tmp_policy):
     cron_dir = tmp_policy["cron_d_dir"]
     os.makedirs(cron_dir, exist_ok=True)

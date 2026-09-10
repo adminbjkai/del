@@ -1,20 +1,41 @@
 {% extends "base.html" %}
+{% import "_macros.html" as m %}
 {% block title %}Dashboard{% endblock %}
 {% block content %}
 <div class="page-header">
   <h1>Dashboard</h1>
   {% if last_scan %}
-  <div class="scan-strip muted">
+  <div class="scan-strip muted" id="scan-strip">
     Last scan
     <span class="badge status-{{ last_scan.get('status') }}">#{{ last_scan.get('id') }} {{ last_scan.get('status') }}</span>
     {% if last_scan_age %} · {{ last_scan_age }}{% endif %}
     {% if last_scan_duration and last_scan_duration != '—' %} · took {{ last_scan_duration }}{% endif %}
     · finished <span class="dt">{{ format_dt(last_scan.get('finished') or last_scan.get('started')) }}</span>
+    <span class="scan-strip-live" id="scan-strip-live" hidden>
+      <span class="scan-strip-bar" aria-hidden="true"></span>
+      <span id="scan-strip-elapsed">scanning…</span>
+    </span>
   </div>
   {% else %}
-  <div class="scan-strip muted">No scans yet — run one below.</div>
+  <div class="scan-strip muted" id="scan-strip">No scans yet — run one below.</div>
   {% endif %}
 </div>
+
+<section class="panel" id="attention-panel">
+  <h2>Needs attention</h2>
+  {% if attention is defined and attention %}
+  <ul class="attention-list">
+    {% for a in attention %}
+    <li class="attention-item">
+      <a href="{{ a.url }}">{{ a.name }}</a>
+      <span class="attention-reason">{{ a.reason }}</span>
+    </li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  {{ m.empty_state('Nothing needs attention right now.') }}
+  {% endif %}
+</section>
 <div class="stat-grid">
   <a class="stat-card" href="/apps"><div class="stat-value">{{ stats.get('apps', 0) }}</div><div class="stat-label">Applications</div></a>
   <a class="stat-card" href="/jobs"><div class="stat-value">{{ stats.get('running', 0) }}</div><div class="stat-label">Running jobs</div></a>
@@ -41,9 +62,9 @@
       {% endfor %}
     </tbody>
   </table>
-  <form method="post" action="/scan" style="margin-top:.75rem;" data-submit-guard="Starting scan…">
+  <form method="post" action="/scan" class="scan-run-form" data-submit-guard="Starting scan…">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <button type="submit" class="btn btn-primary">Run scan now</button>
+    <button type="submit" class="btn btn-primary" id="run-scan-btn">Run scan now</button>
   </form>
 </section>
 

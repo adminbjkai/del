@@ -26,13 +26,13 @@
     <tr>
       <th scope="col">Name</th>
       <th scope="col">Status</th>
-      <th scope="col">Kind</th>
+      <th scope="col" data-priority="low">Kind</th>
       <th scope="col">Installed</th>
       <th scope="col">Domains</th>
       <th scope="col">Host ports</th>
       <th scope="col">Resources</th>
-      <th scope="col">Warnings</th>
-      <th scope="col">Protected</th>
+      <th scope="col" data-priority="low">Warnings</th>
+      <th scope="col" data-priority="low">Protected</th>
     </tr>
   </thead>
   <tbody>
@@ -40,21 +40,21 @@
     <tr{% if app.is_removed %} class="row-muted"{% endif %}>
       <td>
         <a href="/apps/{{ app.slug }}">{{ app.name }}</a>
-        <div class="muted mono" style="font-size:.75rem">
+        <div class="muted mono text-xs">
           <button type="button" class="copy" data-copy="{{ app.slug }}" title="Copy slug" aria-label="Copy slug {{ app.slug }} to clipboard">{{ app.slug }}<span class="copy-mark" aria-hidden="true">⧉</span></button>
-          {% if app.is_removed %}<span class="badge badge-grey" style="margin-left:.35rem">removed</span>{% endif %}
+          {% if app.is_removed %}<span class="badge badge-grey ml-2">removed</span>{% endif %}
         </div>
       </td>
       <td data-filter-value="{{ app.status }}"><span class="badge status-{{ app.status }}">{{ app.status }}</span></td>
-      <td data-filter-value="{{ app.kind }}">{{ app.kind or '—' }}</td>
+      <td data-priority="low" data-filter-value="{{ app.kind }}">{{ app.kind or '—' }}</td>
       <td data-sort-value="{{ iso_sort(app.installed_at) }}" data-filter-value="{{ format_dt(app.installed_at) }}" title="{% if app.installed_at %}{{ format_dt(app.installed_at) }}{% else %}Unknown{% endif %}">
         <span class="dt">{{ format_dt(app.installed_at) }}</span>
       </td>
       <td>{{ m.domain_links(app.domains) }}</td>
       <td>{{ m.joinlist(app.ports) }}</td>
       <td data-sort-value="{{ app.res_count }}">{{ app.res_count }}</td>
-      <td data-sort-value="{{ app.warn_count }}">{% if app.warn_count %}<span class="badge badge-amber">{{ app.warn_count }}</span>{% else %}0{% endif %}</td>
-      <td data-filter-value="{{ 'yes' if app.protected else 'no' }}">{% if app.protected %}<span class="badge badge-blue">protected</span>{% else %}—{% endif %}</td>
+      <td data-priority="low" data-sort-value="{{ app.warn_count }}">{% if app.warn_count %}<span class="badge badge-amber">{{ app.warn_count }}</span>{% else %}0{% endif %}</td>
+      <td data-priority="low" data-filter-value="{{ 'yes' if app.protected else 'no' }}">{% if app.protected %}<span class="badge badge-blue">protected</span>{% else %}—{% endif %}</td>
     </tr>
     {% endfor %}
   </tbody>

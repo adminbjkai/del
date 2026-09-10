@@ -29,7 +29,10 @@ removed nothing. Three live removals hit exactly that.
 
 `planner.STAGE_ORDER` is exactly: `backup`, `quiesce`, `remove_runtime`,
 `remove_host`, `remove_files`, `validate`. Those six strings are the only values
-`job_steps.stage` ever holds.
+`job_steps.stage` ever holds. `_check_stage_order()` enforces that a plan's steps
+appear in non-decreasing `STAGE_ORDER` rank, raising `PlanError` if they don't;
+both `build_plan()` and `persist_plan()` call it, so a stage-ordering bug is
+caught at build/persist time rather than surfacing mid-execution.
 
 1. **`backup`** — `file_backup`, `volume_backup`, `backup_tar` for the resources
    the plan will touch, written under `/apps/del/backups`, before any mutation.
@@ -45,7 +48,12 @@ removed nothing. Three live removals hit exactly that.
 3. **`remove_runtime`** — `compose_down` (or `container_rm` when there is no
    compose project), `network_rm` (skipping `bridge`/`host`/`none` and shared
    networks), `volume_rm` (see the volume gate below), `image_rm` (refused if still
-   referenced by another container).
+   referenced by another container). Before emitting a `compose_down` step, the
+   planner checks whether another app's compose project would resolve to the
+   *same* Docker Compose project label under a different path; if so it adds a
+   plan **warning** (not a hard error) naming both apps and paths, since
+   `compose_down`'s label sweep is host-wide and could otherwise remove the
+   other app's containers too.
 4. **`remove_host`** — `systemd_disable`/`systemd_rm_unit`, `cron_rm`,
    `nginx_rm_site` then `nginx_test_reload`. Every nginx path for the app goes into
    one `nginx_rm_site` step, ordered `sites-enabled` first so removing a
@@ -79,7 +87,10 @@ rather than silently leaving a stale inventory behind.
   them, and independently re-validates every argument against
   `/etc/del/helper-policy.json`. The two controls are independent, not layered:
   tampering with `steps_json` is caught by the HMAC; an argument the helper
-  disallows is refused whether or not a plan vouches for it.
+  disallows is refused whether or not a plan vouches for it. `POST
+  /plans/{id}/execute` distinguishes the two failure modes at the HTTP layer:
+  an unknown plan id (`planner.PlanNotFoundError`, a subclass of `PlanError`)
+  returns 404; any other `PlanError` (e.g. a failed HMAC check) returns 409.
 - **Volume double-confirmation** — live volume deletion requires three
   independent things to all be true: the plan option `remove_named_volumes`
   enabled, the specific volume individually checked by the operator, **and** a

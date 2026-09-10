@@ -117,6 +117,19 @@ def build_apps(resources: list[Resource], manifests: dict[str, Manifest]) -> lis
   rules, phantom apps called `docker`, `deploy` and `compose-project` accumulated
   many unrelated projects' compose roots at confidence 95 and reported them safe to
   delete.
+- **A compose file matched by name is checked against its own project root
+  before being merged.** Step 2 first tries to match a compose project to an
+  existing app by its declared name or directory basename. Before trusting
+  that match, `_foreign_project_root()` resolves the compose file's *own*
+  top-level project directory (`{scan_root}/{first-component}`) and checks
+  whether that directory already belongs to a **different** app. If it does —
+  an archived clone at `/apps/agyinstall/boxy/docker-compose.yml` matching the
+  real `/apps/boxy` app purely by name — the compose project is **not** merged
+  into the same-named app at full confidence. Instead it is attached to the
+  owning tree's app (`agyinstall`, seeding a placeholder application for it if
+  one doesn't exist yet) at confidence 55 / `possible` / `shared`, with an
+  evidence statement naming both the foreign owner and the same-named app it
+  did not merge into.
 - **An app claims its own project root — and only its own.** When an app's compose
   file or directory sits one level down, the enclosing project root is attributed to
   that app directly, instead of falling through to the name-similarity fallback at
@@ -126,7 +139,9 @@ def build_apps(resources: list[Resource], manifests: dict[str, Manifest]) -> lis
   (`/apps/agyinstall/banban`) would otherwise walk up and claim that unrelated
   180 GB archive root, marking it shared and blocking its real owner from ever being
   removed cleanly. The slug comparison also makes the match case-insensitive, so
-  `/apps/2FAuth` resolves to app `2fauth`.
+  `/apps/2FAuth` resolves to app `2fauth`. This directory-walk-up guard and the
+  name-match guard above (`_foreign_project_root`) cover the two different ways a
+  nested clone could otherwise get absorbed into the wrong app.
 - **Docker's built-in networks are never associated.** `bridge`, `host` and `none`
   always exist and cannot be removed; associating them would put
   `network_rm bridge` in a plan as soon as one app happened to be attached.

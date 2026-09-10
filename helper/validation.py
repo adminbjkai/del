@@ -139,6 +139,22 @@ def validate_path_for_deletion(path: str, policy: dict, must_exist: bool = True)
     return realpath
 
 
+def recheck_realpath(original: str, expected_realpath: str) -> None:
+    """Re-resolve `original` immediately before a destructive call and refuse
+    if it no longer matches the realpath computed at validation time.
+
+    Closes a TOCTOU window: validation resolves a symlink once, but a
+    filesystem-controlling attacker could swap the symlink target between
+    validation and the actual `rm -rf` / unit-file removal.
+    """
+    actual = os.path.realpath(original)
+    if actual != expected_realpath:
+        raise ValidationError(
+            f"path resolution changed since validation, refusing: "
+            f"{original!r} now resolves to {actual!r}, expected {expected_realpath!r}"
+        )
+
+
 # ---------------------------------------------------------------------------
 # systemd unit names
 # ---------------------------------------------------------------------------

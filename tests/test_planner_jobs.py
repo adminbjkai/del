@@ -299,6 +299,57 @@ def test_persist_and_verify_plan_roundtrip(settings_env):
     assert verified.app_slug == "app7"
 
 
+def test_compose_project_name_collision_across_apps_produces_warning(settings_env):
+    """Two apps whose compose_project resources resolve to the same project
+    NAME (compose_down sweeps by that label, host-wide) must produce a
+    warning naming both paths, since the sweep can hit the other app's
+    containers."""
+    conn = get_db()
+    app_a = _insert_app(conn, "appa", kind="compose")
+    app_b = _insert_app(conn, "appb", kind="compose")
+    res_a = _insert_resource(
+        conn, "compose_project", "/apps/appa/docker",
+        path="/apps/appa/docker",
+        data={"declared_name": "shared-name", "config_files": []},
+    )
+    res_b = _insert_resource(
+        conn, "compose_project", "/apps/appb/docker",
+        path="/apps/appb/docker",
+        data={"declared_name": "shared-name", "config_files": []},
+    )
+    _insert_assoc(conn, app_a, res_a, confidence=95)
+    _insert_assoc(conn, app_b, res_b, confidence=95)
+    conn.close()
+
+    plan = planner.build_plan("appa", {})
+    assert any(
+        "shared-name" in w and "/apps/appb/docker" in w for w in plan.warnings
+    ), plan.warnings
+
+
+def test_persist_plan_rejects_out_of_order_stages(settings_env):
+    _insert_app(get_db(), "orderapp", kind="standalone")
+    steps = [
+        PlanStep(seq=1, stage="remove_files", operation="path_delete",
+                  args={"path": "/apps/orderapp"}, description="delete",
+                  reversible=False, danger="data_loss"),
+        PlanStep(seq=2, stage="quiesce", operation="container_stop",
+                  args={"container_id": "c1"}, description="stop",
+                  reversible=True, danger="safe"),
+    ]
+    plan = Plan(app_slug="orderapp", options={}, steps=steps)
+    with pytest.raises(planner.PlanError):
+        planner.persist_plan(plan)
+
+
+def test_load_plan_raises_plan_not_found_error_for_unknown_id(settings_env):
+    with pytest.raises(planner.PlanNotFoundError):
+        planner.load_plan(999999)
+    # PlanNotFoundError is a PlanError, so existing PlanError catches keep working.
+    with pytest.raises(planner.PlanError):
+        planner.load_plan(999999)
+
+
 def test_tampered_plan_fails_hmac_verification(settings_env):
     conn = get_db()
     app_id = _insert_app(conn, "app8", kind="standalone")
@@ -375,6 +426,35 @@ def test_dry_run_job_executes_all_steps_with_dry_run_true(settings_env, monkeypa
     status = jobs.job_status(job_id)
     assert status["status"] == "success"
     assert all(s["state"] == "done" for s in status["steps"])
+
+
+def test_job_status_includes_progress_and_current_step(settings_env, monkeypatch):
+    _patch_audit(monkeypatch)
+    fake = _FakeHelper(failing_ops={"container_rm"})
+    monkeypatch.setattr(jobs, "helper_client", fake)
+
+    steps = [
+        PlanStep(seq=1, stage="quiesce", operation="container_stop",
+                  args={"container_id": "c1"}, description="stop", reversible=True, danger="safe"),
+        PlanStep(seq=2, stage="remove_runtime", operation="container_rm",
+                  args={"container_id": "c1"}, description="rm", reversible=False, danger="warning"),
+        PlanStep(seq=3, stage="remove_runtime", operation="network_rm",
+                  args={"network_name": "n1"}, description="net rm", reversible=False, danger="warning"),
+    ]
+    plan_id = _persist_manual_plan("progressapp", steps)
+    job_id = jobs.create_job(plan_id, "live", user_id=1)
+
+    jobs._run_job(job_id, None)
+
+    status = jobs.job_status(job_id)
+    assert status["progress"] == {"done": 2, "total": 3, "pct": 67}
+    # No step is left "running" after _run_job finishes.
+    assert status["current_step"] is None
+    for s in status["steps"]:
+        assert "duration" in s
+    assert set(status["steps"][0].keys()) >= {
+        "seq", "stage", "operation", "state", "exit_code", "duration", "output_sanitized",
+    }
 
 
 def test_failure_mid_job_halts_downstream_steps(settings_env, monkeypatch):

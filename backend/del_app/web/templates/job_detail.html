@@ -4,14 +4,26 @@
 <div class="page-header">
   <h1>Job #{{ job.get('id') }}</h1>
 </div>
-<p class="muted">
-  {% if job.get('app_slug') %}app: <a href="/apps/{{ job.get('app_slug') }}">{{ job.get('app_name') or job.get('app_slug') }}</a> · {% endif %}
-  plan: <a href="/plans/{{ job.get('plan_id') }}">#{{ job.get('plan_id') }}</a> ·
-  mode: <span class="badge {{ 'badge-danger' if job.get('mode') == 'live' else 'badge-grey' }}">{{ 'LIVE' if job.get('mode') == 'live' else 'dry-run' }}</span> ·
-  status: <span class="badge status-{{ job.get('status') }}" id="job-status">{{ job.get('status') }}</span>
-</p>
+<div class="job-summary">
+  <p class="muted">
+    {% if job.get('app_slug') %}app: <a href="/apps/{{ job.get('app_slug') }}">{{ job.get('app_name') or job.get('app_slug') }}</a> · {% endif %}
+    plan: <a href="/plans/{{ job.get('plan_id') }}">#{{ job.get('plan_id') }}</a> ·
+    mode: <span class="badge {{ 'badge-danger' if job.get('mode') == 'live' else 'badge-grey' }}">{{ 'LIVE' if job.get('mode') == 'live' else 'dry-run' }}</span> ·
+    status: <span class="badge status-{{ job.get('status') }}" id="job-status" aria-live="polite">{{ job.get('status') }}</span>
+  </p>
+  {% set pct = progress.get('pct', 0) if progress is defined and progress else 0 %}
+  <div class="job-progress-track" role="progressbar" id="job-progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ pct }}" aria-label="Job progress">
+    <div class="job-progress-fill" id="job-progress-fill" data-width="{{ pct }}"></div>
+  </div>
+  <div class="job-progress-label" id="job-progress-label">
+    {% if progress is defined and progress %}{{ progress.get('done', 0) }} of {{ progress.get('total', 0) }} steps done ({{ pct }}%){% else %}No steps yet{% endif %}
+  </div>
+  <div class="job-current-step muted" id="job-current-step" aria-live="polite">
+    {% if current_step is defined and current_step %}Running: {{ current_step.get('stage') }} · {{ current_step.get('operation') }}{% endif %}
+  </div>
+</div>
 
-<label style="display:inline-flex;gap:.4rem;align-items:center;margin-bottom:.75rem;">
+<label class="job-autoscroll-label">
   <input type="checkbox" id="autoscroll-toggle" checked> Auto-scroll output
 </label>
 
@@ -29,9 +41,9 @@
         <td>{{ s.get('seq') }}</td>
         <td class="mono">{{ s.get('operation') }}</td>
         <td class="step-state"><span class="badge status-{{ s.get('state') }}">{{ s.get('state') }}</span></td>
-        <td>{{ s.get('exit_code') if s.get('exit_code') is not none else '—' }}</td>
-        <td>{{ s.get('duration') }}</td>
-        <td>
+        <td class="step-exit">{{ s.get('exit_code') if s.get('exit_code') is not none else '—' }}</td>
+        <td class="step-duration">{{ s.get('duration') }}</td>
+        <td class="step-output">
           {% if s.get('output_sanitized') %}
           <details><summary>output</summary><pre class="output">{{ s.get('output_sanitized') }}</pre></details>
           {% else %}—{% endif %}
@@ -43,12 +55,8 @@
   </div>
 </section>
 {% else %}
-<div class="table-scroll">
-<table class="table" id="job-steps" data-job-id="{{ job.get('id') }}">
-  <caption class="sr-only">Steps recorded for this job.</caption>
-  <thead><tr><th scope="col">#</th><th scope="col">Stage</th><th scope="col">Operation</th><th scope="col">State</th></tr></thead>
-  <tbody><tr><td colspan="4" class="muted">No steps recorded yet.</td></tr></tbody>
-</table>
+<div class="empty-state" id="job-no-steps">
+  <div class="empty-state-msg">No steps recorded yet.</div>
 </div>
 {% endfor %}
 </div>

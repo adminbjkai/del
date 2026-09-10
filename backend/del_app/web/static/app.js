@@ -3,6 +3,60 @@
   "use strict";
 
   // =========================================================================
+  // Toasts: minimal aria-live notifications (DEL.toast), shared by job
+  // completion and copy-to-clipboard feedback.
+  // =========================================================================
+  function showToast(message, kind) {
+    var region = document.getElementById("toast-region");
+    if (!region) return;
+    var toast = document.createElement("div");
+    toast.className = "toast toast-" + (kind || "info");
+    toast.textContent = message;
+    region.appendChild(toast);
+    setTimeout(function () {
+      toast.classList.add("is-leaving");
+      setTimeout(function () { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 200);
+    }, 3200);
+  }
+  window.DEL = window.DEL || {};
+  window.DEL.toast = showToast;
+
+  // =========================================================================
+  // DEL.theme: dark/light toggle, persisted in localStorage. base.html already
+  // sets data-theme on <html> before first paint; this wires the header
+  // toggle button and keeps its aria-pressed state in sync.
+  // =========================================================================
+  var THEME_KEY = "del.theme";
+  window.DEL.theme = {
+    get: function () {
+      return document.documentElement.getAttribute("data-theme") === "light" ? "light" : "dark";
+    },
+    set: function (theme) {
+      document.documentElement.setAttribute("data-theme", theme);
+      try { localStorage.setItem(THEME_KEY, theme); } catch (e) {}
+      var btn = document.getElementById("theme-toggle");
+      if (btn) {
+        var isLight = theme === "light";
+        btn.setAttribute("aria-pressed", isLight ? "true" : "false");
+        btn.setAttribute("aria-label", isLight ? "Switch to dark theme" : "Switch to light theme");
+      }
+    },
+    toggle: function () {
+      window.DEL.theme.set(window.DEL.theme.get() === "light" ? "dark" : "light");
+    },
+  };
+  window.DEL.theme.set(window.DEL.theme.get());
+  var themeToggleBtn = document.getElementById("theme-toggle");
+  if (themeToggleBtn) themeToggleBtn.addEventListener("click", window.DEL.theme.toggle);
+
+  // Apply data-width (percent) to width style: used by the confidence meter
+  // and job progress fill, which the templates set via data attribute so
+  // no inline style="" is needed anywhere (CSP-friendly, easy to grep-audit).
+  document.querySelectorAll("[data-width]").forEach(function (el) {
+    el.style.width = el.getAttribute("data-width") + "%";
+  });
+
+  // =========================================================================
   // Value parsing helpers (numeric-aware / date-aware sorting)
   // =========================================================================
   var SIZE_UNITS = {
@@ -75,7 +129,8 @@
   }
 
   // =========================================================================
-  // Tables → AG Grid Community (filters, sort, pagination) with vanilla fallback
+  // Tables: single vanilla engine (sort, per-column Excel-style filter popover,
+  // resize-by-drag, quick filter, pagination, CSV export). No external assets.
   // =========================================================================
   // Single mobile breakpoint, shared by JS and the CSS @media rules below 900px.
   var MOBILE_MAX = 900;
@@ -95,556 +150,29 @@
       .replace(/"/g, "&quot;");
   }
 
-  var gridApisById = {};
-  var agGridReady = null;
-
-  function loadAgGrid(cb) {
-    if (window.agGrid && window.agGrid.createGrid) {
-      try {
-        if (window.agGrid.ModuleRegistry && window.agGrid.AllCommunityModule) {
-          window.agGrid.ModuleRegistry.registerModules([window.agGrid.AllCommunityModule]);
-        }
-      } catch (e) { /* already registered */ }
-      cb(null);
-      return;
-    }
-    if (agGridReady) { agGridReady.push(cb); return; }
-    agGridReady = [cb];
-    var s = document.createElement("script");
-    s.src = "/static/ag-grid-community.min.js";
-    s.async = true;
-    s.onload = function () {
-      try {
-        if (window.agGrid && window.agGrid.ModuleRegistry && window.agGrid.AllCommunityModule) {
-          window.agGrid.ModuleRegistry.registerModules([window.agGrid.AllCommunityModule]);
-        }
-      } catch (e) {}
-      var q = agGridReady || [];
-      agGridReady = null;
-      q.forEach(function (fn) { fn(null); });
-    };
-    s.onerror = function () {
-      var q = agGridReady || [];
-      agGridReady = null;
-      q.forEach(function (fn) { fn(new Error("ag-grid load failed")); });
-    };
-    document.head.appendChild(s);
+  // One popover open at a time; closing it is shared by outside-click, Escape,
+  // and opening a different column's popover.
+  var openColPopover = null;
+  function closeColPopover() {
+    if (!openColPopover) return;
+    var p = openColPopover;
+    openColPopover = null;
+    p.trap.release(p.trigger);
+    if (p.el.parentNode) p.el.parentNode.removeChild(p.el);
+    p.trigger.setAttribute("aria-expanded", "false");
   }
+  document.addEventListener("click", function (e) {
+    if (!openColPopover) return;
+    if (openColPopover.el.contains(e.target) || openColPopover.trigger.contains(e.target)) return;
+    closeColPopover();
+  });
+  document.addEventListener("keydown", function (e) {
+    if (e.key === "Escape" && openColPopover) closeColPopover();
+  });
 
-  function delGridTheme() {
-    // Clearer contrast + slightly larger type than the shell defaults.
-    // The app is dark-only (both templates hardcode data-theme="dark").
-    if (!window.agGrid || !window.agGrid.themeQuartz) return undefined;
-    return window.agGrid.themeQuartz.withParams({
-      backgroundColor: "#12151c",
-      foregroundColor: "#f2f4f8",
-      cellTextColor: "#f2f4f8",
-      headerBackgroundColor: "#0f1218",
-      headerTextColor: "#c8ceda",
-      borderColor: "#2e3545",
-      rowHoverColor: "#1a2030",
-      oddRowBackgroundColor: "#141820",
-      selectedRowBackgroundColor: "rgba(79,140,255,0.18)",
-      accentColor: "#6da0ff",
-      chromeBackgroundColor: "#0f1218",
-      inputBackgroundColor: "#1a2030",
-      inputTextColor: "#f2f4f8",
-      inputPlaceholderTextColor: "#9aa3b5",
-      inputBorder: { color: "#3a4254" },
-      wrapperBorder: { color: "#2e3545" },
-      rowBorder: { color: "#2a3140" },
-      headerColumnBorder: { color: "#2e3545" },
-      headerColumnResizeHandleColor: "#6da0ff",
-      headerColumnResizeHandleWidth: 2,
-      headerColumnResizeHandleHeight: "60%",
-      columnBorder: { color: "#252b38" },
-      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif',
-      fontSize: "14px",
-      headerFontSize: "12.5px",
-      headerFontWeight: 600,
-      wrapperBorderRadius: "6px",
-      browserColorScheme: "dark",
-      spacing: 6,
-    });
-  }
-
-  // Excel-style filter: checkbox list of existing values + text "contains / does not contain"
-  function DelExcelFilter() {}
-  DelExcelFilter.prototype.init = function (params) {
-    this.params = params;
-    this.field = params.colDef.field;
-    var provided = (params.colDef.filterParams && params.colDef.filterParams.values) || [];
-    this.allValues = provided.slice();
-    // selected: null means "all selected" (inactive filter)
-    this.selected = null;
-    this.textOp = "contains";
-    this.textVal = "";
-
-    this.eGui = document.createElement("div");
-    this.eGui.className = "del-excel-filter";
-    this.eGui.innerHTML =
-      '<div class="del-excel-filter-head">' +
-      '<label class="del-excel-text-label">Text' +
-      '<select class="del-excel-text-op" aria-label="Text operator">' +
-      '<option value="contains">contains</option>' +
-      '<option value="notContains">does not contain</option>' +
-      '<option value="equals">equals</option>' +
-      '<option value="notEqual">does not equal</option>' +
-      '<option value="startsWith">starts with</option>' +
-      '<option value="endsWith">ends with</option>' +
-      "</select>" +
-      '<input type="text" class="del-excel-text-inp" placeholder="Type to match…" aria-label="Text filter value">' +
-      "</label>" +
-      "</div>" +
-      '<div class="del-excel-filter-actions">' +
-      '<button type="button" class="btn btn-sm del-excel-select-all">Select all</button>' +
-      '<button type="button" class="btn btn-sm del-excel-clear">Clear</button>' +
-      "</div>" +
-      '<input type="search" class="del-excel-search" placeholder="Search values…" aria-label="Search value list">' +
-      '<div class="del-excel-list" role="group" aria-label="Filter by value"></div>';
-
-    this.opEl = this.eGui.querySelector(".del-excel-text-op");
-    this.textEl = this.eGui.querySelector(".del-excel-text-inp");
-    this.searchEl = this.eGui.querySelector(".del-excel-search");
-    this.listEl = this.eGui.querySelector(".del-excel-list");
-
-    var self = this;
-    this.eGui.querySelector(".del-excel-select-all").addEventListener("click", function () {
-      self.selected = null; // all
-      self.renderList();
-      self.params.filterChangedCallback();
-    });
-    this.eGui.querySelector(".del-excel-clear").addEventListener("click", function () {
-      self.selected = new Set(); // none
-      self.renderList();
-      self.params.filterChangedCallback();
-    });
-    this.opEl.addEventListener("change", function () {
-      self.textOp = self.opEl.value;
-      self.params.filterChangedCallback();
-    });
-    this.textEl.addEventListener("input", function () {
-      self.textVal = self.textEl.value;
-      self.params.filterChangedCallback();
-    });
-    this.searchEl.addEventListener("input", function () {
-      self.renderList();
-    });
-
-    this.renderList();
-  };
-  DelExcelFilter.prototype.renderList = function () {
-    var self = this;
-    var q = (this.searchEl.value || "").toLowerCase();
-    this.listEl.innerHTML = "";
-    var allOn = this.selected === null;
-    this.allValues.forEach(function (val) {
-      var labelText = val === "" ? "(blank)" : val;
-      if (q && labelText.toLowerCase().indexOf(q) === -1) return;
-      var id = "del-fv-" + Math.random().toString(36).slice(2, 9);
-      var lab = document.createElement("label");
-      lab.className = "del-excel-item";
-      var cb = document.createElement("input");
-      cb.type = "checkbox";
-      cb.id = id;
-      cb.checked = allOn || (self.selected && self.selected.has(val));
-      cb.addEventListener("change", function () {
-        if (self.selected === null) {
-          // switch from "all" to explicit set of everything except this if unchecked
-          self.selected = new Set(self.allValues);
-        }
-        if (cb.checked) self.selected.add(val);
-        else self.selected.delete(val);
-        // if everything selected again, treat as inactive "all"
-        if (self.selected.size === self.allValues.length) self.selected = null;
-        self.params.filterChangedCallback();
-      });
-      var span = document.createElement("span");
-      span.textContent = labelText;
-      span.title = labelText;
-      lab.appendChild(cb);
-      lab.appendChild(span);
-      self.listEl.appendChild(lab);
-    });
-    if (!this.listEl.childNodes.length) {
-      var empty = document.createElement("div");
-      empty.className = "del-excel-empty muted";
-      empty.textContent = "No values";
-      this.listEl.appendChild(empty);
-    }
-  };
-  DelExcelFilter.prototype.getGui = function () { return this.eGui; };
-  DelExcelFilter.prototype.doesFilterPass = function (params) {
-    var raw = params.data ? params.data[this.field] : "";
-    if (raw == null) raw = "";
-    raw = String(raw);
-    // Value set (Excel-style)
-    if (this.selected !== null) {
-      if (!this.selected.has(raw)) return false;
-    }
-    // Optional text operator
-    var needle = (this.textVal || "").toLowerCase();
-    if (!needle) return true;
-    var hay = raw.toLowerCase();
-    var op = this.textOp || "contains";
-    if (op === "contains") return hay.indexOf(needle) !== -1;
-    if (op === "notContains") return hay.indexOf(needle) === -1;
-    if (op === "equals") return hay === needle;
-    if (op === "notEqual") return hay !== needle;
-    if (op === "startsWith") return hay.indexOf(needle) === 0;
-    if (op === "endsWith") return hay.length >= needle.length && hay.slice(-needle.length) === needle;
-    return true;
-  };
-  DelExcelFilter.prototype.isFilterActive = function () {
-    var textOn = !!(this.textVal && String(this.textVal).trim());
-    var setOn = this.selected !== null;
-    return textOn || setOn;
-  };
-  DelExcelFilter.prototype.getModel = function () {
-    if (!this.isFilterActive()) return null;
-    return {
-      textOp: this.textOp,
-      textVal: this.textVal,
-      values: this.selected === null ? null : Array.from(this.selected),
-    };
-  };
-  DelExcelFilter.prototype.setModel = function (model) {
-    if (!model) {
-      this.selected = null;
-      this.textOp = "contains";
-      this.textVal = "";
-    } else {
-      this.textOp = model.textOp || "contains";
-      this.textVal = model.textVal || "";
-      this.selected = model.values == null ? null : new Set(model.values);
-    }
-    if (this.opEl) this.opEl.value = this.textOp;
-    if (this.textEl) this.textEl.value = this.textVal;
-    if (this.searchEl) this.searchEl.value = "";
-    if (this.listEl) this.renderList();
-  };
-  DelExcelFilter.prototype.getModelAsString = function (model) {
-    if (!model) return "";
-    var parts = [];
-    if (model.textVal) parts.push((model.textOp || "contains") + ' "' + model.textVal + '"');
-    if (model.values) parts.push(model.values.length + " values");
-    return parts.join(" · ") || "filtered";
-  };
-
-  function DelExcelFloatingFilter() {}
-  DelExcelFloatingFilter.prototype.init = function (params) {
-    this.params = params;
-    this.eGui = document.createElement("div");
-    this.eGui.className = "del-excel-ff";
-    this.btn = document.createElement("button");
-    this.btn.type = "button";
-    this.btn.className = "del-excel-ff-btn";
-    this.btn.textContent = "All ▾";
-    this.btn.title = "Filter by values (Excel-style)";
-    var self = this;
-    this.btn.addEventListener("click", function () {
-      // Open the full filter popup (value list + text ops)
-      if (params.showParentFilter) params.showParentFilter();
-    });
-    this.eGui.appendChild(this.btn);
-  };
-  DelExcelFloatingFilter.prototype.onParentModelChanged = function (model) {
-    if (!model) {
-      this.btn.textContent = "All ▾";
-      this.btn.classList.remove("is-active");
-      return;
-    }
-    var bits = [];
-    if (model.textVal) bits.push('"' + model.textVal + '"');
-    if (model.values) bits.push(model.values.length + " selected");
-    this.btn.textContent = (bits.join(" · ") || "Filtered") + " ▾";
-    this.btn.classList.add("is-active");
-  };
-  DelExcelFloatingFilter.prototype.getGui = function () { return this.eGui; };
-
-  function uniqueColumnValues(rows, field) {
-    var seen = {};
-    var out = [];
-    for (var i = 0; i < rows.length; i++) {
-      var v = rows[i][field];
-      if (v == null) v = "";
-      v = String(v);
-      if (!Object.prototype.hasOwnProperty.call(seen, v)) {
-        seen[v] = true;
-        out.push(v);
-      }
-    }
-    out.sort(function (a, b) {
-      if (a === "") return -1;
-      if (b === "") return 1;
-      var na = parseFloat(a), nb = parseFloat(b);
-      if (!isNaN(na) && !isNaN(nb) && String(a).trim() !== "" && String(b).trim() !== "") return na - nb;
-      return a.toLowerCase().localeCompare(b.toLowerCase());
-    });
-    // Cap very high-cardinality columns for UI sanity
-    if (out.length > 500) out = out.slice(0, 500);
-    return out;
-  }
-
-  function parseHtmlTable(table) {
-    var tbody = table.tBodies[0];
-    var headRow = table.tHead ? table.tHead.rows[0] : null;
-    if (!tbody || !headRow) return null;
-    var rows = [];
-    Array.prototype.forEach.call(tbody.rows, function (r) {
-      var row = {};
-      Array.prototype.forEach.call(r.cells, function (td, idx) {
-        var text = (td.getAttribute("data-filter-value") || td.textContent || "").replace(/\s+/g, " ").trim();
-        var sortV = td.getAttribute("data-sort-value");
-        row["c" + idx] = text === "—" ? "" : text;
-        // Prefer data-sort-value for chronological/numeric sort (e.g. Installed ISO key)
-        row["s" + idx] = sortV !== null && sortV !== "" ? sortV : (text === "—" ? "" : text);
-        row["h" + idx] = td.innerHTML;
-      });
-      row._all = (r.textContent || "").replace(/\s+/g, " ").trim();
-      rows.push(row);
-    });
-
-    var colDefs = [];
-    Array.prototype.forEach.call(headRow.cells, function (th, idx) {
-      var header = (th.textContent || "").trim() || ("Col " + (idx + 1));
-      var nosort = th.hasAttribute("data-nosort");
-      var field = "c" + idx;
-      var values = uniqueColumnValues(rows, field);
-      // Detect ISO-ish sort keys (Installed / Started / Finished) for true chronological sort
-      var sampleSort = "";
-      for (var ri = 0; ri < rows.length; ri++) {
-        if (rows[ri]["s" + idx]) { sampleSort = String(rows[ri]["s" + idx]); break; }
-      }
-      var isDateSort = /^\d{4}-\d{2}-\d{2}/.test(sampleSort);
-
-      colDefs.push({
-        field: field,
-        headerName: header,
-        sortable: !nosort,
-        sortingOrder: ["asc", "desc"],
-        unSortIcon: true,
-        resizable: true,
-        filter: DelExcelFilter,
-        floatingFilter: true,
-        floatingFilterComponent: DelExcelFloatingFilter,
-        filterParams: {
-          values: values,
-        },
-        minWidth: isDateSort ? 120 : 100,
-        width: isDateSort ? 150 : 140,
-        // autoHeight + custom HTML cells is flaky on Android Chrome (0-height rows).
-        wrapText: !isDateSort,
-        autoHeight: false,
-        cellClass: "del-grid-cell" + (isDateSort ? " del-grid-cell-date" : ""),
-        cellRenderer: function (params) {
-          var html = params.data ? params.data["h" + idx] : "";
-          var span = document.createElement("div");
-          span.className = "del-grid-cell-inner" + (isDateSort ? " del-grid-cell-date-inner" : "");
-          span.innerHTML = html || "";
-          return span;
-        },
-        // Always sort by data-sort-value when present (ISO dates, numbers, …).
-        // Uses the same sortValue() as the vanilla phone path so a column can
-        // never sort one way on desktop and another on a phone.
-        comparator: function (valueA, valueB, nodeA, nodeB) {
-          var sa = nodeA && nodeA.data ? nodeA.data["s" + idx] : valueA;
-          var sb = nodeB && nodeB.data ? nodeB.data["s" + idx] : valueB;
-          sa = sa == null ? "" : String(sa);
-          sb = sb == null ? "" : String(sb);
-          // Blanks last in both directions feels right for Installed
-          if (!sa && !sb) return 0;
-          if (!sa) return 1;
-          if (!sb) return -1;
-          var va = sortValue(sa);
-          var vb = sortValue(sb);
-          if (va.n !== null && vb.n !== null) return va.n - vb.n;
-          if (va.n !== null) return -1;
-          if (vb.n !== null) return 1;
-          return va.s < vb.s ? -1 : va.s > vb.s ? 1 : 0;
-        },
-        getQuickFilterText: function (params) {
-          return params.data ? params.data["c" + idx] : "";
-        },
-      });
-    });
-    return { colDefs: colDefs, rows: rows };
-  }
-
-  function enhanceTableWithAgGrid(table, host) {
-    var parsed = parseHtmlTable(table);
-    if (!parsed) return;
-
-    var wrap = document.createElement("div");
-    wrap.className = "table-block del-grid-block";
-    // `host` is the placeholder inserted before the bundle downloaded; reuse its
-    // slot so the grid lands exactly where the "Loading table…" box was.
-    if (host && host.parentNode) host.parentNode.insertBefore(wrap, host);
-    else table.parentNode.insertBefore(wrap, table);
-
-    var toolbar = document.createElement("div");
-    toolbar.className = "table-toolbar";
-    wrap.appendChild(toolbar);
-
-    var search = document.createElement("input");
-    search.type = "text";
-    search.className = "table-filter";
-    search.placeholder = table.getAttribute("data-search-placeholder") || "Quick filter (all columns)…";
-    search.setAttribute("aria-label", "Quick filter all columns");
-    toolbar.appendChild(search);
-
-    var clearBtn = document.createElement("button");
-    clearBtn.type = "button";
-    clearBtn.className = "btn btn-sm table-clear-filters";
-    clearBtn.textContent = "Clear all filters";
-    clearBtn.title = "Reset column filters and quick filter";
-    toolbar.appendChild(clearBtn);
-
-    var autoSizeBtn = document.createElement("button");
-    autoSizeBtn.type = "button";
-    autoSizeBtn.className = "btn btn-sm";
-    autoSizeBtn.textContent = "Autosize columns";
-    autoSizeBtn.title = "Fit each column to its content (you can still drag edges after)";
-    toolbar.appendChild(autoSizeBtn);
-
-    var fitBtn = document.createElement("button");
-    fitBtn.type = "button";
-    fitBtn.className = "btn btn-sm";
-    fitBtn.textContent = "Fit to width";
-    fitBtn.title = "Squeeze all columns into the visible width";
-    toolbar.appendChild(fitBtn);
-
-    var hint = document.createElement("span");
-    hint.className = "table-resize-hint muted";
-    hint.textContent = "Drag column edges to resize";
-    toolbar.appendChild(hint);
-
-    var status = document.createElement("div");
-    status.className = "table-status";
-    status.setAttribute("role", "status");
-    wrap.appendChild(status);
-
-    var gridHost = document.createElement("div");
-    gridHost.className = "del-ag-grid";
-    var defaultPage = parseInt(table.getAttribute("data-page-size") || "50", 10);
-    if (!defaultPage || defaultPage < 1) defaultPage = 50;
-    wrap.appendChild(gridHost);
-    if (host && host.parentNode) host.parentNode.removeChild(host);
-
-    // Short tables (dashboard panels) size to their content instead of burning
-    // 72vh on three rows; long ones get an explicit height so the grid scrolls.
-    var rowCount = parsed.rows.length;
-    var autoHeight = rowCount <= 12;
-    if (!autoHeight) {
-      gridHost.style.height = Math.min(760, 96 + rowCount * 48) + "px";
-    }
-
-    // Hide original table (keep in DOM for progressive enhancement / export fallback id)
-    table.style.display = "none";
-    table.setAttribute("aria-hidden", "true");
-
-    var prefill = table.getAttribute("data-prefill");
-    if (prefill) search.value = prefill;
-
-    var emptyText = table.getAttribute("data-empty") || "No rows match the current filter.";
-
-    var api = window.agGrid.createGrid(gridHost, {
-      theme: delGridTheme(),
-      columnDefs: parsed.colDefs,
-      rowData: parsed.rows,
-      defaultColDef: {
-        sortable: true,
-        resizable: true,
-        floatingFilter: true,
-        wrapHeaderText: true,
-        autoHeaderHeight: true,
-        minWidth: 90,
-        autoHeight: false,
-      },
-      rowHeight: 48,
-      animateRows: false,
-      suppressCellFocus: true,
-      // Sideways scroll is fine when columns are wider for readability.
-      suppressHorizontalScroll: false,
-      alwaysShowVerticalScroll: false,
-      // Live column resize by dragging header edges (default AG Grid).
-      // Do NOT call sizeColumnsToFit on every resize — that undoes user widths.
-      pagination: true,
-      paginationPageSize: defaultPage,
-      paginationPageSizeSelector: [25, 50, 100, 200],
-      quickFilterText: prefill || "",
-      domLayout: autoHeight ? "autoHeight" : "normal",
-      // data-empty is honoured by the vanilla path too; keep the wording identical.
-      overlayNoRowsTemplate:
-        '<span class="table-empty">' + escapeHtml(emptyText) + "</span>",
-      onGridReady: function (e) {
-        try {
-          // Fit first so phones/narrow panes show values immediately; desktop
-          // can still Autosize from the toolbar for content-based widths.
-          if (matchesMobile()) {
-            e.api.sizeColumnsToFit();
-          } else {
-            e.api.autoSizeAllColumns(false);
-          }
-        } catch (err) {
-          try { e.api.sizeColumnsToFit(); } catch (err2) {}
-        }
-      },
-      onFirstDataRendered: function (e) {
-        try {
-          if (matchesMobile()) e.api.sizeColumnsToFit();
-        } catch (err) {}
-      },
-      onFilterChanged: function () { updateStatus(); },
-      onModelUpdated: function () { updateStatus(); },
-      onPaginationChanged: function () { updateStatus(); },
-      onColumnResized: function () { /* user-driven; leave widths alone */ },
-    });
-
-    function updateStatus() {
-      if (!api) return;
-      var total = 0;
-      var displayed = 0;
-      try {
-        total = parsed.rows.length;
-        displayed = api.getDisplayedRowCount();
-      } catch (e) { return; }
-      var msg = displayed + " of " + total;
-      if (displayed !== total) msg += " (filtered)";
-      var model = null;
-      try { model = api.getFilterModel(); } catch (e) {}
-      var nFilters = model ? Object.keys(model).length : 0;
-      if (search.value.trim()) nFilters += 1;
-      if (nFilters) msg += " · " + nFilters + " filter" + (nFilters === 1 ? "" : "s") + " active";
-      status.textContent = msg;
-      clearBtn.disabled = nFilters === 0 && !search.value.trim();
-    }
-
-    search.addEventListener("input", function () {
-      api.setGridOption("quickFilterText", search.value);
-      updateStatus();
-    });
-    clearBtn.addEventListener("click", function () {
-      search.value = "";
-      api.setGridOption("quickFilterText", "");
-      api.setFilterModel(null);
-      updateStatus();
-    });
-    autoSizeBtn.addEventListener("click", function () {
-      try { api.autoSizeAllColumns(false); } catch (e) {}
-    });
-    fitBtn.addEventListener("click", function () {
-      try { api.sizeColumnsToFit(); } catch (e) {}
-    });
-
-    var tableId = table.id;
-    if (tableId) gridApisById[tableId] = api;
-    wrap._gridApi = api;
-    wrap._gridSearch = search;
-    updateStatus();
-  }
-
-  // Vanilla fallback: per-column contains / not-contains + clear all (no AG Grid)
+  // Vanilla table engine (sort, per-column Excel-style filter, quick filter,
+  // resize, pagination, CSV export). This is the only table path on all
+  // viewports; it used to be the small-screen fallback for AG Grid.
   function enhanceTableVanilla(table) {
     var tbody = table.tBodies[0];
     var headRow = table.tHead ? table.tHead.rows[0] : null;
@@ -671,9 +199,12 @@
     wrap.appendChild(status);
 
     var emptyMsg = document.createElement("div");
-    emptyMsg.className = "table-empty";
+    emptyMsg.className = "empty-state";
     emptyMsg.hidden = true;
-    emptyMsg.textContent = table.getAttribute("data-empty") || "No rows match the current filter.";
+    var emptyMsgText = document.createElement("div");
+    emptyMsgText.className = "empty-state-msg";
+    emptyMsgText.textContent = table.getAttribute("data-empty") || "No rows match the current filter.";
+    emptyMsg.appendChild(emptyMsgText);
     wrap.appendChild(emptyMsg);
 
     var search = document.createElement("input");
@@ -689,42 +220,39 @@
     clearBtn.textContent = "Clear all filters";
     toolbar.appendChild(clearBtn);
 
-    // Floating filter row: text op + Excel-style multi-select of existing values
-    var filterRow = document.createElement("tr");
-    filterRow.className = "table-filter-row";
+    // Mobile only: `data-priority="low"` columns are hidden below 900px by
+    // default (see CSS); this toggle reveals them without going back to a
+    // horizontal-scroll table for every column.
+    var hasLowPriority = !!headRow.querySelector('[data-priority="low"]');
+    var showAllBtn = null;
+    if (hasLowPriority) {
+      showAllBtn = document.createElement("button");
+      showAllBtn.type = "button";
+      showAllBtn.className = "btn btn-sm table-show-all";
+      showAllBtn.textContent = "Show all columns";
+      showAllBtn.setAttribute("aria-pressed", "false");
+      table.setAttribute("data-hide-low", "");
+      showAllBtn.addEventListener("click", function () {
+        var hidden = table.hasAttribute("data-hide-low");
+        if (hidden) {
+          table.removeAttribute("data-hide-low");
+          showAllBtn.textContent = "Hide secondary columns";
+          showAllBtn.setAttribute("aria-pressed", "true");
+        } else {
+          table.setAttribute("data-hide-low", "");
+          showAllBtn.textContent = "Show all columns";
+          showAllBtn.setAttribute("aria-pressed", "false");
+        }
+      });
+      toolbar.appendChild(showAllBtn);
+    }
+
+    // Per-column filter: a header button opens an Excel-style popover (text
+    // operator + multi-select of existing values), replacing the always-visible
+    // AG Grid floating-filter row.
     var colFilters = [];
     Array.prototype.forEach.call(headRow.cells, function (th, idx) {
-      var td = document.createElement("th");
-      td.className = "table-col-filter-cell";
-      var op = document.createElement("select");
-      op.className = "table-col-op";
-      op.setAttribute("aria-label", "Filter operator for " + (th.textContent || "").trim());
-      [
-        ["contains", "contains"],
-        ["notContains", "does not contain"],
-        ["equals", "equals"],
-        ["notEqual", "does not equal"],
-        ["startsWith", "starts with"],
-        ["endsWith", "ends with"],
-        ["blank", "is empty"],
-        ["notBlank", "is not empty"],
-      ].forEach(function (pair) {
-        var o = document.createElement("option");
-        o.value = pair[0];
-        o.textContent = pair[1];
-        op.appendChild(o);
-      });
-      var inp = document.createElement("input");
-      inp.type = "text";
-      inp.className = "table-col-input";
-      inp.placeholder = "text…";
-      inp.setAttribute("aria-label", "Filter text for " + (th.textContent || "").trim());
-      var multi = document.createElement("select");
-      multi.className = "table-col-multi";
-      multi.multiple = true;
-      multi.size = 1;
-      multi.title = "Select existing values (Ctrl/Cmd-click multi)";
-      multi.setAttribute("aria-label", "Values for " + (th.textContent || "").trim());
+      var headerLabel = (th.textContent || "").trim();
       var values = {};
       allRows.forEach(function (r) {
         var cell = r.cells[idx];
@@ -733,34 +261,160 @@
         if (v === "—") v = "";
         values[v] = true;
       });
-      var optAll = document.createElement("option");
-      optAll.value = "";
-      optAll.textContent = "(all values)";
-      multi.appendChild(optAll);
-      Object.keys(values).sort().forEach(function (v) {
-        var o = document.createElement("option");
-        o.value = v;
-        o.textContent = v === "" ? "(blank)" : v;
-        multi.appendChild(o);
-      });
-      multi.addEventListener("focus", function () { multi.size = Math.min(8, multi.options.length); });
-      multi.addEventListener("blur", function () { multi.size = 1; });
-      td.appendChild(op);
-      td.appendChild(inp);
-      td.appendChild(multi);
-      filterRow.appendChild(td);
-      colFilters.push({ op: op, inp: inp, multi: multi, col: idx });
-      function refreshInp() {
-        var need = op.value !== "blank" && op.value !== "notBlank";
-        inp.disabled = !need;
-        if (!need) inp.value = "";
+      var valueList = Object.keys(values).sort();
+
+      var filterBtn = document.createElement("button");
+      filterBtn.type = "button";
+      filterBtn.className = "th-filter-btn";
+      filterBtn.setAttribute("aria-label", "Filter " + headerLabel);
+      filterBtn.setAttribute("aria-haspopup", "dialog");
+      filterBtn.setAttribute("aria-expanded", "false");
+      filterBtn.innerHTML = '<span aria-hidden="true">▾</span>';
+      th.appendChild(filterBtn);
+
+      var state = { op: "contains", val: "", selected: null, col: idx };
+      colFilters.push(state);
+
+      function isActive() {
+        return !!(state.val.trim()) || state.selected !== null;
       }
-      op.addEventListener("change", function () { refreshInp(); applyFilter(); render(); });
-      inp.addEventListener("input", function () { applyFilter(); render(); });
-      multi.addEventListener("change", function () { applyFilter(); render(); });
-      refreshInp();
+      function updateBtn() {
+        filterBtn.classList.toggle("is-active", isActive());
+      }
+
+      function openPopover() {
+        if (openColPopover && openColPopover.trigger === filterBtn) { closeColPopover(); return; }
+        closeColPopover();
+
+        var pop = document.createElement("div");
+        pop.className = "col-filter-pop";
+        pop.setAttribute("role", "dialog");
+        pop.setAttribute("aria-label", "Filter " + headerLabel);
+        pop.innerHTML =
+          '<div class="col-filter-pop-head">' +
+          '<label>Text' +
+          '<select class="col-filter-op" aria-label="Filter operator for ' + escapeHtml(headerLabel) + '">' +
+          '<option value="contains">contains</option>' +
+          '<option value="notContains">does not contain</option>' +
+          '<option value="equals">equals</option>' +
+          '<option value="notEqual">does not equal</option>' +
+          '<option value="startsWith">starts with</option>' +
+          '<option value="endsWith">ends with</option>' +
+          '<option value="blank">is empty</option>' +
+          '<option value="notBlank">is not empty</option>' +
+          "</select>" +
+          '<input type="text" class="col-filter-text" placeholder="Type to match…" aria-label="Filter text for ' + escapeHtml(headerLabel) + '">' +
+          "</label></div>" +
+          '<div class="col-filter-actions">' +
+          '<button type="button" class="btn btn-sm col-filter-all">Select all</button>' +
+          '<button type="button" class="btn btn-sm col-filter-none">Clear</button>' +
+          "</div>" +
+          '<input type="search" class="col-filter-search" placeholder="Search values…" aria-label="Search values for ' + escapeHtml(headerLabel) + '">' +
+          '<div class="col-filter-list" role="group" aria-label="Values"></div>' +
+          '<div class="col-filter-close-row"><button type="button" class="btn btn-sm col-filter-done">Done</button></div>';
+
+        var opEl = pop.querySelector(".col-filter-op");
+        var textEl = pop.querySelector(".col-filter-text");
+        var searchEl = pop.querySelector(".col-filter-search");
+        var listEl = pop.querySelector(".col-filter-list");
+        opEl.value = state.op;
+        textEl.value = state.val;
+        var needsText = function () { return opEl.value !== "blank" && opEl.value !== "notBlank"; };
+        textEl.disabled = !needsText();
+
+        function renderList() {
+          var q = (searchEl.value || "").toLowerCase();
+          listEl.innerHTML = "";
+          var allOn = state.selected === null;
+          valueList.forEach(function (v) {
+            var labelText = v === "" ? "(blank)" : v;
+            if (q && labelText.toLowerCase().indexOf(q) === -1) return;
+            var lab = document.createElement("label");
+            lab.className = "col-filter-item";
+            var cb = document.createElement("input");
+            cb.type = "checkbox";
+            cb.checked = allOn || (state.selected && state.selected.has(v));
+            cb.addEventListener("change", function () {
+              if (state.selected === null) state.selected = new Set(valueList);
+              if (cb.checked) state.selected.add(v); else state.selected.delete(v);
+              if (state.selected.size === valueList.length) state.selected = null;
+              applyFilter(); render(); updateBtn();
+            });
+            var span = document.createElement("span");
+            span.textContent = labelText;
+            span.title = labelText;
+            lab.appendChild(cb);
+            lab.appendChild(span);
+            listEl.appendChild(lab);
+          });
+          if (!listEl.childNodes.length) {
+            var empty = document.createElement("div");
+            empty.className = "muted col-filter-empty";
+            empty.textContent = "No values";
+            listEl.appendChild(empty);
+          }
+        }
+        renderList();
+
+        pop.querySelector(".col-filter-all").addEventListener("click", function () {
+          state.selected = null; renderList(); applyFilter(); render(); updateBtn();
+        });
+        pop.querySelector(".col-filter-none").addEventListener("click", function () {
+          state.selected = new Set(); renderList(); applyFilter(); render(); updateBtn();
+        });
+        opEl.addEventListener("change", function () {
+          state.op = opEl.value;
+          textEl.disabled = !needsText();
+          if (textEl.disabled) { textEl.value = ""; state.val = ""; }
+          applyFilter(); render(); updateBtn();
+        });
+        textEl.addEventListener("input", function () {
+          state.val = textEl.value; applyFilter(); render(); updateBtn();
+        });
+        searchEl.addEventListener("input", renderList);
+        pop.querySelector(".col-filter-done").addEventListener("click", closeColPopover);
+
+        document.body.appendChild(pop);
+        var r = filterBtn.getBoundingClientRect();
+        pop.style.position = "absolute";
+        pop.style.top = (window.scrollY + r.bottom + 4) + "px";
+        var left = window.scrollX + r.left;
+        var maxLeft = window.scrollX + document.documentElement.clientWidth - pop.offsetWidth - 8;
+        pop.style.left = Math.max(8, Math.min(left, maxLeft)) + "px";
+
+        var trap = makeFocusTrap(function () { return pop; });
+        filterBtn.setAttribute("aria-expanded", "true");
+        openColPopover = { el: pop, trigger: filterBtn, trap: trap };
+        trap.activate();
+      }
+      filterBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        openPopover();
+      });
+      updateBtn();
+
+      // Column resize: drag the header's trailing edge.
+      var resizer = document.createElement("span");
+      resizer.className = "th-resizer";
+      resizer.setAttribute("aria-hidden", "true");
+      th.appendChild(resizer);
+      resizer.addEventListener("mousedown", function (e) {
+        e.preventDefault();
+        var startX = e.clientX;
+        var startW = th.offsetWidth;
+        table.style.tableLayout = "fixed";
+        function onMove(ev) {
+          var w = Math.max(60, startW + (ev.clientX - startX));
+          th.style.width = w + "px";
+        }
+        function onUp() {
+          document.removeEventListener("mousemove", onMove);
+          document.removeEventListener("mouseup", onUp);
+        }
+        document.addEventListener("mousemove", onMove);
+        document.addEventListener("mouseup", onUp);
+      });
     });
-    if (table.tHead) table.tHead.appendChild(filterRow);
 
     var pageSel = document.createElement("select");
     pageSel.className = "table-pagesize";
@@ -843,30 +497,16 @@
         if (term && r.textContent.toLowerCase().indexOf(term) === -1) return false;
         for (var i = 0; i < colFilters.length; i++) {
           var f = colFilters[i];
-          var op = f.op.value;
-          var val = f.inp.value;
           var text = cellText(r, f.col);
-          // Multi-select of existing values (Excel-like)
-          var selected = [];
-          Array.prototype.forEach.call(f.multi.selectedOptions, function (o) {
-            if (o.value !== "" || (o.value === "" && o.textContent === "(blank)")) {
-              if (o.textContent !== "(all values)") selected.push(o.value.toLowerCase());
-            }
-          });
-          // If user selected real options (not only placeholder)
-          var multiActive = false;
-          Array.prototype.forEach.call(f.multi.selectedOptions, function (o) {
-            if (o.textContent !== "(all values)") multiActive = true;
-          });
-          if (multiActive) {
+          // Excel-style value set
+          if (f.selected !== null) {
+            var raw = (text === "—" ? "" : text);
             var hit = false;
-            for (var s = 0; s < selected.length; s++) {
-              if (text === selected[s]) { hit = true; break; }
-            }
-            // blank option
-            if (!hit && selected.indexOf("") !== -1 && (!text || text === "—")) hit = true;
+            f.selected.forEach(function (v) { if (String(v).toLowerCase() === raw) hit = true; });
             if (!hit) return false;
           }
+          var op = f.op;
+          var val = f.val;
           if (op !== "blank" && op !== "notBlank" && !val.trim()) continue;
           if (!matchOp(text, op, val.trim())) return false;
         }
@@ -904,13 +544,14 @@
     search.addEventListener("input", function () { applyFilter(); render(); });
     clearBtn.addEventListener("click", function () {
       search.value = "";
+      closeColPopover();
       colFilters.forEach(function (f) {
-        f.op.value = "contains";
-        f.inp.value = "";
-        f.inp.disabled = false;
-        Array.prototype.forEach.call(f.multi.options, function (o) {
-          o.selected = o.textContent === "(all values)";
-        });
+        f.op = "contains";
+        f.val = "";
+        f.selected = null;
+      });
+      wrap.querySelectorAll(".th-filter-btn.is-active").forEach(function (b) {
+        b.classList.remove("is-active");
       });
       applyFilter();
       render();
@@ -930,47 +571,7 @@
   }
 
   function enhanceTable(table) {
-    // Phones / small tablets: skip the 2MB AG Grid path — vanilla HTML tables
-    // with sideways scroll reliably show cell values on Pixel / Android Chrome.
-    // Same 900px breakpoint the mobile CSS uses, so the two never disagree.
-    if (matchesMobile()) {
-      enhanceTableVanilla(table);
-      return;
-    }
-
-    // Claim the grid's slot before the 1.9 MB bundle downloads so the raw table
-    // isn't shown and then yanked out from under the reader.
-    var placeholder = document.createElement("div");
-    placeholder.className = "del-grid-loading";
-    placeholder.textContent = "Loading table…";
-    table.parentNode.insertBefore(placeholder, table);
-    table.style.display = "none";
-    table.setAttribute("aria-hidden", "true");
-
-    function revertToTable() {
-      if (placeholder.parentNode) placeholder.parentNode.removeChild(placeholder);
-      table.style.display = "";
-      table.removeAttribute("aria-hidden");
-    }
-
-    loadAgGrid(function (err) {
-      if (err || !window.agGrid || !window.agGrid.createGrid) {
-        revertToTable();
-        enhanceTableVanilla(table);
-        return;
-      }
-      try {
-        enhanceTableWithAgGrid(table, placeholder);
-      } catch (e) {
-        console.warn("AG Grid enhance failed, falling back", e);
-        revertToTable();
-        var orphan = table.previousElementSibling;
-        if (orphan && orphan.classList && orphan.classList.contains("del-grid-block")) {
-          orphan.parentNode.removeChild(orphan);
-        }
-        enhanceTableVanilla(table);
-      }
-    });
+    enhanceTableVanilla(table);
   }
 
   document.querySelectorAll("table[data-enhanced]").forEach(enhanceTable);
@@ -992,7 +593,7 @@
   });
 
   // =========================================================================
-  // CSV export (AG Grid filtered rows, or DOM fallback)
+  // CSV export (current filtered + sorted rows)
   // =========================================================================
   function csvEscape(val) {
     var s = (val == null ? "" : String(val)).replace(/\r?\n/g, " ").trim();
@@ -1001,32 +602,13 @@
   }
 
   function exportTableCsv(tableId) {
-    var api = gridApisById[tableId];
-    if (api) {
-      api.exportDataAsCsv({
-        fileName: (tableId || "export") + ".csv",
-        exportedRows: "filteredAndSorted",
-        processCellCallback: function (params) {
-          // Prefer plain-text field over HTML
-          if (params.column) {
-            var f = params.column.getColId();
-            if (params.node && params.node.data && params.node.data[f] != null) {
-              return params.node.data[f];
-            }
-          }
-          return params.value;
-        },
-      });
-      return;
-    }
     var table = document.getElementById(tableId);
     if (!table) return;
     var headRow = table.tHead ? table.tHead.rows[0] : null;
     if (!headRow) return;
     var headers = [];
     Array.prototype.forEach.call(headRow.cells, function (th) {
-      if (th.classList.contains("table-col-filter-cell")) return;
-      headers.push(csvEscape(th.textContent));
+      headers.push(csvEscape((th.textContent || "").replace(/▾\s*$/, "").trim()));
     });
     var lines = [headers.join(",")];
     // Prefer the vanilla renderer's filtered set: pagination removes off-page
@@ -1036,7 +618,6 @@
       : (table.tBodies[0] ? Array.prototype.slice.call(table.tBodies[0].rows) : []);
     rows.forEach(function (r) {
       if (r.hidden || r.style.display === "none") return;
-      if (r.classList.contains("table-filter-row")) return;
       var cols = [];
       Array.prototype.forEach.call(r.cells, function (td) {
         var explicit = td.getAttribute("data-sort-value");
@@ -1074,6 +655,7 @@
       el.classList.add("copied");
       var badge = el.querySelector(".copy-mark");
       if (badge) badge.textContent = "✓";
+      showToast("Copied to clipboard", "ok");
       setTimeout(function () {
         el.classList.remove("copied");
         if (badge) badge.textContent = "⧉";
@@ -1768,6 +1350,17 @@
     }
     glossaryTrap.release(glossaryFab);
   }
+  document.querySelectorAll("[data-glossary-open]").forEach(function (btn) {
+    btn.addEventListener("click", function () {
+      if (glossaryFab && glossaryFab.offsetParent !== null) {
+        openGlossary();
+      } else {
+        var rail = document.getElementById("glossary-rail");
+        if (rail) rail.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+    });
+  });
+
   if (glossaryFab) glossaryFab.addEventListener("click", openGlossary);
   if (glossaryClose) glossaryClose.addEventListener("click", closeGlossary);
   if (glossaryBackdrop) glossaryBackdrop.addEventListener("click", closeGlossary);
@@ -1786,14 +1379,26 @@
     var jobId = outputBox.getAttribute("data-job-id");
     var statusEl = document.getElementById("job-status");
     var scrollToggle = document.getElementById("autoscroll-toggle");
+    var progressFill = document.getElementById("job-progress-fill");
+    var progressTrack = document.getElementById("job-progress");
+    var progressLabel = document.getElementById("job-progress-label");
+    var currentStepEl = document.getElementById("job-current-step");
+    var noStepsMsg = document.getElementById("job-no-steps");
     var TERMINAL_STATES = ["done", "failed", "success", "error", "refused"];
-    var fallbackTable = document.getElementById("job-steps");
+    var toastedDone = false;
 
-    // Build the stage panel a late-arriving step belongs to, mirroring the
-    // server-rendered markup in job_detail.html.
+    // Build (or find) the stage panel a step belongs to, mirroring the
+    // server-rendered markup in job_detail.html. The shape is decided from
+    // the polled payload every time, never from whatever happens to be in
+    // the DOM — a job with zero steps at page load must still grow full
+    // per-stage tables once steps start arriving.
     function stageTableFor(stage) {
       var table = outputBox.querySelector('table[data-stage="' + stage.replace(/"/g, "") + '"]');
       if (table) return table;
+      if (noStepsMsg && noStepsMsg.parentNode) {
+        noStepsMsg.parentNode.removeChild(noStepsMsg);
+        noStepsMsg = null;
+      }
       var section = document.createElement("section");
       section.className = "panel";
       section.innerHTML =
@@ -1808,30 +1413,16 @@
     }
 
     function appendStepRow(step) {
+      var table = stageTableFor(step.stage || "steps");
       var row = document.createElement("tr");
       row.setAttribute("data-step-seq", step.seq);
-      // A job with no steps at page load renders the compact 4-column table.
-      if (fallbackTable && document.contains(fallbackTable)) {
-        var placeholder = fallbackTable.querySelector("tbody tr td[colspan]");
-        if (placeholder) {
-          var emptyRow = placeholder.parentNode;
-          emptyRow.parentNode.removeChild(emptyRow);
-        }
-        row.innerHTML =
-          "<td>" + escapeHtml(step.seq) + "</td>" +
-          "<td>" + escapeHtml(step.stage || "") + "</td>" +
-          '<td class="mono">' + escapeHtml(step.operation || "") + "</td>" +
-          '<td class="step-state"></td>';
-        fallbackTable.tBodies[0].appendChild(row);
-        return row;
-      }
-      var table = stageTableFor(step.stage || "steps");
       row.innerHTML =
         "<td>" + escapeHtml(step.seq) + "</td>" +
         '<td class="mono">' + escapeHtml(step.operation || "") + "</td>" +
         '<td class="step-state"></td>' +
-        "<td>" + (step.exit_code === null || step.exit_code === undefined ? "—" : escapeHtml(step.exit_code)) + "</td>" +
-        "<td>—</td><td>—</td>";
+        '<td class="step-exit">—</td>' +
+        '<td class="step-duration">—</td>' +
+        '<td class="step-output">—</td>';
       table.tBodies[0].appendChild(row);
       var section = table.closest("section");
       var pill = section ? section.querySelector(".count-pill") : null;
@@ -1847,34 +1438,344 @@
       }
       (data.steps || []).forEach(function (step) {
         var row = outputBox.querySelector('tr[data-step-seq="' + step.seq + '"]');
-        if (!row) {
-          // Steps created after page load were polled but never rendered.
-          row = appendStepRow(step);
-          if (!row) return;
-        }
+        if (!row) row = appendStepRow(step);
+        if (!row) return;
         var stateCell = row.querySelector(".step-state");
         if (stateCell) {
           stateCell.innerHTML =
             '<span class="badge status-' + escapeHtml(step.state) + '">' + escapeHtml(step.state) + "</span>";
         }
+        var exitCell = row.querySelector(".step-exit");
+        if (exitCell) {
+          exitCell.textContent = step.exit_code === null || step.exit_code === undefined ? "—" : String(step.exit_code);
+        }
+        var durationCell = row.querySelector(".step-duration");
+        if (durationCell) durationCell.textContent = step.duration || "—";
+        var outputCell = row.querySelector(".step-output");
+        if (outputCell) {
+          if (step.output_sanitized) {
+            outputCell.innerHTML =
+              "<details><summary>output</summary><pre class=\"output\">" +
+              escapeHtml(step.output_sanitized) + "</pre></details>";
+          } else {
+            outputCell.textContent = "—";
+          }
+        }
       });
+      if (progressFill && data.progress) {
+        var pct = data.progress.pct || 0;
+        progressFill.style.width = pct + "%";
+        if (progressTrack) progressTrack.setAttribute("aria-valuenow", String(pct));
+        if (progressLabel) {
+          progressLabel.textContent = data.progress.done + " of " + data.progress.total + " steps done (" + pct + "%)";
+        }
+      }
+      if (currentStepEl) {
+        currentStepEl.textContent = data.current_step
+          ? "Running: " + (data.current_step.stage || "") + " · " + (data.current_step.operation || "")
+          : "";
+      }
       if (scrollToggle && scrollToggle.checked && outputBox) {
         outputBox.scrollTop = outputBox.scrollHeight;
       }
+      if (data.status && TERMINAL_STATES.indexOf(data.status) !== -1 && !toastedDone) {
+        toastedDone = true;
+        showToast("Job " + data.status, data.status === "done" || data.status === "success" ? "ok" : "error");
+      }
+    }
+
+    // Exponential backoff 2s -> 10s; pause entirely while the tab is hidden
+    // and resume (with an immediate poll) when it becomes visible again.
+    var pollDelay = 2000;
+    var pollTimer = null;
+    var stopped = false;
+
+    function scheduleNext() {
+      if (stopped || document.hidden) return;
+      pollTimer = setTimeout(poll, pollDelay);
+      pollDelay = Math.min(pollDelay * 1.5, 10000);
     }
 
     function poll() {
+      pollTimer = null;
       fetch("/jobs/" + jobId + "/status", { credentials: "same-origin" })
         .then(function (r) { return r.json(); })
         .then(function (data) {
           applyStatus(data);
           if (!data || TERMINAL_STATES.indexOf(data.status) === -1) {
-            setTimeout(poll, 2000);
+            scheduleNext();
+          } else {
+            stopped = true;
           }
         })
-        .catch(function () { setTimeout(poll, 2000); });
+        .catch(function () { scheduleNext(); });
     }
-    setTimeout(poll, 2000);
+
+    document.addEventListener("visibilitychange", function () {
+      if (!document.hidden && !stopped && !pollTimer) {
+        pollDelay = 2000;
+        poll();
+      }
+      if (document.hidden && pollTimer) {
+        clearTimeout(pollTimer);
+        pollTimer = null;
+      }
+    });
+
+    pollTimer = setTimeout(poll, pollDelay);
+  }
+
+  // =========================================================================
+  // Dashboard: live scan strip — poll /scan/status while a scan runs, disable
+  // "Run scan now" meanwhile, and reload once when it flips back to idle.
+  // =========================================================================
+  var scanStrip = document.getElementById("scan-strip");
+  if (scanStrip) {
+    var scanLive = document.getElementById("scan-strip-live");
+    var scanElapsed = document.getElementById("scan-strip-elapsed");
+    var runScanBtn = document.getElementById("run-scan-btn");
+    var scanStartedAt = null;
+    var scanWasRunning = false;
+    var scanPollTimer = null;
+
+    function formatElapsed(ms) {
+      var s = Math.max(0, Math.round(ms / 1000));
+      if (s < 60) return s + "s";
+      return Math.floor(s / 60) + "m " + (s % 60) + "s";
+    }
+
+    function tickElapsed() {
+      if (!scanStartedAt || !scanElapsed) return;
+      scanElapsed.textContent = "scanning… " + formatElapsed(Date.now() - scanStartedAt);
+    }
+
+    function pollScanStatus() {
+      fetch("/scan/status", { credentials: "same-origin" })
+        .then(function (r) { return r.json(); })
+        .then(function (data) {
+          if (!data) return;
+          var running = !!data.running;
+          if (running) {
+            if (!scanStartedAt) {
+              scanStartedAt = data.started ? Date.parse(data.started) : Date.now();
+              if (isNaN(scanStartedAt)) scanStartedAt = Date.now();
+            }
+            if (scanLive) scanLive.hidden = false;
+            if (runScanBtn) runScanBtn.disabled = true;
+            tickElapsed();
+            scanWasRunning = true;
+            scanPollTimer = setTimeout(pollScanStatus, 3000);
+          } else {
+            if (scanLive) scanLive.hidden = true;
+            if (runScanBtn) runScanBtn.disabled = false;
+            if (scanWasRunning) {
+              // Scan just finished: reload once to pick up fresh stats/tables.
+              window.location.reload();
+              return;
+            }
+          }
+        })
+        .catch(function () {
+          scanPollTimer = setTimeout(pollScanStatus, 3000);
+        });
+    }
+    pollScanStatus();
+
+    var scanForm = document.querySelector(".scan-run-form");
+    if (scanForm) {
+      scanForm.addEventListener("submit", function () {
+        scanWasRunning = true;
+        if (runScanBtn) runScanBtn.disabled = true;
+        setTimeout(pollScanStatus, 1000);
+      });
+    }
+  }
+
+  // =========================================================================
+  // DEL.tabs: accessible tablist (roving tabindex, arrow keys, aria-selected)
+  // for any `.tabs` block: a `.tablist` of `[role=tab]` buttons plus matching
+  // `.tabpanel` elements, wired by aria-controls/aria-labelledby. Deep-links
+  // via the URL hash when a tab's id matches window.location.hash.
+  // =========================================================================
+  function initTabs(root) {
+    var tablist = root.querySelector('[role="tablist"]');
+    if (!tablist) return;
+    var tabs = Array.prototype.slice.call(tablist.querySelectorAll('[role="tab"]'));
+    if (!tabs.length) return;
+
+    function panelFor(tab) {
+      var id = tab.getAttribute("aria-controls");
+      return id ? document.getElementById(id) : null;
+    }
+
+    function select(tab, focus) {
+      tabs.forEach(function (t) {
+        var selected = t === tab;
+        t.setAttribute("aria-selected", selected ? "true" : "false");
+        t.tabIndex = selected ? 0 : -1;
+        var panel = panelFor(t);
+        if (panel) panel.hidden = !selected;
+      });
+      if (focus) tab.focus();
+      if (tab.id) {
+        history.replaceState(null, "", "#" + tab.id);
+      }
+    }
+
+    tabs.forEach(function (tab, idx) {
+      tab.addEventListener("click", function () { select(tab, false); });
+      tab.addEventListener("keydown", function (e) {
+        var next = null;
+        if (e.key === "ArrowRight" || e.key === "ArrowDown") next = tabs[(idx + 1) % tabs.length];
+        else if (e.key === "ArrowLeft" || e.key === "ArrowUp") next = tabs[(idx - 1 + tabs.length) % tabs.length];
+        else if (e.key === "Home") next = tabs[0];
+        else if (e.key === "End") next = tabs[tabs.length - 1];
+        if (next) {
+          e.preventDefault();
+          select(next, true);
+        }
+      });
+    });
+
+    var initial = tabs[0];
+    if (window.location.hash) {
+      var hashId = window.location.hash.slice(1);
+      var match = tabs.filter(function (t) { return t.id === hashId; })[0];
+      if (match) initial = match;
+    }
+    select(initial, false);
+  }
+
+  window.DEL.tabs = { init: initTabs };
+  document.querySelectorAll(".tabs").forEach(initTabs);
+
+  // =========================================================================
+  // DEL.palette: Ctrl/Cmd+K command palette. Pages come from the sidebar nav
+  // already in the DOM; apps are fetched once from /palette.json (best-effort
+  // — the dialog still works with pages-only if that endpoint is absent).
+  // =========================================================================
+  var cmdkDialog = document.getElementById("cmdk");
+  if (cmdkDialog && typeof cmdkDialog.showModal === "function") {
+    var cmdkInput = document.getElementById("cmdk-input");
+    var cmdkResults = document.getElementById("cmdk-results");
+    var cmdkEmpty = document.getElementById("cmdk-empty");
+    var cmdkOpenBtn = document.getElementById("cmdk-open");
+    var cmdkTrap = makeFocusTrap(function () { return cmdkDialog; });
+    var cmdkPages = Array.prototype.map.call(
+      document.querySelectorAll(".nav-links a"),
+      function (a) { return { title: (a.textContent || "").trim(), url: a.getAttribute("href") }; }
+    );
+    var cmdkApps = null; // null = not yet fetched
+    var cmdkSelected = 0;
+    var cmdkItems = [];
+
+    function loadApps() {
+      if (cmdkApps !== null) return Promise.resolve(cmdkApps);
+      return fetch("/palette.json", { credentials: "same-origin" })
+        .then(function (r) { return r.ok ? r.json() : { apps: [] }; })
+        .then(function (data) { cmdkApps = (data && data.apps) || []; return cmdkApps; })
+        .catch(function () { cmdkApps = []; return cmdkApps; });
+    }
+
+    function fuzzyMatch(text, query) {
+      text = (text || "").toLowerCase();
+      return text.indexOf(query) !== -1;
+    }
+
+    function renderResults(query) {
+      query = (query || "").trim().toLowerCase();
+      var pageMatches = cmdkPages.filter(function (p) {
+        return !query || fuzzyMatch(p.title, query) || fuzzyMatch(p.url, query);
+      });
+      var appList = cmdkApps || [];
+      var appMatches = appList.filter(function (a) {
+        return !query || fuzzyMatch(a.name, query) || fuzzyMatch(a.slug, query) ||
+          fuzzyMatch((a.domains || []).join(" "), query);
+      });
+
+      cmdkResults.innerHTML = "";
+      cmdkItems = [];
+
+      function addGroup(label, items, render) {
+        if (!items.length) return;
+        var groupLabel = document.createElement("div");
+        groupLabel.className = "cmdk-group-label";
+        groupLabel.textContent = label;
+        cmdkResults.appendChild(groupLabel);
+        items.forEach(function (item) {
+          var btn = document.createElement("button");
+          btn.type = "button";
+          btn.className = "cmdk-item";
+          btn.setAttribute("role", "option");
+          btn.innerHTML = render(item);
+          btn.addEventListener("click", function () { window.location.href = item.url; });
+          cmdkResults.appendChild(btn);
+          cmdkItems.push(btn);
+        });
+      }
+
+      addGroup("Pages", pageMatches, function (p) {
+        return escapeHtml(p.title);
+      });
+      addGroup("Apps", appMatches, function (a) {
+        return escapeHtml(a.name) + '<span class="cmdk-meta">' + escapeHtml(a.status || "") + "</span>";
+      });
+
+      cmdkEmpty.hidden = cmdkItems.length !== 0;
+      cmdkSelected = 0;
+      highlightSelected();
+    }
+
+    function highlightSelected() {
+      cmdkItems.forEach(function (el, i) {
+        el.setAttribute("aria-selected", i === cmdkSelected ? "true" : "false");
+      });
+      if (cmdkItems[cmdkSelected]) {
+        cmdkItems[cmdkSelected].scrollIntoView({ block: "nearest" });
+      }
+    }
+
+    function openPalette() {
+      renderResults("");
+      cmdkDialog.showModal();
+      loadApps().then(function () { renderResults(cmdkInput.value); });
+      cmdkTrap.activate();
+      setTimeout(function () { cmdkInput.focus(); }, 0);
+    }
+    function closePalette() {
+      if (cmdkDialog.open) cmdkDialog.close();
+    }
+
+    cmdkDialog.addEventListener("close", function () {
+      cmdkTrap.release(cmdkOpenBtn);
+      cmdkInput.value = "";
+    });
+    cmdkDialog.addEventListener("cancel", closePalette);
+    // Clicking the ::backdrop area (outside .cmdk-box) closes the dialog.
+    cmdkDialog.addEventListener("click", function (e) {
+      if (e.target === cmdkDialog) closePalette();
+    });
+    if (cmdkOpenBtn) cmdkOpenBtn.addEventListener("click", openPalette);
+    cmdkInput.addEventListener("input", function () { renderResults(cmdkInput.value); });
+    cmdkInput.addEventListener("keydown", function (e) {
+      if (e.key === "ArrowDown") {
+        e.preventDefault();
+        if (cmdkItems.length) { cmdkSelected = (cmdkSelected + 1) % cmdkItems.length; highlightSelected(); }
+      } else if (e.key === "ArrowUp") {
+        e.preventDefault();
+        if (cmdkItems.length) { cmdkSelected = (cmdkSelected - 1 + cmdkItems.length) % cmdkItems.length; highlightSelected(); }
+      } else if (e.key === "Enter") {
+        e.preventDefault();
+        if (cmdkItems[cmdkSelected]) cmdkItems[cmdkSelected].click();
+      }
+    });
+    document.addEventListener("keydown", function (e) {
+      if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+        e.preventDefault();
+        if (cmdkDialog.open) closePalette(); else openPalette();
+      }
+    });
+    window.DEL.palette = { open: openPalette, close: closePalette };
   }
 
   // =========================================================================

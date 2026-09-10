@@ -442,6 +442,12 @@ def retry_job(job_id: int, confirm_phrase: str | None = None) -> None:
     execute_job(job_id, confirm_phrase=confirm_phrase)
 
 
+# Step-level terminal states actually written by _run_job (see the
+# `state = "done" if ok else "failed"` write above; "pending"/"running" are
+# the only non-terminal states).
+_TERMINAL_STEP_STATES = {"done", "failed"}
+
+
 def job_status(job_id: int) -> dict:
     conn = get_db()
     try:
@@ -450,7 +456,32 @@ def job_status(job_id: int) -> dict:
             raise JobError(f"no such job: {job_id}")
         job = dict(job_rows[0])
         steps = [dict(s) for s in q(conn, "SELECT * FROM job_steps WHERE job_id = ? ORDER BY seq", (job_id,))]
+
+        for s in steps:
+            started = s.get("started")
+            finished = s.get("finished")
+            duration = None
+            if started and finished:
+                try:
+                    t0 = datetime.fromisoformat(started)
+                    t1 = datetime.fromisoformat(finished)
+                    duration = (t1 - t0).total_seconds()
+                except (ValueError, TypeError):
+                    duration = None
+            s["duration"] = duration
+
         job["steps"] = steps
+
+        total = len(steps)
+        done = sum(1 for s in steps if s.get("state") in _TERMINAL_STEP_STATES)
+        pct = int(round(100 * done / total)) if total else 0
+        job["progress"] = {"done": done, "total": total, "pct": pct}
+
+        running = next((s for s in steps if s.get("state") == "running"), None)
+        job["current_step"] = (
+            {"seq": running["seq"], "stage": running["stage"], "operation": running["operation"]}
+            if running is not None else None
+        )
         return job
     finally:
         conn.close()

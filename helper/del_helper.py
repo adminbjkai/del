@@ -330,13 +330,17 @@ class Operations:
         return {"output": out + err, "changed": [f"unit:{unit}"]}
 
     def systemd_rm_unit(self, args, dry_run):
-        unit_file = V.validate_unit_name(args.get("unit", ""), self.policy,
+        unit_name = args.get("unit", "")
+        unit_file = V.validate_unit_name(unit_name, self.policy,
                                          require_unit_file=True, must_exist=False)
         if not os.path.isfile(unit_file):
             return {"output": f"unit file already absent: {unit_file}", "changed": []}
         cmds = [["rm", "--", unit_file], ["systemctl", "daemon-reload"]]
         if dry_run:
             return {"output": _fmt_cmds(cmds), "changed": []}
+        # TOCTOU re-check immediately before the destructive call.
+        unit_dir = self.policy.get("systemd_unit_dir", "/etc/systemd/system")
+        V.recheck_realpath(os.path.join(unit_dir, unit_name), unit_file)
         rc, out, err = _run(cmds[0])
         if rc != 0:
             raise OpError(f"rm unit file failed (rc={rc}): {err.strip()}")
@@ -437,7 +441,8 @@ class Operations:
 
     # -- filesystem ----------------------------------------------------------
     def path_delete(self, args, dry_run):
-        realpath = V.validate_path_for_deletion(args.get("path", ""), self.policy,
+        raw_path = args.get("path", "")
+        realpath = V.validate_path_for_deletion(raw_path, self.policy,
                                                 must_exist=False)
         if not os.path.lexists(realpath):
             return {"output": f"path already absent: {realpath}", "changed": []}
@@ -449,6 +454,9 @@ class Operations:
         cmd = ["rm", "-rf", "--one-file-system", "--", realpath]
         if dry_run:
             return {"output": _fmt_cmds([cmd]), "changed": []}
+        # TOCTOU re-check immediately before the destructive call: a symlink
+        # swapped in after validation would otherwise let `rm -rf` follow it.
+        V.recheck_realpath(raw_path, realpath)
         rc, out, err = _run(cmd)
         if rc != 0:
             raise OpError(f"rm -rf failed (rc={rc}): {err.strip()}")

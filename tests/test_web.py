@@ -15,7 +15,7 @@ from del_app import auth
 from del_app.auth import NeedsLogin, User
 from del_app.config import get_settings
 from del_app.db import run_migrations
-from del_app.web import routes
+from del_app.web import gallery, plans_jobs, routes
 
 
 @pytest.fixture()
@@ -229,7 +229,7 @@ def test_view_apps_only_renders_current_enabled_healthy_domains(
             },
         }
 
-    monkeypatch.setattr(routes, "_probe_domains", fake_probes)
+    monkeypatch.setattr(gallery, "_probe_domains", fake_probes)
     resp = authed_client.get("/view-apps")
     assert resp.status_code == 200
     assert "Good App" in resp.text
@@ -855,7 +855,7 @@ def test_plan_post_builds_plan(authed_client, monkeypatch, settings_env):
             plan.id = 42
             return 42
 
-    monkeypatch.setattr(routes, "planner", _FakePlanner())
+    monkeypatch.setattr(plans_jobs, "planner", _FakePlanner())
 
     csrf = _with_csrf(authed_client)
     resp = authed_client.post(
@@ -888,8 +888,8 @@ def test_execute_live_without_phrase_returns_400(authed_client, monkeypatch, set
         def execute_job(self, job_id, confirm_phrase=None):
             raise AssertionError("execute_job must not be called without a valid confirm phrase")
 
-    monkeypatch.setattr(routes, "planner", _FakePlanner())
-    monkeypatch.setattr(routes, "jobs", _FakeJobs())
+    monkeypatch.setattr(plans_jobs, "planner", _FakePlanner())
+    monkeypatch.setattr(plans_jobs, "jobs", _FakeJobs())
 
     csrf = _with_csrf(authed_client)
     resp = authed_client.post(
@@ -917,8 +917,8 @@ def test_execute_live_with_correct_phrase_creates_job(authed_client, monkeypatch
         def execute_job(self, job_id, confirm_phrase=None):
             calls["execute_job"] = (job_id, confirm_phrase)
 
-    monkeypatch.setattr(routes, "planner", _FakePlanner())
-    monkeypatch.setattr(routes, "jobs", _FakeJobs())
+    monkeypatch.setattr(plans_jobs, "planner", _FakePlanner())
+    monkeypatch.setattr(plans_jobs, "jobs", _FakeJobs())
 
     csrf = _with_csrf(authed_client)
     resp = authed_client.post(
@@ -951,7 +951,7 @@ def test_job_status_json_shape(authed_client, monkeypatch):
             assert job_id == 5
             return canned
 
-    monkeypatch.setattr(routes, "jobs", _FakeJobs())
+    monkeypatch.setattr(plans_jobs, "jobs", _FakeJobs())
 
     resp = authed_client.get("/jobs/5/status")
     assert resp.status_code == 200
@@ -1022,7 +1022,7 @@ def test_app_icon_refuses_domains_not_in_the_current_inventory(
     _seed_enabled_site("known.bjk.ai")
     called = []
     monkeypatch.setattr(
-        routes, "_cached_icon", lambda d: called.append(d) or (b"x", "image/png")
+        gallery, "_cached_icon", lambda d: called.append(d) or (b"x", "image/png")
     )
 
     for hostile in ("evil.example.com", "169.254.169.254", "localhost", "*.bjk.ai"):
@@ -1034,7 +1034,7 @@ def test_app_icon_serves_a_real_favicon_with_cache_headers(
     authed_client, settings_env, monkeypatch
 ):
     _seed_enabled_site("good.bjk.ai")
-    monkeypatch.setattr(routes, "_cached_icon", lambda d: (b"\x89PNG-body", "image/png"))
+    monkeypatch.setattr(gallery, "_cached_icon", lambda d: (b"\x89PNG-body", "image/png"))
 
     resp = authed_client.get("/app-icon/good.bjk.ai")
     assert resp.status_code == 200
@@ -1081,7 +1081,7 @@ def test_gallery_markup_points_icons_at_the_proxy(
     finally:
         conn.close()
 
-    monkeypatch.setattr(routes, "_probe_domains", lambda domains, force=False: {
+    monkeypatch.setattr(gallery, "_probe_domains", lambda domains, force=False: {
         "iconapp.bjk.ai": {"healthy": True, "status": 200, "latency_ms": 12,
                            "checked_at": "2026-08-24T00:00:00+00:00"},
     })
@@ -1185,7 +1185,7 @@ def test_stale_probes_are_served_immediately_and_refreshed_in_background(monkeyp
         return {"healthy": True, "status": 200, "latency_ms": 5,
                 "error": "", "checked_at": "2026-08-24T00:00:00+00:00"}
 
-    monkeypatch.setattr(routes, "_probe_domain", slow_probe)
+    monkeypatch.setattr(gallery, "_probe_domain", slow_probe)
 
     # First call has nothing cached: it must block and actually probe.
     started = _time.perf_counter()
@@ -1221,7 +1221,7 @@ def test_forced_refresh_still_blocks_and_reprobes(monkeypatch):
     routes._APP_PROBE_CACHE.clear()
     routes._PROBE_REFRESHING.clear()
     calls = []
-    monkeypatch.setattr(routes, "_probe_domain", lambda d: calls.append(d) or {
+    monkeypatch.setattr(gallery, "_probe_domain", lambda d: calls.append(d) or {
         "healthy": True, "status": 200, "latency_ms": 1, "error": "",
         "checked_at": "2026-08-24T00:00:00+00:00",
     })
@@ -1235,13 +1235,13 @@ def test_forced_refresh_still_blocks_and_reprobes(monkeypatch):
 def test_rescan_approve_rejects_an_unknown_action(authed_client, settings_env):
     """An unrecognised action used to fall through silently — nothing updated,
     yet an audit record written and success flashed."""
+    csrf = _with_csrf(authed_client)
     resp = authed_client.post("/apps/whatever/rescan-approve", data={
-        "csrf_token": authed_client.headers.get("x-csrf", ""),
+        "csrf_token": csrf,
         "association_id": 1, "action": "delete-everything",
     }, follow_redirects=False)
-    assert resp.status_code in (400, 403)  # 403 if CSRF rejects first
-    if resp.status_code == 400:
-        assert "unknown action" in resp.text
+    assert resp.status_code == 400
+    assert "unknown action" in resp.text
 
 
 def test_jobs_list_is_capped(authed_client, settings_env):
@@ -1249,3 +1249,396 @@ def test_jobs_list_is_capped(authed_client, settings_env):
     assert routes.JOBS_PAGE_LIMIT > 0
     resp = authed_client.get("/jobs")
     assert resp.status_code == 200
+
+
+# ---------------------------------------------------------------------------
+# B2: real 404s instead of fabricated dicts
+# ---------------------------------------------------------------------------
+
+def test_app_detail_404s_for_an_unknown_slug(authed_client, settings_env):
+    resp = authed_client.get("/apps/does-not-exist")
+    assert resp.status_code == 404
+
+
+def test_plan_form_404s_for_an_unknown_slug(authed_client, settings_env):
+    resp = authed_client.get("/apps/does-not-exist/plan")
+    assert resp.status_code == 404
+
+
+def test_plan_view_404s_for_an_unknown_plan(authed_client, settings_env):
+    resp = authed_client.get("/plans/999999")
+    assert resp.status_code == 404
+
+
+def test_plan_execute_404s_for_an_unknown_plan(authed_client, monkeypatch, settings_env):
+    class _FakePlanner:
+        class PlanError(Exception):
+            pass
+
+        class PlanNotFoundError(PlanError):
+            pass
+
+        def verify_plan(self, plan_id):
+            raise self.PlanNotFoundError(f"no such plan: {plan_id}")
+
+    monkeypatch.setattr(plans_jobs, "planner", _FakePlanner())
+    monkeypatch.setattr(plans_jobs, "jobs", object())
+
+    csrf = _with_csrf(authed_client)
+    resp = authed_client.post(
+        "/plans/999999/execute", data={"csrf_token": csrf, "mode": "dry_run"}
+    )
+    assert resp.status_code == 404
+
+
+def test_plan_execute_409s_for_a_tampered_plan(authed_client, monkeypatch, settings_env):
+    class _FakePlanner:
+        class PlanError(Exception):
+            pass
+
+        class PlanNotFoundError(PlanError):
+            pass
+
+        def verify_plan(self, plan_id):
+            raise self.PlanError(f"plan {plan_id} failed integrity check (tampered steps_json)")
+
+    monkeypatch.setattr(plans_jobs, "planner", _FakePlanner())
+    monkeypatch.setattr(plans_jobs, "jobs", object())
+
+    csrf = _with_csrf(authed_client)
+    resp = authed_client.post(
+        "/plans/7/execute", data={"csrf_token": csrf, "mode": "dry_run"}
+    )
+    assert resp.status_code == 409
+
+
+def test_job_status_404s_for_an_unknown_job(authed_client, monkeypatch):
+    class _JobError(Exception):
+        pass
+
+    class _FakeJobs:
+        JobError = _JobError
+
+        def job_status(self, job_id):
+            raise _JobError(f"no such job: {job_id}")
+
+    monkeypatch.setattr(plans_jobs, "jobs", _FakeJobs())
+    resp = authed_client.get("/jobs/999999/status")
+    assert resp.status_code == 404
+    assert "no such job" in resp.json()["error"]
+
+
+# ---------------------------------------------------------------------------
+# B2: /scan runs in the background, /scan/status polls it
+# ---------------------------------------------------------------------------
+
+def test_trigger_scan_starts_in_background_and_redirects(authed_client, monkeypatch, settings_env):
+    import threading as _threading
+
+    from del_app.web import settings as settings_module
+
+    started = _threading.Event()
+
+    class _FakeScanner:
+        ScanInProgressError = RuntimeError
+
+        def scan_state(self):
+            return {"running": False, "scan_id": None, "started": None}
+
+        def run_scan(self):
+            started.set()
+            return 1
+
+    monkeypatch.setattr(settings_module, "scanner", _FakeScanner())
+    csrf = _with_csrf(authed_client)
+    resp = authed_client.post("/scan", data={"csrf_token": csrf}, follow_redirects=False)
+    assert resp.status_code == 303
+    assert "Scan+started" in resp.headers["location"]
+    assert started.wait(timeout=2), "run_scan() was never invoked"
+
+
+def test_trigger_scan_reports_already_in_progress(authed_client, monkeypatch, settings_env):
+    from del_app.web import settings as settings_module
+
+    class _FakeScanner:
+        ScanInProgressError = RuntimeError
+
+        def scan_state(self):
+            return {"running": True, "scan_id": 5, "started": "2026-01-01 00:00:00"}
+
+        def run_scan(self):
+            raise AssertionError("run_scan must not be called while one is already running")
+
+    monkeypatch.setattr(settings_module, "scanner", _FakeScanner())
+    csrf = _with_csrf(authed_client)
+    resp = authed_client.post("/scan", data={"csrf_token": csrf}, follow_redirects=False)
+    assert resp.status_code == 303
+    assert "already+in+progress" in resp.headers["location"]
+
+
+def test_scan_status_merges_scan_state_and_last_scan(authed_client, monkeypatch, settings_env):
+    from del_app.db import get_db, x
+    from del_app.web import settings as settings_module
+
+    conn = get_db()
+    try:
+        x(conn, "INSERT INTO scans (status, finished) VALUES ('done', '2026-01-01 00:00:00')")
+        conn.commit()
+    finally:
+        conn.close()
+
+    class _FakeScanner:
+        def scan_state(self):
+            return {"running": True, "scan_id": 7, "started": "2026-01-01 00:00:00"}
+
+    monkeypatch.setattr(settings_module, "scanner", _FakeScanner())
+    resp = authed_client.get("/scan/status")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["running"] is True
+    assert body["last_scan"]["status"] == "done"
+
+
+# ---------------------------------------------------------------------------
+# B2: /palette.json
+# ---------------------------------------------------------------------------
+
+def test_palette_json_lists_apps_and_pages(authed_client, settings_env):
+    from del_app.db import get_db, x
+
+    conn = get_db()
+    try:
+        scan_id = x(conn, "INSERT INTO scans (status) VALUES ('done')")
+        x(
+            conn,
+            "INSERT INTO applications (slug, name, status, kind, last_seen) VALUES (?,?,?,?,?)",
+            ("paletteapp", "Palette App", "running", "compose", scan_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    resp = authed_client.get("/palette.json")
+    assert resp.status_code == 200
+    body = resp.json()
+    slugs = [a["slug"] for a in body["apps"]]
+    assert "paletteapp" in slugs
+    assert any(p["url"] == "/apps" for p in body["pages"])
+
+
+def test_palette_json_requires_authentication(anon_client, settings_env):
+    resp = anon_client.get("/palette.json", follow_redirects=False)
+    assert resp.status_code == 303
+
+
+# ---------------------------------------------------------------------------
+# B2: dashboard 'Needs attention' panel
+# ---------------------------------------------------------------------------
+
+def test_dashboard_attention_lists_apps_with_uncertain_mappings(authed_client, settings_env):
+    from del_app.db import get_db, x
+
+    conn = get_db()
+    try:
+        scan_id = x(conn, "INSERT INTO scans (status) VALUES ('done')")
+        app_id = x(
+            conn,
+            "INSERT INTO applications (slug, name, status, kind, last_seen) VALUES (?,?,?,?,?)",
+            ("uncertain-app", "Uncertain App", "running", "compose", scan_id),
+        )
+        res_id = x(
+            conn,
+            "INSERT INTO resources (type, key, display, state, data_json, last_seen) "
+            "VALUES (?,?,?,?,?,?)",
+            ("container", "unc-c", "unc-c", "running", "{}", scan_id),
+        )
+        x(
+            conn,
+            "INSERT INTO associations (app_id, resource_id, confidence, ownership, shared, removal_eligible) "
+            "VALUES (?,?,?,?,?,?)",
+            (app_id, res_id, 40, "possible", 0, "uncertain"),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    resp = authed_client.get("/")
+    assert resp.status_code == 200
+    from del_app.db import get_db as _get_db
+
+    conn = _get_db()
+    try:
+        from del_app.web.dashboard import _attention_apps
+        from del_app.web.queries import _latest_scan_id
+
+        attention = _attention_apps(conn, _latest_scan_id(conn))
+    finally:
+        conn.close()
+    assert any(a["slug"] == "uncertain-app" for a in attention)
+
+
+# ---------------------------------------------------------------------------
+# B3: coverage gaps
+# ---------------------------------------------------------------------------
+
+def test_settings_page_200(authed_client, settings_env):
+    resp = authed_client.get("/settings")
+    assert resp.status_code == 200
+
+
+def test_resources_index_redirects(authed_client, settings_env):
+    resp = authed_client.get("/resources", follow_redirects=False)
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/resources/container"
+
+
+def test_job_detail_html_200(authed_client, settings_env):
+    from del_app.db import get_db, x
+
+    conn = get_db()
+    try:
+        app_id = _insert_app(conn, "jobdetailapp", "Job Detail App")
+        plan_id = x(
+            conn, "INSERT INTO plans (app_id, steps_json) VALUES (?, '[]')", (app_id,)
+        )
+        job_id = x(
+            conn,
+            "INSERT INTO jobs (plan_id, mode, status) VALUES (?, 'dry_run', 'done')",
+            (plan_id,),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    resp = authed_client.get(f"/jobs/{job_id}")
+    assert resp.status_code == 200
+
+
+def test_job_detail_initial_render_has_progress_bar(authed_client, settings_env):
+    """job_detail() must pass progress/current_step at initial render, not
+    just via the /status poll — otherwise the progress bar/label are blank
+    until JS makes its first fetch."""
+    from del_app.db import get_db, x
+
+    conn = get_db()
+    try:
+        app_id = _insert_app(conn, "jobprogressapp", "Job Progress App")
+        plan_id = x(
+            conn, "INSERT INTO plans (app_id, steps_json) VALUES (?, '[]')", (app_id,)
+        )
+        job_id = x(
+            conn,
+            "INSERT INTO jobs (plan_id, mode, status) VALUES (?, 'dry_run', 'running')",
+            (plan_id,),
+        )
+        x(
+            conn,
+            "INSERT INTO job_steps (job_id, seq, stage, operation, state) VALUES (?, 1, 'docker', 'stop', 'done')",
+            (job_id,),
+        )
+        x(
+            conn,
+            "INSERT INTO job_steps (job_id, seq, stage, operation, state) VALUES (?, 2, 'docker', 'rm', 'running')",
+            (job_id,),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    resp = authed_client.get(f"/jobs/{job_id}")
+    assert resp.status_code == 200
+    body = resp.text
+    assert 'id="job-progress"' in body
+    assert 'aria-valuenow="50"' in body
+    assert "1 of 2 steps done (50%)" in body
+    assert "Running: docker" in body
+
+
+def test_static_assets_200_with_content_type(authed_client):
+    for path, prefix in (
+        ("/static/app.css", "text/css"),
+        ("/static/app.js", "application/javascript"),
+        ("/static/theme-init.js", "application/javascript"),
+        ("/static/favicon.svg", "image/svg+xml"),
+    ):
+        resp = authed_client.get(path)
+        assert resp.status_code == 200, path
+        assert resp.headers["content-type"].startswith(prefix), path
+
+
+def test_no_inline_script_without_src(authed_client):
+    import re
+
+    for path in ("/login", "/"):
+        resp = authed_client.get(path)
+        assert resp.status_code == 200, path
+        for match in re.finditer(r"<script\b[^>]*>", resp.text):
+            assert "src=" in match.group(0), (path, match.group(0))
+
+
+def test_manifest_edit_form_renders(authed_client, settings_env):
+    resp = authed_client.get("/manifests/someapp")
+    assert resp.status_code == 200
+
+
+def test_manifest_edit_submit_happy_path(authed_client, settings_env):
+    csrf = _with_csrf(authed_client)
+    yaml_text = "id: someapp\nname: Some App\n"
+    resp = authed_client.post(
+        "/manifests/someapp",
+        data={"csrf_token": csrf, "yaml_text": yaml_text},
+        follow_redirects=False,
+    )
+    assert resp.status_code == 303
+    assert resp.headers["location"] == "/apps/someapp?flash=Manifest+saved"
+
+
+def test_manifest_edit_submit_yaml_error(authed_client, settings_env):
+    csrf = _with_csrf(authed_client)
+    resp = authed_client.post(
+        "/manifests/someapp",
+        data={"csrf_token": csrf, "yaml_text": "id: [unterminated"},
+    )
+    assert resp.status_code == 200
+    assert "Invalid YAML" in resp.text
+
+
+def test_manifest_edit_submit_validation_error(authed_client, settings_env):
+    """Missing the required `id` field must surface a validation error, not save."""
+    csrf = _with_csrf(authed_client)
+    resp = authed_client.post(
+        "/manifests/someapp",
+        data={"csrf_token": csrf, "yaml_text": "name: Some App\n"},
+    )
+    assert resp.status_code == 200
+    assert "validation" in resp.text.lower() or "id" in resp.text.lower()
+
+
+# ---------------------------------------------------------------------------
+# B3: CSRF-negative (403) tests
+# ---------------------------------------------------------------------------
+
+def test_csrf_rejected_on_plan_build(authed_client, settings_env):
+    from del_app.db import get_db
+    conn = get_db()
+    try:
+        _insert_app(conn, "csrfapp", "Csrf App")
+    finally:
+        conn.close()
+    resp = authed_client.post("/apps/csrfapp/plan", data={"csrf_token": "bogus"})
+    assert resp.status_code == 403
+
+
+def test_csrf_rejected_on_plan_execute(authed_client, settings_env):
+    resp = authed_client.post("/plans/1/execute", data={"csrf_token": "bogus", "mode": "dry_run"})
+    assert resp.status_code == 403
+
+
+def test_csrf_rejected_on_manifest_submit(authed_client, settings_env):
+    resp = authed_client.post(
+        "/manifests/someapp", data={"csrf_token": "bogus", "yaml_text": "id: someapp\n"}
+    )
+    assert resp.status_code == 403
+
+
+def test_csrf_rejected_on_scan(authed_client, settings_env):
+    resp = authed_client.post("/scan", data={"csrf_token": "bogus"})
+    assert resp.status_code == 403

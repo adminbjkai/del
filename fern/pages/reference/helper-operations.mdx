@@ -81,6 +81,9 @@ every request, success or refusal.
     Removes a unit file. Restricted to `/etc/systemd/system` (the resolved path must
     stay inside it), refused for protected units, and followed by a
     `daemon-reload`. An already-absent unit file is success, not an error.
+    Immediately before the delete call, `recheck_realpath()` re-resolves the
+    unit file's path and refuses if it no longer matches what validation
+    computed — a TOCTOU guard against a symlink swapped in between.
   </Accordion>
   <Accordion title="cron_rm — path">
     Removes a cron file. **`/etc/cron.d` only.** The operation takes a single
@@ -106,7 +109,10 @@ every request, success or refusal.
     escape), must resolve at least one component deep under an approved deletion
     root, must not be a protected root or on the `never_delete` list, and
     mountpoints are refused outright. A last-line guard also refuses any path
-    shallower than two `/` separators.
+    shallower than two `/` separators. Immediately before the actual delete
+    call, `recheck_realpath()` re-resolves the path and refuses if it no
+    longer matches what validation computed — closing the TOCTOU window
+    between validation and the destructive call.
   </Accordion>
   <Accordion title="path_restore — backup_path, original_path">
     Restores a prior `backup_tar`/`file_backup` copy back to `original_path`

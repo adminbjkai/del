@@ -26,6 +26,40 @@
   {% if items %}{{ items | join(sep) }}{% else %}—{% endif %}
 {%- endmacro %}
 
+{% macro confidence(a) -%}
+  {% set lvl = a.get('level') or 'possible' %}
+  {% set score = a.get('confidence') %}
+  {% set pct = ([([score | int, 0] | max), 100] | min) if score is not none else 0 %}
+  {% set evidence = a.get('evidence', []) %}
+  <div class="confidence confidence-{{ lvl }}">
+    <div class="confidence-head">
+      <span class="badge badge-confidence-{{ lvl }}">{{ lvl }}</span>
+      <span class="confidence-score">{{ score if score is not none else '—' }}</span>
+    </div>
+    <span class="meter confidence-meter" role="img" aria-label="Confidence score {{ score if score is not none else 'unknown' }} of 100">
+      <span class="meter-fill confidence-meter-fill" data-width="{{ pct }}"></span>
+    </span>
+    {% if evidence %}
+    <div class="confidence-evidence">{{ evidence[0].get('statement') }}</div>
+    <details>
+      <summary>{{ evidence | length }} evidence item(s)</summary>
+      <ul>
+        {% for ev in evidence %}
+        <li>[{{ ev.get('source') }}] {{ ev.get('statement') }} (weight {{ ev.get('weight') }})</li>
+        {% endfor %}
+      </ul>
+    </details>
+    {% endif %}
+  </div>
+{%- endmacro %}
+
+{% macro empty_state(message, action_html='') -%}
+  <div class="empty-state">
+    <div class="empty-state-msg">{{ message }}</div>
+    {% if action_html %}{{ action_html | safe }}{% endif %}
+  </div>
+{%- endmacro %}
+
 {% macro domain_links(domains, sep=', ') -%}
   {% if domains %}
     {# data-stop-propagation, not an inline onclick: script-src 'self' blocks

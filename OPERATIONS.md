@@ -119,6 +119,12 @@ is simply not there yet — install it per INSTALL.md before troubleshooting fur
 
 Either:
 - **UI**: Settings page → Scan (issues `POST /scan`, requires auth + CSRF).
+  `POST /scan` starts `run_scan()` on a background thread and redirects
+  immediately to `/settings?flash=Scan+started` — it does not block the
+  request on the whole scan. If a scan is already running (`scanner.scan_state()`
+  reports `running: true`), it redirects with an error instead of starting a
+  second one. Poll `GET /scan/status` for progress; it returns the current
+  `scan_state()` (running/scan_id/started) plus the most recent `scans` row.
 - **CLI**:
   ```bash
   /apps/del/scripts/del-admin rescan

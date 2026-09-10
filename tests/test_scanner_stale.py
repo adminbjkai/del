@@ -108,6 +108,42 @@ def test_run_scan_rejects_concurrent(settings_env, monkeypatch):
     assert len(result_ids) == 1
 
 
+def test_scan_state_reports_running_and_idle(settings_env, monkeypatch):
+    assert scanner.scan_state() == {"running": False, "scan_id": None, "started": None}
+
+    entered = threading.Event()
+    release = threading.Event()
+
+    def slow_collect():
+        entered.set()
+        assert release.wait(timeout=10)
+        return []
+
+    monkeypatch.setattr(scanner, "_collect_all", lambda: (slow_collect(), {}))
+    monkeypatch.setattr(scanner, "load_all", lambda: {})
+    monkeypatch.setattr(scanner, "build_apps", lambda resources, manifests: [])
+
+    result_ids: list[int] = []
+
+    def runner():
+        result_ids.append(scanner.run_scan())
+
+    t = threading.Thread(target=runner)
+    t.start()
+    assert entered.wait(timeout=5), "slow_collect never started"
+
+    state = scanner.scan_state()
+    assert state["running"] is True
+    assert isinstance(state["scan_id"], int)
+    assert state["started"]
+
+    release.set()
+    t.join(timeout=10)
+    assert result_ids
+
+    assert scanner.scan_state() == {"running": False, "scan_id": None, "started": None}
+
+
 def test_run_scan_abandons_prior_running_before_insert(settings_env, monkeypatch):
     monkeypatch.setattr(scanner, "_collect_all", lambda: ([], {}))
     monkeypatch.setattr(scanner, "load_all", lambda: {})

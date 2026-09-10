@@ -8,10 +8,11 @@
   `change-password`; there are no default or hardcoded credentials.
 - The unauthenticated routes are exactly: `/login`, `/healthz`, `/favicon.ico`
   (a 301 to the SVG), and the four static assets `/static/app.css`,
-  `/static/app.js`, `/static/ag-grid-community.min.js`, `/static/favicon.svg`.
-  Every other route carries `Depends(auth.require_user)` — including
-  `/app-icon/{domain}`, the gallery's server-side favicon proxy. Unauthenticated
-  requests to protected routes redirect to `/login` (303).
+  `/static/app.js`, `/static/theme-init.js`, `/static/favicon.svg`. Every other route carries
+  `Depends(auth.require_user)` — including `/app-icon/{domain}` (the
+  gallery's server-side favicon proxy) and `/palette.json` (the
+  command-palette data feed). Unauthenticated requests to protected routes
+  redirect to `/login` (303).
 - Nothing writes a password to disk. `del-admin` takes it from a `getpass` prompt
   or stdin and persists only the argon2 hash. The
   `/apps/del/config/admin-initial-password.txt` this document used to describe has
@@ -134,6 +135,18 @@ absent from the `never_delete` list, and not to be a mountpoint. (The planner
 separately only emits paths it derived from an approved plan, but as above, the
 helper cannot check that.)
 
+`/home/bjkai` stays on the approved list despite being a home directory: the
+`code-server` unit bind-mounts it, so DEL needs to be able to clean up projects
+under it the same way it does under `/apps`. This is a known trade-off, not an
+oversight — nothing else in `/home` is in scope.
+
+**TOCTOU defense.** `path_delete` and `systemd_rm_unit` both call
+`recheck_realpath()` immediately before the destructive subprocess call,
+re-resolving the original path/unit-file and refusing if it no longer matches
+the realpath computed at validation time. This closes the window between "the
+path was validated" and "the path was deleted" during which an attacker with
+filesystem control could swap a symlink to point somewhere else.
+
 DEL itself is recorded as `protected=1` in the `applications` table (see
 `manifests/del.yaml`, `notes: "Protected application — must never be removable
 through DEL"`), and the planner refuses to build a removal plan for it — DEL cannot
@@ -222,9 +235,13 @@ The original full attacker/vector/mitigation table lives in `docs/server-audit.m
   Two deliberate relaxations: `style-src 'unsafe-inline'`, because a handful of
   templates still carry inline `style=""` attributes (tightening it means moving
   those to classes first); and `img-src data:`, for the inline SVG data URI used in
-  some views. Everything else is `'self'` — AG Grid is vendored, there are no CDN
-  scripts or web fonts, and app icons are proxied through `/app-icon/` rather than
-  loaded from a third-party origin, so no external asset origin is needed.
+  some views. Everything else is `'self'` — the client-side tables are a vanilla
+  JS/CSS implementation (the vendored AG Grid bundle has been removed), there are
+  no CDN scripts or web fonts, and app icons are proxied through `/app-icon/`
+  rather than loaded from a third-party origin, so no external asset origin is
+  needed. `script-src 'self'` with no `'unsafe-inline'` is also why the pre-paint
+  dark/light theme switch is its own external file, `/static/theme-init.js`,
+  rather than an inline `<script>` in `base.html`.
   Note that nginx's `add_header` is not inherited into a `location` block that
   defines its own; none of the blocks in this vhost do, but adding one means
   repeating these directives.

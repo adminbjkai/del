@@ -148,7 +148,11 @@ manual-follow-up list for you to finish by hand.
     top to bottom:
 
     - **Warnings** (amber box) — resources DEL is deliberately *not* removing and
-      why, e.g. `/apps/deldemo/.git: blocked: not safely removable`.
+      why, e.g. `/apps/deldemo/.git: blocked: not safely removable`. If another
+      app's compose project would resolve to the same Docker Compose project
+      label under a different path, a warning names both apps and paths —
+      `compose_down`'s teardown sweep is host-wide by that label, so the
+      collision could remove the other app's containers too.
     - **Steps**, grouped by the six stages (backup → quiesce → remove_runtime →
       remove_host → remove_files → validate) — those are all the stages there are.
       Each step shows its operation, a plain-English
@@ -203,10 +207,16 @@ manual-follow-up list for you to finish by hand.
   </Step>
 
   <Step title="Read the final job and its validation">
-    The live job page streams each step to `done` in stage order. When it finishes,
-    the status badge reads `success`. The final **validate** stage runs post-removal
-    checks — container absent, volume absent, unit inactive, `nginx -t` still passes —
-    and records the result; expand its output to confirm every check returned `ok`.
+    The live job page streams each step to `done` in stage order. A progress bar and
+    a "Running: stage · operation" line update live above the step tables (both are
+    `aria-live` regions, so a screen reader announces each change), and the job's
+    status badge itself is `aria-live` too. Polling starts every 2 seconds and backs
+    off to every 10 seconds the longer the job runs; it pauses entirely if you switch
+    away from the tab and resumes immediately when you switch back. When the job
+    reaches a terminal state (`success`, `failed`, …) a toast confirms it and polling
+    stops. The final **validate** stage runs post-removal checks — container absent,
+    volume absent, unit inactive, `nginx -t` still passes — and records the result;
+    expand its output to confirm every check returned `ok`.
 
     <Frame caption="Step 7 — the completed live job: every stage done through validate, status success.">
       <img src="../../assets/10-live-job.png" alt="Completed live removal job" />

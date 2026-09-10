@@ -56,6 +56,47 @@ def test_standalone_container_becomes_its_own_app():
     assert assocs[0].level == "confirmed"
 
 
+def _compose_project(display, working_dir, declared_name=None):
+    return Resource(
+        type="compose_project",
+        key=working_dir,
+        display=display,
+        path=working_dir,
+        state="stopped",
+        data={"working_dir": working_dir, "declared_name": declared_name, "config_files": []},
+    )
+
+
+def test_nested_compose_in_another_apps_tree_is_not_a_safe_same_name_match():
+    # /apps/boxy is the real app; /apps/agyinstall/boxy is an archived clone
+    # inside a DIFFERENT project's tree (agyinstall). Both compose files slug
+    # to "boxy" by directory basename — the nested one must NOT be merged
+    # into app "boxy" at full (95, safe) confidence.
+    resources = [
+        _compose_project("boxy", "/apps/boxy"),
+        _compose_project("agyinstall", "/apps/agyinstall"),
+        _compose_project("boxy", "/apps/agyinstall/boxy"),
+    ]
+    apps = build_apps(resources, {})
+    by_slug = {record.slug: (record, assocs) for record, assocs in apps}
+    assert "boxy" in by_slug
+    boxy_record, boxy_assocs = by_slug["boxy"]
+    nested = next(
+        (a for a in boxy_assocs if a.resource_key == "/apps/agyinstall/boxy"), None
+    )
+    # Either it was kept out of app "boxy" entirely, or it was attached at a
+    # confidence/level that is not a safe 95 same-name association.
+    if nested is not None:
+        assert not (nested.confidence == 95 and nested.removal_eligible == "safe")
+    # And it must not have vanished silently — it should land somewhere
+    # (its own path key associated to SOME app), most sensibly agyinstall.
+    all_keys = {
+        a.resource_key for _, assocs in apps for a in assocs
+        if a.resource_key == "/apps/agyinstall/boxy"
+    }
+    assert "/apps/agyinstall/boxy" in all_keys
+
+
 def test_nginx_port_match_creates_high_confidence_association():
     container = _container("myapp_web", compose_project="myapp", compose_working_dir="/apps/myapp",
                             published_ports=[9205])

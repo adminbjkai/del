@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="en" data-theme="dark">
+<html lang="en">
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -8,6 +8,7 @@
   <title>{% block title %}DEL{% endblock %} · DEL</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/app.css">
+  <script src="/static/theme-init.js"></script>
 </head>
 {% set path = request.url.path %}
 {% if path == '/' %}
@@ -42,6 +43,10 @@
       <div class="sidebar-top">
         <a href="/" class="brand" title="Dashboard">DEL</a>
         <div class="sidebar-controls">
+          <button type="button" id="theme-toggle" class="btn btn-sm icon-btn"
+                  aria-label="Switch to light theme" aria-pressed="false" title="Toggle theme">
+            <span aria-hidden="true">◐</span>
+          </button>
           <button type="button" id="sidebar-collapse" class="btn btn-sm icon-btn sidebar-collapse-btn"
                   aria-label="Collapse sidebar" title="Collapse sidebar">‹</button>
           <button type="button" id="nav-toggle" class="btn btn-sm icon-btn nav-toggle"
@@ -49,6 +54,10 @@
         </div>
       </div>
       <div class="nav-drawer" id="nav-drawer">
+        <button type="button" id="cmdk-open" class="btn btn-sm cmdk-trigger">
+          <span aria-hidden="true">⌕</span> <span class="nav-label">Search</span>
+          <kbd class="cmdk-hint" aria-hidden="true">Ctrl K</kbd>
+        </button>
         <ul class="nav-links">
           <li><a href="/" title="Dashboard"{% if path == '/' %} class="active"{% endif %}><span class="nav-ico" aria-hidden="true">⌂</span><span class="nav-label">Dashboard</span></a></li>
           <li><a href="/view-apps" title="View Apps"{% if path.startswith('/view-apps') %} class="active"{% endif %}><span class="nav-ico" aria-hidden="true">◫</span><span class="nav-label">View Apps</span></a></li>
@@ -98,6 +107,17 @@
   </div>
 
   <div class="nav-backdrop" id="nav-backdrop" hidden></div>
+
+  <div class="toast-region" id="toast-region" aria-live="polite" aria-atomic="true"></div>
+
+  <dialog id="cmdk" class="cmdk-dialog" aria-label="Command palette">
+    <div class="cmdk-box">
+      <input type="text" id="cmdk-input" class="cmdk-input" placeholder="Search pages and applications…"
+             aria-label="Search pages and applications" autocomplete="off">
+      <div id="cmdk-results" class="cmdk-results" role="listbox" aria-label="Results"></div>
+      <div id="cmdk-empty" class="empty-state" hidden><div class="empty-state-msg">No matches.</div></div>
+    </div>
+  </dialog>
 
   <script src="/static/app.js"></script>
 </body>

@@ -135,6 +135,14 @@ Both call `del_app.scanner.run_scan()`, which re-runs all discovery sources
 scan row plus refreshed `applications`/`resources`/`associations`. Scanning is
 entirely read-only against the host — it does not stop, start, or modify anything.
 
+The dashboard's scan strip reflects this live: once you click **Run scan now** the
+button disables itself, a small bar and an elapsed-time counter appear ("scanning…
+Ns"), and the page polls `GET /scan/status` every 3 seconds. When the scan finishes
+the page reloads once on its own to show the refreshed stats and tables — you don't
+need to refresh by hand or watch for it. The same dashboard has a **Needs
+attention** panel (up to 10 entries) listing applications with uncertain
+correlation, each linking straight to the app that needs a look.
+
 ## Regenerating the port registry
 
 ```bash

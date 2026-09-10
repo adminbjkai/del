@@ -10,7 +10,7 @@ served at https://del.bjk.ai behind Nginx, bound only to localhost.
 |---|---|---|
 | Language | Python 3.10 (system python3, venv) | Already on host; excellent for sysadmin tooling; typed with dataclasses/pydantic |
 | Web framework | FastAPI + Uvicorn | Typed request/response models, async, small footprint |
-| Templates/UI | Jinja2 server-rendered + vanilla JS + single CSS file | No Node toolchain; fully self-contained (CSP-friendly, no CDN); dark-mode via CSS |
+| Templates/UI | Jinja2 server-rendered + vanilla JS + single CSS file | No Node toolchain; fully self-contained (CSP-friendly, no CDN); dark theme by default with a light-theme toggle (`data-theme`, persisted in `localStorage`) |
 | Database | SQLite (WAL mode) via sqlite3 + migration runner | Single admin user; zero-ops; file lives in /apps/del/database/del.db |
 | Privileged layer | del-helper: separate root daemon on a unix socket | Strict allowlist; web app never runs shell as root |
 | Deployment | Host systemd units (del-web.service, del-helper.service, del-docs.service) | See below |
@@ -101,12 +101,12 @@ basename falls back to the app slug.
 | image_rm | image_id | refused if other containers reference it |
 | volume_rm | volume_name | refused unless plan approved w/ double confirmation flag |
 | network_rm | network_name | refuses bridge/host/none and networks with foreign containers |
-| systemd_stop / systemd_disable / systemd_rm_unit | unit | name must match `^[A-Za-z0-9@_.-]+\.(service\|timer)$` and must not match `protected_units`; rm restricted to /etc/systemd/system + daemon-reload |
+| systemd_stop / systemd_disable / systemd_rm_unit | unit | name must match `^[A-Za-z0-9@_.-]+\.(service\|timer)$` and must not match `protected_units`; rm restricted to /etc/systemd/system + daemon-reload; `systemd_rm_unit` re-resolves the unit file's realpath (`recheck_realpath`) immediately before the delete call, closing the TOCTOU window between validation and the actual removal |
 | cron_rm | path | **`/etc/cron.d` files only.** The op takes a single `path` argument, validated to resolve under the policy's `cron_d_dir`. It cannot edit a user crontab — there is no `crontab -l` diff and no way to remove a user crontab line through DEL |
 | nginx_rm_site | paths[] | only under /etc/nginx/sites-{enabled,available}; backup first; nginx -t; reload only on pass; restore on fail |
 | nginx_test | — | read-only `nginx -t`, never reloads; safe in dry_run and live |
 | nginx_test_reload | — | nginx -t, reload if ok |
-| path_delete | path | canonicalized; must resolve at least one component deep under an approved root (/apps, /data, /srv, /var/www, /home/bjkai, /etc/nginx/sites-{available,enabled}, /etc/systemd/system, /etc/cron.d), must not be a protected root or on `never_delete`; refuses mountpoints |
+| path_delete | path | canonicalized; must resolve at least one component deep under an approved root (/apps, /data, /srv, /var/www, /home/bjkai, /etc/nginx/sites-{available,enabled}, /etc/systemd/system, /etc/cron.d), must not be a protected root or on `never_delete`; refuses mountpoints; re-resolves the realpath (`recheck_realpath`) immediately before the destructive call and refuses if it no longer matches the realpath computed at validation time |
 | path_restore | backup_path, original_path | `cp -a` of a prior backup back to original_path. backup_path must be under /apps/del/backups and exist; original_path must resolve under a DEL-managed root, not protected/never-delete, and **must have the same basename as the backup** — a restore may only replace the file it was taken from. A protected unit cannot be recreated in /etc/systemd/system this way |
 | tmux_kill | session | exact session name |
 | process_term | pid, expected_exe | TERM then KILL after grace; pid+exe must still match |
@@ -154,13 +154,17 @@ being uncompromised.
 │   │   ├── proc_src.py    ss/ps/tmux/screen
 │   │   ├── cron_src.py    crontabs/cron.d
 │   │   └── fs_src.py      project dirs, git repos, du
-│   ├── correlate.py       evidence-based association + confidence scoring
+│   ├── scanner.py         run_scan() orchestration + scan_state() (in-process lock state: running/scan_id/started, for polling)
+  ├── correlate.py       evidence-based association + confidence scoring
 │   ├── manifests.py       YAML manifests read/write/validate
 │   ├── planner.py         removal plan generation (dry-run), impact/risk report, HMAC
 │   ├── jobs.py            staged job engine (backup→quiesce→remove_runtime→remove_host→remove_files→validate), step records, backup recording, in-job restore
 │   ├── helper_client.py   unix-socket client to del-helper
 │   ├── auditlog.py        append-only audit records
-│   └── web/               routes + Jinja2 templates + static/
+│   └── web/               routes.py (thin aggregator) + render.py, formatting.py,
+│                          queries.py, orphans.py, gallery.py, auth_routes.py,
+│                          dashboard.py, apps.py, plans_jobs.py, resources.py,
+│                          settings.py, static_routes.py + Jinja2 templates + static/
 ├── helper/
 │   ├── del_helper.py      root daemon (stdlib only) — source; deployed to /usr/local/lib/del-helper/
 │   └── validation.py      pure argument/path validation, imported by the daemon
@@ -180,6 +184,57 @@ being uncompromised.
 │   └── make-demo-app.sh   builds a disposable demo app for exercising removal
 └── tests/
 ```
+
+### Frontend (`web/templates`, `web/static`)
+
+Server-rendered Jinja2 (`base.html` shell + one template per route, `_macros.html`
+for shared markup like the confidence meter, `_glossary.html` for the glossary rail
+and its mobile sheet) plus four static assets, all served unauthenticated (`/login`
+needs them too): `app.css` (single stylesheet), `app.js` (single script, no
+external assets — the CSP is `script-src 'self'` with no `'unsafe-inline'`),
+`theme-init.js` (~9 lines, loaded from `<head>` before first paint — reads
+`localStorage['del.theme']`, falls back to `prefers-color-scheme`, and sets
+`data-theme` on `<html>` so there is no flash of the wrong theme; kept as its own
+file rather than an inline `<script>` because the CSP forbids inline scripts), and
+`favicon.svg`.
+
+`app.js` is one file exposing a `window.DEL` namespace plus several page-scoped
+blocks, all guarded by `if (element) { … }` so a script this size can run
+unconditionally on every page:
+
+- `DEL.toast(message, kind)` — aria-live toast notifications (copy-to-clipboard,
+  job completion).
+- `DEL.theme` (`get`/`set`/`toggle`) — the dark/light switch wired to the header
+  button; `base.html`/`theme-init.js` already set `data-theme` before this runs, so
+  this only handles the click and persists the choice back to `localStorage`.
+- The table engine (`enhanceTableVanilla`, applied to every `table[data-enhanced]`)
+  — the single implementation for sorting (type-aware: numbers, sizes, durations,
+  ISO dates), a per-column Excel-style filter popover (checkbox value list +
+  contains/equals/starts-with/… text operators), a global quick filter (`/`
+  focuses it), drag-to-resize columns, pagination with a page-size selector, CSV
+  export of the current filtered/sorted rows, and — on screens ≤900px — hiding
+  `data-priority="low"` columns behind a "Show all columns" toggle. This replaced a
+  vendored AG Grid bundle that duplicated the same behaviour.
+- `DEL.tabs.init(root)` — an accessible tablist (roving tabindex, arrow keys,
+  `aria-selected`) applied to every `.tabs` block, used by the application detail
+  page's Overview/Docker/systemd/Nginx/Scheduled/Processes/Files/Shared/Readiness
+  tabs; a tab whose `id` matches `location.hash` opens on load, and selecting a tab
+  updates the hash for deep-linking.
+- `DEL.palette` (`open`/`close`) — the `Ctrl`/`Cmd`+`K` command palette
+  (`<dialog id="cmdk">`), fuzzy-filtering two groups: **Pages** (read from the
+  sidebar's `.nav-links` already in the DOM) and **Apps** (fetched once from
+  `GET /palette.json`, best-effort — the dialog still works pages-only if that
+  fetch fails).
+- The job-detail poller (`GET /jobs/{id}/status`) — updates the progress bar,
+  current-step line, and per-stage step tables; polls every 2s, backing off
+  ×1.5 up to a 10s ceiling, pauses entirely while the tab is hidden (resuming
+  immediately on visibility), and stops once the job reaches a terminal status.
+- The dashboard scan-status poller (`GET /scan/status`) — shows an elapsed-time
+  strip and disables "Run scan now" while a scan is running, then reloads the
+  page once when it flips back to idle.
+- A shared focus-trap helper (`makeFocusTrap`) used by the four modal-ish
+  surfaces: the mobile nav drawer, the glossary bottom sheet, a column filter
+  popover, and the command palette.
 
 ## Data model (SQLite)
 
@@ -274,14 +329,23 @@ top of a page the operator was already authenticated to.
 
 - `GET /favicon.ico` — 301 to `/static/favicon.svg`. Browsers request it
   unprompted; it used to 404 on every page load.
-- `/static/*` — the four assets (`app.css`, `app.js`,
-  `ag-grid-community.min.js`, `favicon.svg`) are served with `Cache-Control`;
-  the pinned 1.9 MB AG Grid bundle is `immutable`. They previously carried etag
-  and last-modified but no cache directive, costing a revalidation round trip per
-  asset per page load.
+- `/static/*` — the four assets (`app.css`, `app.js`, `theme-init.js`,
+  `favicon.svg`) are served with `Cache-Control: public, max-age=300,
+  must-revalidate`. They previously carried etag and last-modified but no cache
+  directive, costing a revalidation round trip per asset per page load.
 - Unauthenticated routes are exactly `/login`, `/healthz`, `/favicon.ico` and
-  those four `/static/*` paths. Everything else, `/app-icon/{domain}` included,
-  depends on `auth.require_user`.
+  those four `/static/*` paths. Everything else, `/app-icon/{domain}` and
+  `GET /palette.json` included, depends on `auth.require_user`.
+- `POST /scan` starts the scan on a background thread and redirects
+  immediately with `flash=Scan+started` (it no longer blocks the request on
+  the whole scan); `GET /scan/status` returns the current `scanner.scan_state()`
+  plus the most recent `scans` row as JSON, for the settings page to poll.
+- `/apps/{slug}`, `/apps/{slug}/plan` and `/plans/{id}` return 404 for an
+  unknown slug/id. `/plans/{id}/execute` returns 404 when the plan id does not
+  exist (`planner.PlanNotFoundError`) or 409 when the plan exists but fails
+  integrity/other `PlanError` checks. `/jobs/{id}/status` returns a 404 JSON
+  body for an unknown job and otherwise includes `progress {done, total, pct}`
+  and `current_step` alongside the raw job status.
 
 ## Confidence scoring
 
@@ -329,6 +393,17 @@ association — confidence 100 — is displayed and classified as **`confirmed`*
 `manual`. It is fully removal-eligible either way; only the badge differs from what
 these docs used to promise.
 
+A compose project whose name matches an existing app is only merged into it
+when the compose file's *own* top-level project directory (the
+`{scan_root}/{first-component}` directory containing it) also belongs to that
+app. If it instead sits inside a *different* app's project tree — an archived
+clone at `/apps/agyinstall/boxy/docker-compose.yml` matching the real
+`/apps/boxy` app by name — it is attached to the owning tree's app (seeding a
+placeholder app for it if needed) at confidence 55 / `possible` / `shared`,
+with an evidence statement naming both the foreign owner and the same-named
+app it did *not* merge into, rather than being silently absorbed at full
+confidence.
+
 Applications are not only Docker/Compose — a purely systemd-managed service
 (no container at all) is seeded as its own first-class application (`kind
 "systemd"`) whenever one of its custom (non-vendor) unit's
@@ -351,6 +426,16 @@ downstream deletions. Steps carry reversible=true/false.
 only strings that ever appear in `job_steps.stage`. Analysis and preview happen at
 plan-build time, and the report is the job's terminal status plus its audit
 records; none of the three produce step rows.
+
+`_check_stage_order` enforces `STAGE_ORDER` as non-decreasing across a plan's
+steps, raising `PlanError` if violated; both `build_plan` and `persist_plan`
+call it, so a stage-order bug fails at build/persist time rather than at
+execution. Separately, when building a `compose_down` step the planner checks
+whether another app's compose project would resolve to the *same* Docker
+Compose project label under a different path, and if so appends a plan
+warning (not a hard error) naming both apps and paths — `compose_down`'s
+label sweep is host-wide, so that collision could remove the other app's
+containers too.
 
 **Plan build refuses on an empty result.** `build_plan` scopes an app's
 associations to the latest scan with `status = 'done'`. If the app has

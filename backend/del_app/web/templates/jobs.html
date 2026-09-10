@@ -11,7 +11,7 @@
   <caption class="sr-only">Removal jobs with mode, status, duration and timestamps.</caption>
   <thead>
     <tr>
-      <th scope="col">ID</th><th scope="col">App</th><th scope="col">Plan</th>
+      <th scope="col">ID</th><th scope="col">App</th><th scope="col" data-priority="low">Plan</th>
       <th scope="col">Mode</th><th scope="col">Status</th>
       <th scope="col">Duration</th><th scope="col">Started</th><th scope="col">Finished</th>
     </tr>
@@ -21,7 +21,7 @@
     <tr>
       <td><a href="/jobs/{{ j.get('id') }}">{{ j.get('id') }}</a></td>
       <td>{% if j.get('app_slug') %}<a href="/apps/{{ j.get('app_slug') }}">{{ j.get('app_name') or j.get('app_slug') }}</a>{% else %}—{% endif %}</td>
-      <td><a href="/plans/{{ j.get('plan_id') }}">#{{ j.get('plan_id') }}</a></td>
+      <td data-priority="low"><a href="/plans/{{ j.get('plan_id') }}">#{{ j.get('plan_id') }}</a></td>
       <td data-filter-value="{{ j.get('mode') }}"><span class="badge {{ 'badge-danger' if j.get('mode') == 'live' else 'badge-grey' }}">{{ 'LIVE' if j.get('mode') == 'live' else 'dry-run' }}</span></td>
       <td data-filter-value="{{ j.get('status') }}"><span class="badge status-{{ j.get('status') }}">{{ j.get('status') }}</span></td>
       <td>{{ j.get('duration') }}</td>

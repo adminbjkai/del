@@ -15,12 +15,12 @@
 </div>
 
 <div class="box box-info">
-  <p style="margin:0 0 .5rem"><strong>What this page is:</strong> resources from the
+  <p class="mt-0 mb-2"><strong>What this page is:</strong> resources from the
   latest completed scan that have <em>no application association</em>.</p>
-  <p style="margin:0 0 .5rem"><strong>Default view = Actionable only</strong>
+  <p class="mt-0 mb-2"><strong>Default view = Actionable only</strong>
   ({{ counts.get('actionable', 0) }}): real review/cleanup candidates — custom units,
   unused volumes/images, enabled nginx without an app, project dirs with no owner, etc.</p>
-  <p style="margin:0"><strong>Not shown by default:</strong>
+  <p class="mt-0"><strong>Not shown by default:</strong>
     <span class="badge">System</span> {{ counts.get('system', 0) }}
     (OS/vendor units, SSH/Samba ports, distro cron/timers, Docker built-ins) ·
     <span class="badge badge-grey">Expected</span> {{ counts.get('expected', 0) }}
@@ -72,7 +72,7 @@
             <span class="badge badge-grey">{{ r.bucket_label }}</span>
           {% endif %}
         </td>
-        <td class="muted" style="font-size:.85rem">{{ r.reason }}</td>
+        <td class="muted text-sm">{{ r.reason }}</td>
       </tr>
       {% endfor %}
     </tbody>

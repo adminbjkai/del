@@ -105,6 +105,36 @@ def _project_dir_for(path: str) -> str | None:
     return None
 
 
+def _foreign_project_root(working_dir: str | None, target_slug: str, apps: dict) -> str | None:
+    """True (returns the owning slug) if `working_dir`'s own project root
+    (the `{scan_root}/{first-component}` directory containing it) belongs to
+    an already-known app OTHER than `target_slug`.
+
+    Mirrors the Step 7 directory guard for compose_project resources: a
+    compose file at /apps/agyinstall/boxy/docker-compose.yml must not be
+    silently merged into app "boxy" just because its directory basename or
+    declared name is "boxy" — /apps/agyinstall/boxy sits inside the
+    "agyinstall" project tree, not boxy's own.
+    """
+    if not working_dir:
+        return None
+    proj_dir = _project_dir_for(working_dir)
+    if not proj_dir:
+        # working_dir IS a top-level scan-root project directory (or not
+        # under a scan root at all) — nothing to be nested inside.
+        return None
+    owner_slug = _slugify(proj_dir.rsplit("/", 1)[-1])
+    if owner_slug == target_slug:
+        return None
+    # Any deeper nesting whose own top-level project directory slugifies to
+    # something OTHER than the matched app's slug means this compose file
+    # does not live at <app>'s own project root (mirrors the Step 7 rule that
+    # a directory only becomes an app's project root when its basename slug
+    # equals the app slug) — it is nested inside a *different* project's
+    # tree, named or not yet registered as its own app.
+    return owner_slug
+
+
 def _level_for_confidence(confidence: int) -> str:
     if confidence >= 95:
         return "confirmed"
@@ -344,6 +374,20 @@ def build_apps(
             if cand and _slugify(cand) in apps:
                 matched_slug = _slugify(cand)
                 break
+        foreign_owner = None
+        if matched_slug is not None and working_dir:
+            foreign_owner = _foreign_project_root(working_dir, matched_slug, apps)
+            if foreign_owner:
+                # The name matched an existing app, but the compose file lives
+                # inside a DIFFERENT app's project tree (an archived clone,
+                # e.g. /apps/agyinstall/boxy vs. the real /apps/boxy) — do not
+                # let it merge into the same-named app at full confidence.
+                # The owning project may not have its own app entry yet (this
+                # loop can visit a nested compose file before the sibling that
+                # would seed it) — seed a placeholder now so it does.
+                if foreign_owner not in apps:
+                    apps[foreign_owner] = _AppBuilder(foreign_owner, foreign_owner, "compose_stopped")
+                matched_slug = foreign_owner
         if matched_slug is None and working_dir:
             for slug, app in apps.items():
                 if working_dir in app.dir_paths:
@@ -392,13 +436,30 @@ def build_apps(
                 app.dir_paths.add(working_dir) if working_dir else None
                 matched_slug = slug
         app = apps[matched_slug]
-        app.add(
-            cp,
-            confidence=95,
-            ownership="exclusive",
-            data_loss_risk="config",
-            evidence=[Evidence(source="compose_src", statement=f"compose file found at {working_dir}", weight=95)],
-        )
+        if foreign_owner:
+            app.add(
+                cp,
+                confidence=55,
+                ownership="shared",
+                data_loss_risk="config",
+                evidence=[Evidence(
+                    source="compose_src",
+                    statement=(
+                        f"compose file found at {working_dir}, nested inside "
+                        f"'{foreign_owner}'s project tree — NOT the same-named app "
+                        f"'{_slugify(cp.display)}'; not safely removable at full confidence"
+                    ),
+                    weight=55,
+                )],
+            )
+        else:
+            app.add(
+                cp,
+                confidence=95,
+                ownership="exclusive",
+                data_loss_risk="config",
+                evidence=[Evidence(source="compose_src", statement=f"compose file found at {working_dir}", weight=95)],
+            )
         if working_dir:
             app.dir_paths.add(working_dir)
 
