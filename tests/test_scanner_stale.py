@@ -165,3 +165,31 @@ def test_run_scan_abandons_prior_running_before_insert(settings_env, monkeypatch
         conn.close()
     assert stale_row["status"] == "failed"
     assert new_row["status"] == "done"
+
+
+def test_run_scan_marks_unseen_apps_removed(settings_env, monkeypatch):
+    monkeypatch.setattr(scanner, "_collect_all", lambda: ([], {}))
+    monkeypatch.setattr(scanner, "load_all", lambda: {})
+    monkeypatch.setattr(scanner, "build_apps", lambda resources, manifests: [])
+
+    conn = get_db()
+    try:
+        prior = x(conn, "INSERT INTO scans (status) VALUES ('done')")
+        x(
+            conn,
+            "INSERT INTO applications (slug, name, status, kind, protected, first_seen, last_seen) "
+            "VALUES ('ghost-app', 'ghost-app', 'running', 'compose', 0, ?, ?)",
+            (prior, prior),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    scanner.run_scan()
+    conn = get_db()
+    try:
+        row = dict(q(conn, "SELECT status, last_seen FROM applications WHERE slug='ghost-app'")[0])
+    finally:
+        conn.close()
+    assert row["status"] == "removed"
+    assert row["last_seen"] == 1

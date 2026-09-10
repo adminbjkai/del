@@ -214,6 +214,11 @@ def run_scan() -> int:
             (scan_id,),
         )
         stale_assoc_removed = cur.rowcount or 0
+        # Keep the row for history, but stop advertising a gone app as running.
+        conn.execute(
+            "UPDATE applications SET status='removed' WHERE last_seen < ? AND status != 'removed'",
+            (scan_id,),
+        )
         conn.commit()
 
         stats = {
