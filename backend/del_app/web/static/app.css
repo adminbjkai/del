@@ -415,7 +415,7 @@ a:hover { color: var(--accent-hover); text-decoration: underline; }
 .glossary-section.is-hidden { display: none !important; }
 .glossary-section h3 {
   margin: 0 0 0.5rem;
-  font-size: 0.68rem;
+  font-size: var(--text-xs);
   text-transform: uppercase;
   letter-spacing: 0.05em;
   color: var(--accent);
@@ -630,12 +630,12 @@ a.stat-card:hover { border-color: var(--accent); text-decoration: none; transfor
 .stat-value { font-size: 1.8rem; font-weight: 700; }
 .stat-label { color: var(--text-muted); font-size: 0.85rem; margin-top: 0.25rem; }
 
-.panel {
+.card, .panel {
   background: var(--bg-card); border: 1px solid var(--border-subtle, var(--border));
-  border-radius: var(--radius); padding: 1.25rem; margin-bottom: 1.5rem;
+  border-radius: 14px; padding: 1.25rem; margin-bottom: 1.5rem;
   box-shadow: var(--shadow-sm);
 }
-.panel > h2 { margin-top: 0; }
+.card > h2, .panel > h2 { margin-top: 0; }
 .count-pill {
   font-size: 0.75rem; font-weight: 600; color: var(--text-muted);
   background: var(--bg-alt); border: 1px solid var(--border);
@@ -891,7 +891,7 @@ a.stat-card:hover { border-color: var(--accent); text-decoration: none; transfor
   word-break: break-all;
 }
 .table .badge {
-  font-size: 0.65rem;
+  font-size: var(--text-xs);
   padding: 0.08rem 0.32rem;
   max-width: 100%;
   white-space: normal;
@@ -1081,7 +1081,11 @@ th.sort-desc::after { content: "\2193"; opacity: 1; }
 .login-title { margin: 0 0 0.25rem; font-size: var(--text-xl); }
 
 details { margin-bottom: 0.5rem; }
-details summary { cursor: pointer; color: var(--accent); }
+details summary {
+  cursor: pointer;
+  color: var(--accent);
+  display: list-item;
+}
 pre.output { background: var(--bg); border: 1px solid var(--border); border-radius: var(--radius); padding: 0.6rem; max-height: 320px; overflow: auto; font-family: var(--mono); font-size: 0.8rem; white-space: pre-wrap; margin: 0; }
 
 /* Job detail: the live step log must be its own scroll container, otherwise the
@@ -1419,7 +1423,7 @@ pre.output { background: var(--bg); border: 1px solid var(--border); border-radi
     background: transparent;
   }
   .table th {
-    font-size: 0.68rem;
+    font-size: var(--text-xs);
     min-width: 5.5rem;
     background: var(--bg-card);
   }
@@ -1635,14 +1639,6 @@ pre.output { background: var(--bg); border: 1px solid var(--border); border-radi
 .align-middle { vertical-align: middle; }
 .badge-sm { font-size: 0.72em; }
 
-/* =========================================================================
-   Card (generalized .panel — kept as an alias so existing markup is untouched)
-   ========================================================================= */
-.card, .panel {
-  background: var(--bg-card); border: 1px solid var(--border);
-  border-radius: var(--radius); padding: 1.25rem; margin-bottom: 1.5rem;
-}
-.card > h2, .panel > h2 { margin-top: 0; }
 
 /* =========================================================================
    kbd chip (element already styled above; class form for use outside <kbd>)
@@ -1875,10 +1871,6 @@ a.stat-card:hover {
   font-size: 1.65rem;
   letter-spacing: -0.03em;
   font-variant-numeric: tabular-nums;
-}
-.panel {
-  border-radius: 14px;
-  box-shadow: var(--shadow-sm);
 }
 .tabbar {
   gap: 0.35rem;

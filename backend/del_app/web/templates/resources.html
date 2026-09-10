@@ -15,12 +15,12 @@
     {% endif %}
   </div>
 </div>
-<p class="page-lede">Name relatedness for each resource — shared, probable owner, possible (weak), or unassigned on Orphans (review-only).</p>
+<p class="page-lede">Name relatedness for each resource — shared, probable owner (≥60), possible (weak), unassigned (no association rows), or Orphans (no probable owner; review-only, no delete). The volume Orphan column is unused-by-containers, not the Orphans page.</p>
 <div class="legend-row" aria-label="How rows relate">
   <span class="chip" title="More than one current application owns it">shared = 2+ current apps</span>
   <span class="chip" title="Confidence ≥ 60 counts as an owner">probable = strong owner</span>
   <span class="chip" title="Confidence 30–59; review, do not treat as owner">possible = weak</span>
-  <span class="chip" title="No probable current owner; review-only page">unassigned → Orphans</span>
+  <span class="chip" title="No probable (≥60) current owner; review-only, no delete. Unassigned chips are no association rows.">no probable owner → Orphans</span>
 </div>
 
 <nav class="tabbar">

@@ -8,7 +8,7 @@
       {% if r.get('shared') %}<span class="badge badge-amber" title="Shared: more than one current app. Do not delete with a single app.">shared</span>{% endif %}
     </span>
   {% else %}
-    <a class="chip owner-chip owner-chip-unassigned" href="/orphans" title="No probable current owner — review on Orphans">unassigned</a>
+    <a class="chip owner-chip owner-chip-unassigned" href="/orphans" title="No association rows — not the same as Orphans (no probable owner). Review on Orphans if there is also no probable owner.">unassigned</a>
   {% endif %}
 {%- endmacro %}
 

@@ -18,12 +18,12 @@
   </div>
 </div>
 
-<p class="page-lede">Name relatedness here is unassigned only — review-only; shared and probable owners live on Apps and Resources.</p>
+<p class="page-lede">Name relatedness here is no probable owner (≥60) — review-only, no delete. Possible/weak claims may still exist. Shared and probable owners live on Apps and Resources. Unassigned chips mean no association rows, which is stricter than this page.</p>
 <div class="legend-row" aria-label="How rows relate">
   <span class="chip" title="More than one current application owns it">shared = 2+ current apps</span>
   <span class="chip" title="Confidence ≥ 60 counts as an owner">probable = strong owner</span>
   <span class="chip" title="Confidence 30–59; review, do not treat as owner">possible = weak</span>
-  <span class="chip" title="No probable current owner; review-only page">unassigned → Orphans</span>
+  <span class="chip" title="No probable (≥60) current owner; review-only, no delete. Unassigned chips are no association rows.">no probable owner → Orphans</span>
 </div>
 <p class="muted">Actionable {{ counts.get('actionable', 0) }} · System {{ counts.get('system', 0) }} · Expected {{ counts.get('expected', 0) }} · unassociated {{ unfiltered_total }}.</p>
 

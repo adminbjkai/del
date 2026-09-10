@@ -319,7 +319,7 @@ letter.
 
 Two related route details: `GET /favicon.ico` is a 301 to `/static/favicon.svg`
 (browsers request it unprompted; it used to 404 on every page load), and the
-four `/static/*` assets (`app.css`, `app.js`, `theme-init.js`, `favicon.svg`)
+`/static/*` assets (`app.css`, `app.js`, `theme-init.js`, `favicon.svg`, `assistant.css`, `assistant.js`, and vendored AG Grid under `/static/vendor/`)
 send `Cache-Control: public, max-age=300, must-revalidate`.
 
 `POST /scan` starts a scan on a background thread and redirects immediately
@@ -524,8 +524,8 @@ operator-facing walkthrough.
   and backups directory are not world-readable.
 - Helper socket 0660 root:bjkai; 22 allowlisted operations; args validated twice;
   helper code and policy deployed root-owned outside `/apps/del`.
-- Unauthenticated routes are exactly `/login`, `/healthz`, `/favicon.ico` and the
-  four `/static/*` assets.
+- Unauthenticated routes are exactly `/login`, `/healthz`, `/favicon.ico` and
+  `/static/*` (`app.css`, `app.js`, `theme-init.js`, `favicon.svg`, `assistant.css`, `assistant.js`, vendored AG Grid).
 - DEL itself flagged protected=1; planner refuses to plan its removal.
 
 See [Security Model](/reference/security) for the full detail.

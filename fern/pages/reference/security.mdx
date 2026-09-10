@@ -212,7 +212,7 @@ house standard:
 
 | Vector | Mitigation |
 |---|---|
-| Internet → Nginx → auth bypass | TLS termination + security headers (incl. CSP and HSTS with `includeSubDomains`) at Nginx; `del-web` bound to 127.0.0.1 only; a session required on every route except `/login`, `/healthz`, `/favicon.ico` and the four `/static/*` assets; rate-limited login |
+| Internet → Nginx → auth bypass | TLS termination + security headers (incl. CSP and HSTS with `includeSubDomains`) at Nginx; `del-web` bound to 127.0.0.1 only; a session required on every route except `/login`, `/healthz`, `/favicon.ico` and `/static/*` (`app.css`, `app.js`, `theme-init.js`, `favicon.svg`, `assistant.css`, `assistant.js`, vendored AG Grid); rate-limited login |
 | Compromised web session → arbitrary host command | Fixed 22-op helper allowlist with independent re-validation bounds the blast radius regardless of what `del-web` is tricked into requesting |
 | Compromised web tier → rewrite what root runs | Helper code and policy deployed `root:root` outside `/apps/del`; `protected_units` refuses to stop `del-helper` itself |
 | Path traversal / symlink escape | `realpath` canonicalization + protected-root refusal + approved-root confinement on every path argument, including backup *reads* and restore *writes* |

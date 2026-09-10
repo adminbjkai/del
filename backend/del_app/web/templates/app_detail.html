@@ -15,12 +15,12 @@
 <p class="muted">slug: {{ app.get('slug') }} · status: {{ app.get('status') }}
   {% if app.get('protected') %}<span class="badge badge-blue">protected</span>{% endif %}
 </p>
-<p class="page-lede">Name relatedness for this app’s resources — shared, probable owner, or possible (weak); unassigned is review-only on Orphans.</p>
+<p class="page-lede">Name relatedness for this app’s resources — shared, probable owner (≥60), or possible (weak). Unassigned chips mean no association rows. Orphans is no probable owner (review-only, no delete).</p>
 <div class="legend-row" aria-label="How rows relate">
   <span class="chip" title="More than one current application owns it">shared = 2+ current apps</span>
   <span class="chip" title="Confidence ≥ 60 counts as an owner">probable = strong owner</span>
   <span class="chip" title="Confidence 30–59; review, do not treat as owner">possible = weak</span>
-  <span class="chip" title="No probable current owner; review-only page">unassigned → Orphans</span>
+  <span class="chip" title="No probable (≥60) current owner; review-only, no delete. Unassigned chips are no association rows.">no probable owner → Orphans</span>
 </div>
 
 <div class="action-bar">
