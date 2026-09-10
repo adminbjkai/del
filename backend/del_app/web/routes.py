@@ -1,12 +1,12 @@
 """DEL web UI routes: dashboard, apps, plans, jobs, resources, orphans,
 settings, manifests. All routes here (except /login, /healthz which is owned
-by main.py, and the four static assets — app.css, app.js, theme-init.js,
-favicon.svg — served unauthenticated from static_routes.py) sit behind
-auth.require_user.
+by main.py, and the six static assets — app.css, app.js, theme-init.js,
+favicon.svg, assistant.js, assistant.css — served unauthenticated from
+static_routes.py) sit behind auth.require_user.
 
 This module is a thin aggregator over the domain modules in this package
 (dashboard, apps, plans_jobs, resources, orphans, gallery, settings,
-auth_routes, static_routes). Each owns its own routes; this module just
+assistant, auth_routes, static_routes). Each owns its own routes; this module just
 combines their routers and re-exports the handful of pure helpers/constants
 that tests import directly from `del_app.web.routes`.
 
@@ -27,6 +27,7 @@ from fastapi import APIRouter
 
 from del_app.web import (
     apps,
+    assistant,
     auth_routes,
     dashboard,
     gallery,
@@ -62,7 +63,7 @@ assert urllib.request is not None
 router = APIRouter()
 for _module in (
     auth_routes, dashboard, apps, gallery, plans_jobs, resources, orphans,
-    settings, static_routes,
+    assistant, settings, static_routes,
 ):
     router.include_router(_module.router)
 del _module

@@ -11,6 +11,9 @@
     {% else %}
       <a class="btn btn-sm" href="/orphans?show=all">Show system &amp; expected too</a>
     {% endif %}
+    {% if assistant_enabled() %}
+    <a class="btn btn-sm btn-ghost" href="/assistant?scope=orphans" title="Ask the read-only assistant to review the orphan list">Ask the assistant</a>
+    {% endif %}
   </div>
 </div>
 

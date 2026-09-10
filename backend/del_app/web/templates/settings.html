@@ -18,6 +18,26 @@
   </dl>
 </section>
 
+<section class="panel" id="assistant-settings">
+  <h2>Assistant</h2>
+  {% set ast = assistant_status or {} %}
+  <dl class="kv">
+    <dt>Enabled</dt><dd>{% if ast.get('enabled') %}<span class="badge badge-ok">yes</span>{% else %}<span class="badge badge-grey">no</span>{% endif %}</dd>
+    <dt>Configured</dt><dd>{% if ast.get('configured') %}<span class="badge badge-ok">yes</span>{% else %}<span class="badge badge-amber">no</span>{% if ast.get('reason') %} <span class="muted text-sm">{{ ast.get('reason') }}</span>{% endif %}{% endif %}</dd>
+    <dt>Model</dt><dd>{{ ast.get('model') or '—' }}</dd>
+    <dt>Key source</dt><dd>{{ ast.get('key_source') or '—' }}</dd>
+  </dl>
+  <form method="post" action="/assistant/test" class="mt-2" data-submit-guard="Testing…">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit" class="btn"{% if not (ast.get('enabled') and ast.get('configured')) %} disabled title="Configure an API key first"{% endif %}>Test connection</button>
+    <a class="btn btn-ghost" href="/assistant">Open assistant</a>
+  </form>
+  <p class="muted text-sm mt-2">
+    Read-only advisory chat over the inventory (Ollama Cloud). Enable it by placing the API key in
+    <code>/apps/del/config/ollama-api-key.txt</code> (mode 0600) and restarting <code>del-web</code>.
+  </p>
+</section>
+
 <section class="panel">
   <h2>Scanning</h2>
   <form method="post" action="/scan" data-submit-guard="Starting scan…">

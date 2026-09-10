@@ -60,6 +60,11 @@
   </div>
 {%- endmacro %}
 
+{# Per-row deep link into the assistant's `resource` scope (docker types only). #}
+{% macro ask_link(res_type, key) -%}
+  <td class="text-sm"><a class="assistant-ask-link" href="/assistant?scope=resource&amp;target={{ (res_type ~ ':' ~ key) | urlencode }}" title="Ask the read-only assistant about this {{ res_type }}">Ask</a></td>
+{%- endmacro %}
+
 {% macro domain_links(domains, sep=', ') -%}
   {% if domains %}
     {# data-stop-propagation, not an inline onclick: script-src 'self' blocks

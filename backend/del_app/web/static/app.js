@@ -1431,6 +1431,7 @@
     apps: "Applications",
     "app-detail": "Application detail",
     orphans: "Orphans",
+    assistant: "Assistant",
     jobs: "Jobs",
     "job-detail": "Job detail",
     resources: "Resources",
@@ -1465,6 +1466,7 @@
     }
     if (pathname.indexOf("/resources") === 0) return "resources";
     if (pathname.indexOf("/orphans") === 0) return "orphans";
+    if (pathname.indexOf("/assistant") === 0) return "assistant";
     if (pathname.indexOf("/jobs/") === 0) return "job-detail";
     if (pathname.indexOf("/jobs") === 0) return "jobs";
     if (pathname.indexOf("/settings") === 0) return "general";

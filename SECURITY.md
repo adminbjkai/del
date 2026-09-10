@@ -29,6 +29,7 @@
   deleted them and the table only grew.
 - CSRF token required and checked on every mutating (`POST`) request
   (`auth.csrf_token` / `auth.check_csrf`); forms and `app.js` fetches both carry it.
+  JSON posts from the Assistant also send `X-CSRF-Token` (same HMAC as the form field).
 - Login is rate-limited to 5 attempts per 60 seconds per IP — a plain in-memory
   sliding window (`auth.rate_limited` / `auth.record_attempt`). There is no
   escalating backoff and no persistence: a `del-web` restart clears the counters.
@@ -39,6 +40,7 @@
   argon2 hash and session token hashes, and was previously world-readable.
 - `/apps/del/backups/`: mode `0750`.
 - `/apps/del/config/secret.key` (the HMAC signing key): mode `0600`.
+- `/apps/del/config/ollama-api-key.txt` (Assistant): mode `0600`, refused if group/world readable; gitignored via `config/*-api-key.txt`.
 - `/usr/local/lib/del-helper/` and `/etc/del/helper-policy.json`: `root:root`,
   not writable by `bjkai`. See the next section for why that is load-bearing.
 
@@ -174,7 +176,8 @@ Environment variable **values** are stripped at the discovery-source layer
 (`fs_src.py` and others record `.env` variable *names* only); secrets are never
 logged to `helper-audit.log`, the app logs, the `audit_log` table, or job step
 output (`output_sanitized`). Callers of `auditlog.audit()` are responsible for
-pre-sanitizing details before they're recorded.
+pre-sanitizing details before they're recorded. The Assistant API key is never
+logged; assistant audit rows store scope and conversation id, not the prompt text.
 
 ## Related host hardening (outside DEL itself)
 
@@ -203,12 +206,13 @@ The original full attacker/vector/mitigation table lives in `docs/server-audit.m
 
 | Vector | Mitigation |
 |---|---|
-| Internet → Nginx → auth bypass | TLS termination + security headers (incl. CSP and HSTS with `includeSubDomains`) at Nginx; `del-web` bound to 127.0.0.1 only; a session required on every route except `/login`, `/healthz`, `/favicon.ico` and the four `/static/*` assets; rate-limited login |
+| Internet → Nginx → auth bypass | TLS termination + security headers (incl. CSP and HSTS with `includeSubDomains`) at Nginx; `del-web` bound to 127.0.0.1 only; a session required on every route except `/login`, `/healthz`, `/favicon.ico` and the `/static/*` assets (`app.css`, `app.js`, `theme-init.js`, `favicon.svg`, `assistant.css`, `assistant.js`); rate-limited login |
 | Compromised web session → arbitrary host command | Fixed 22-op helper allowlist with independent re-validation bounds the blast radius regardless of what `del-web` is tricked into requesting |
 | Compromised web tier → rewrite what root runs | Helper code and policy are deployed `root:root` outside `/apps/del`; `protected_units` refuses to stop `del-helper` itself |
 | Path traversal / symlink escape | `realpath` canonicalization + protected-root refusal + approved-root confinement on every path argument, including backup *reads* and restore *writes* |
 | Command/argument injection | subprocess arg-arrays only, `shell=False`, everywhere |
 | Secrets exposure | env values stripped at collection; never logged or stored; DB and backups no longer world-readable |
+| Assistant → Ollama Cloud | Inventory metadata only (names, paths, tags, evidence); no env values, file contents or secrets; read-only (no helper, no planner); key file 0600 |
 | Server-side request forgery via `/app-icon/` | The proxy accepts only hostnames that are enabled Nginx sites in the latest scan, requires a session, fetches `https://{host}/favicon.ico` only, caps the body at 256 KiB, and checks content type |
 
 ## Hardening notes

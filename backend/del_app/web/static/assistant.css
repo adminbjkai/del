@@ -1,0 +1,109 @@
+/* Assistant page. Tokens only (see app.css); loaded by assistant.html alone. */
+.assistant-layout {
+  display: grid;
+  grid-template-columns: minmax(240px, 320px) minmax(0, 1fr);
+  gap: var(--space-5);
+  align-items: start;
+}
+.assistant-side .card { margin-bottom: 0; padding: var(--space-4); }
+.assistant-side h2 { font-size: var(--text-md); margin-bottom: var(--space-3); }
+
+/* Selects / inputs in the picker (same recipe as .stacked-form controls). */
+.assistant-select {
+  display: block; width: 100%; margin-top: var(--space-1);
+  background: var(--bg-alt); border: 1px solid var(--border); color: var(--text);
+  padding: 0.45rem 0.55rem; border-radius: var(--radius-sm); font: inherit; font-size: var(--text-sm);
+}
+.assistant-select:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+
+/* Prompt cards */
+.assistant-prompt {
+  display: block; width: 100%; text-align: left;
+  background: var(--bg-alt); border: 1px solid var(--border); color: var(--text);
+  border-radius: var(--radius-sm); padding: 0.5rem 0.65rem;
+  font: inherit; font-size: var(--text-sm); cursor: pointer; line-height: 1.35;
+}
+.assistant-prompt:hover, .assistant-prompt:focus-visible { border-color: var(--accent); background: var(--bg-card); }
+.assistant-prompt::before { content: "\2192\00a0"; color: var(--accent); }
+
+/* Conversation list */
+.assistant-conv-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: var(--space-1); }
+.assistant-conv {
+  display: flex; align-items: flex-start; gap: var(--space-2);
+  padding: 0.4rem 0.5rem; border-radius: var(--radius-sm); border: 1px solid transparent;
+}
+.assistant-conv:hover { background: var(--bg-alt); }
+.assistant-conv.is-active { border-color: var(--accent); background: var(--bg-alt); }
+.assistant-conv-link { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 0.1rem; color: var(--text); text-decoration: none; }
+.assistant-conv-link:hover { text-decoration: none; }
+.assistant-conv-title { font-size: var(--text-sm); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.assistant-conv .link-button { margin: 0; font-size: var(--text-xs); }
+
+/* Main column: transcript + status line + composer */
+.assistant-main { display: flex; flex-direction: column; gap: var(--space-3); min-height: 70vh; }
+.assistant-transcript {
+  flex: 1; overflow-y: auto; max-height: 65vh;
+  display: flex; flex-direction: column; gap: var(--space-3);
+  padding: var(--space-2) var(--space-1);
+}
+.assistant-transcript .empty-state { margin: auto; max-width: 34rem; }
+
+.assistant-msg {
+  max-width: 85%; padding: 0.65rem 0.9rem; border-radius: var(--radius);
+  border: 1px solid var(--border); font-size: var(--text-md); line-height: 1.5;
+  overflow-wrap: anywhere;
+}
+.assistant-msg-user {
+  align-self: flex-end; background: var(--accent-bg); border-color: var(--accent-bg); color: #fff;
+  white-space: pre-wrap;
+}
+.assistant-msg-assistant { align-self: flex-start; background: var(--bg-alt); }
+.assistant-msg-assistant.is-streaming::after {
+  content: "\258B"; margin-left: 0.15rem; color: var(--accent); animation: pulse 1s infinite;
+}
+.assistant-msg.is-error { border-color: var(--danger); color: var(--danger); }
+.assistant-msg[data-md] { white-space: pre-wrap; }
+
+/* Rendered markdown subset */
+.assistant-msg-assistant p { margin: 0 0 0.6rem; }
+.assistant-msg-assistant p:last-child { margin-bottom: 0; }
+.assistant-msg-assistant h3, .assistant-msg-assistant h4, .assistant-msg-assistant h5 {
+  margin: 0.6rem 0 0.3rem; font-size: var(--text-md); font-weight: 600;
+}
+.assistant-msg-assistant ul, .assistant-msg-assistant ol { margin: 0 0 0.6rem; padding-left: 1.3rem; }
+.assistant-msg-assistant li { margin: 0.15rem 0; }
+.assistant-msg-assistant code {
+  font-family: var(--mono); font-size: 0.85em; background: var(--bg-card);
+  border: 1px solid var(--border); border-radius: 4px; padding: 0.05rem 0.3rem;
+}
+.assistant-msg-assistant pre {
+  margin: 0.4rem 0 0.6rem; padding: 0.6rem 0.75rem; overflow-x: auto;
+  background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-sm);
+}
+.assistant-msg-assistant pre code { border: none; padding: 0; background: none; font-size: 0.85em; }
+.assistant-msg-assistant a { color: var(--accent); }
+
+.assistant-statusline { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+
+.assistant-composer { display: flex; flex-direction: column; gap: var(--space-2); }
+.assistant-composer textarea {
+  width: 100%; resize: vertical; min-height: 4.5rem;
+  background: var(--bg-alt); border: 1px solid var(--border); color: var(--text);
+  padding: 0.6rem 0.75rem; border-radius: var(--radius); font: inherit; font-size: var(--text-md);
+}
+.assistant-composer textarea:focus { outline: 2px solid var(--accent); outline-offset: 1px; }
+.assistant-composer textarea[readonly] { opacity: 0.7; }
+.assistant-composer-actions { justify-content: flex-start; }
+
+/* Deep-link "Ask" cell on the Resources tables */
+.assistant-ask-link { white-space: nowrap; }
+
+@media (max-width: 900px) {
+  .assistant-layout { grid-template-columns: 1fr; }
+  .assistant-main { min-height: 0; order: -1; }
+  .assistant-transcript { max-height: 50vh; min-height: 12rem; }
+  .assistant-msg { max-width: 100%; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .assistant-msg-assistant.is-streaming::after { animation: none; }
+}

@@ -23,6 +23,7 @@ _PALETTE_PAGES = [
     {"title": "App Gallery", "url": "/view-apps"},
     {"title": "Resources", "url": "/resources"},
     {"title": "Orphans", "url": "/orphans"},
+    {"title": "Assistant", "url": "/assistant"},
     {"title": "Jobs", "url": "/jobs"},
     {"title": "Settings", "url": "/settings"},
 ]

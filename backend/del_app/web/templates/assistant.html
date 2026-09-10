@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}Assistant{% endblock %}
+{% block head %}
+  <meta name="csrf-token" content="{{ csrf_token }}">
+  <link rel="stylesheet" href="/static/assistant.css">
+{% endblock %}
+{% block content %}
+<div class="page-header">
+  <h1>Assistant</h1>
+  <div class="page-actions">
+    <span class="badge badge-grey" title="The assistant has no tools and cannot change anything">read-only</span>
+    {% if assistant_on %}
+    <a class="btn btn-sm" href="/assistant" id="assistant-new">New conversation</a>
+    {% endif %}
+  </div>
+</div>
+
+{% if not assistant_on %}
+<div class="box box-info" id="assistant-disabled">
+  <p class="mt-0"><strong>The assistant is not available.</strong>
+    {% if status.get('reason') %}<span class="muted">{{ status.get('reason') }}</span>{% endif %}
+  </p>
+  <p class="mb-2">It answers questions about the inventory using a hosted model (Ollama Cloud) and needs an API key. To enable it:</p>
+  <ol class="mt-0 mb-2">
+    <li>Save the key, one line, readable by the DEL user only:
+      <code>install -m 600 /dev/stdin /apps/del/config/ollama-api-key.txt &lt;&lt;&lt; "&lt;key&gt;"</code>
+      (the file is refused if it is group- or world-readable).</li>
+    <li>Make sure <code>[assistant] enabled = true</code> in <code>config/del.toml</code> (the default).</li>
+    <li>Restart the service: <code>systemctl restart del-web</code>.</li>
+    <li>Open <a href="/settings#assistant-settings">Settings → Assistant</a> and click <em>Test connection</em>.</li>
+  </ol>
+  <p class="mt-0 muted text-sm">Inventory metadata (names, paths, image tags, ports, evidence) is sent to the model for every question; file contents, environment values and secrets never are.</p>
+</div>
+{% else %}
+<div class="assistant-layout" id="assistant-page"
+     data-scope="{{ scope }}"
+     data-target="{{ target }}"
+     data-resource-type="{{ resource_type }}"
+     data-conversation="{{ conversation.get('id') if conversation else '' }}"
+     data-model="{{ status.get('model') or '' }}">
+
+  <aside class="assistant-side stack-lg">
+    <section class="card assistant-scope">
+      <h2 class="text-md">Scope</h2>
+      <div class="filter-chip-group" role="group" aria-label="Scope">
+        {% for s in scopes %}
+        <button type="button" class="filter-chip assistant-scope-chip" data-scope="{{ s.id }}" aria-pressed="{{ 'true' if s.id == scope else 'false' }}">{{ s.label }}</button>
+        {% endfor %}
+      </div>
+
+      <div class="stack mt-3" id="assistant-target-wrap" hidden>
+        <label class="text-sm" for="assistant-rtype" id="assistant-rtype-wrap" hidden>Resource type
+          <select id="assistant-rtype" class="assistant-select">
+            {% for t in targets.resource_type %}
+            <option value="{{ t.value }}"{% if t.value == resource_type %} selected{% endif %}>{{ t.label }}</option>
+            {% endfor %}
+          </select>
+        </label>
+        <label class="text-sm" for="assistant-target-search" id="assistant-search-wrap" hidden>Find
+          <input type="search" id="assistant-target-search" class="assistant-select" placeholder="Filter resources…" autocomplete="off">
+        </label>
+        <label class="text-sm" for="assistant-target"><span id="assistant-target-label">Target</span>
+          <select id="assistant-target" class="assistant-select"
+                  data-apps='{{ targets.app | tojson }}'
+                  data-rtypes='{{ targets.resource_type | tojson }}'
+                  data-resources='{{ targets.resource | tojson }}'>
+          </select>
+        </label>
+      </div>
+    </section>
+
+    <section class="card assistant-prompts-card">
+      <h2 class="text-md">Suggested questions</h2>
+      <div class="stack-sm" id="assistant-prompts">
+        {% for p in prompts %}
+        <button type="button" class="assistant-prompt" data-prompt-id="{{ p.id }}" data-text="{{ p.text }}" title="{{ p.description or p.text }}">{{ p.label }}</button>
+        {% else %}
+        <div class="muted text-sm">No suggestions for this scope.</div>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="card assistant-history">
+      <h2 class="text-md">Recent conversations</h2>
+      <ul class="assistant-conv-list" id="assistant-conversations">
+        {% for c in conversations %}
+        <li class="assistant-conv{% if conversation and c.get('id') == conversation.get('id') %} is-active{% endif %}">
+          <a href="/assistant?conversation={{ c.get('id') }}" class="assistant-conv-link">
+            <span class="assistant-conv-title">{{ c.get('title') }}</span>
+            <span class="muted text-xs">{{ c.get('scope') }}{% if c.get('target') %} · {{ c.get('target') }}{% endif %} · <span class="dt">{{ relative_dt(c.get('updated_at')) }}</span></span>
+          </a>
+          <form method="post" action="/assistant/conversations/{{ c.get('id') }}/delete" class="inline-form" data-submit-guard="…">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button type="submit" class="link-button danger" data-confirm="Delete this conversation?" aria-label="Delete conversation">delete</button>
+          </form>
+        </li>
+        {% else %}
+        <li class="muted text-sm" id="assistant-no-conversations">Nothing yet.</li>
+        {% endfor %}
+      </ul>
+    </section>
+  </aside>
+
+  <section class="card assistant-main">
+    <div class="assistant-transcript" id="assistant-transcript" aria-live="polite" aria-label="Transcript">
+      {% if conversation %}
+        {% for msg in conversation.get('messages', []) %}
+        <div class="assistant-msg assistant-msg-{{ msg.get('role') }}"{% if msg.get('role') == 'assistant' %} data-md{% endif %}>{{ msg.get('content') }}</div>
+        {% endfor %}
+      {% else %}
+        <div class="empty-state" id="assistant-empty">
+          <div class="empty-state-msg">Pick a scope, then ask a question or choose a suggestion. Answers come only from what DEL already knows about this host; nothing is changed.</div>
+        </div>
+      {% endif %}
+    </div>
+
+    <div class="assistant-statusline muted text-xs" id="assistant-statusline">
+      <span>model: <span class="mono" id="assistant-model">{{ status.get('model') or '—' }}</span></span>
+      <span class="badge badge-amber" id="assistant-truncated" hidden title="The inventory context was cut to the configured budget; the answer may miss items">context truncated</span>
+      <span id="assistant-usage"></span>
+    </div>
+
+    <form class="assistant-composer" id="assistant-form">
+      <label for="assistant-input" class="sr-only">Your question</label>
+      <textarea id="assistant-input" rows="3" placeholder="Ask about the inventory… (Ctrl+Enter to send)" required></textarea>
+      <div class="cluster assistant-composer-actions">
+        <button type="submit" class="btn btn-primary" id="assistant-send">Ask</button>
+        <button type="button" class="btn" id="assistant-stop" hidden>Stop</button>
+        <span class="muted text-xs">Ctrl/Cmd+Enter sends</span>
+      </div>
+    </form>
+  </section>
+</div>
+{% endif %}
+{% endblock %}
+{% block scripts %}
+  <script src="/static/assistant.js"></script>
+{% endblock %}

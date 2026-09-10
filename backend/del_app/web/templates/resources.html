@@ -2,10 +2,16 @@
 {% import "_macros.html" as m %}
 {% block title %}Resources · {{ res_label }}{% endblock %}
 {% block content %}
+{# Per-row "Ask" links exist for the four docker types only (the assistant's
+   `resource` scope); computed once so every row shares the decision. #}
+{% set ask_rows = res_type in ('container', 'image', 'volume', 'network') and assistant_enabled() %}
 <div class="page-header">
   <h1>Resources</h1>
   <div class="page-actions">
     <button type="button" class="btn btn-sm" data-export-table="resources-table" title="Export the currently filtered rows as CSV">Export CSV</button>
+    {% if ask_rows %}
+    <a class="btn btn-sm btn-ghost" href="/assistant?scope=resource_type&amp;target={{ res_type }}" title="Ask the read-only assistant about all {{ res_label | lower }}">Ask the assistant</a>
+    {% endif %}
   </div>
 </div>
 
@@ -25,7 +31,7 @@
 {% if res_type == 'container' %}
 <table id="resources-table" class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
   <caption class="sr-only">{{ res_label }} from the latest scan, with the application(s) that own each one.</caption>
-  <thead><tr><th scope="col">Name</th><th scope="col">State/health</th><th scope="col">Image</th><th scope="col">Host port(s)</th><th scope="col">Container port(s)</th><th scope="col">Compose project</th><th scope="col">Owner app(s)</th><th scope="col">Shared</th></tr></thead>
+  <thead><tr><th scope="col">Name</th><th scope="col">State/health</th><th scope="col">Image</th><th scope="col">Host port(s)</th><th scope="col">Container port(s)</th><th scope="col">Compose project</th><th scope="col">Owner app(s)</th><th scope="col">Shared</th>{% if ask_rows %}<th scope="col" data-nosort>Ask</th>{% endif %}</tr></thead>
   <tbody>
     {% for r in rows %}
     {% set mappings = r.data.get('port_mappings') %}
@@ -45,6 +51,7 @@
       <td>{{ r.data.get('compose_project') or '—' }}</td>
       <td>{{ m.owner_cell(r) }}</td>
       <td data-filter-value="{{ 'yes' if r.shared else 'no' }}">{% if r.shared %}<span class="badge badge-amber">shared</span>{% else %}no{% endif %}</td>
+      {% if ask_rows %}{{ m.ask_link(res_type, r.key) }}{% endif %}
     </tr>
     {% endfor %}
   </tbody>
@@ -54,7 +61,7 @@
 {% elif res_type == 'image' %}
 <table id="resources-table" class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
   <caption class="sr-only">{{ res_label }} from the latest scan, with the application(s) that own each one.</caption>
-  <thead><tr><th scope="col">Repo:tag</th><th scope="col">ID</th><th scope="col">Size</th><th scope="col">Dangling</th><th scope="col">Used by</th><th scope="col">Owner app(s)</th></tr></thead>
+  <thead><tr><th scope="col">Repo:tag</th><th scope="col">ID</th><th scope="col">Size</th><th scope="col">Dangling</th><th scope="col">Used by</th><th scope="col">Owner app(s)</th>{% if ask_rows %}<th scope="col" data-nosort>Ask</th>{% endif %}</tr></thead>
   <tbody>
     {% for r in rows %}
     <tr>
@@ -64,6 +71,7 @@
       <td data-filter-value="{{ 'yes' if r.data.get('dangling') else 'no' }}">{% if r.data.get('dangling') %}<span class="badge badge-amber">dangling</span>{% else %}no{% endif %}</td>
       <td>{{ (r.data.get('containers_using') or []) | length }}</td>
       <td>{{ m.owner_cell(r) }}</td>
+      {% if ask_rows %}{{ m.ask_link(res_type, r.key) }}{% endif %}
     </tr>
     {% endfor %}
   </tbody>
@@ -73,7 +81,7 @@
 {% elif res_type == 'volume' %}
 <table id="resources-table" class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
   <caption class="sr-only">{{ res_label }} from the latest scan, with the application(s) that own each one.</caption>
-  <thead><tr><th scope="col">Name</th><th scope="col">Mountpoint</th><th scope="col">Containers using</th><th scope="col">Orphan</th><th scope="col">Owner app(s)</th><th scope="col">Shared</th></tr></thead>
+  <thead><tr><th scope="col">Name</th><th scope="col">Mountpoint</th><th scope="col">Containers using</th><th scope="col">Orphan</th><th scope="col">Owner app(s)</th><th scope="col">Shared</th>{% if ask_rows %}<th scope="col" data-nosort>Ask</th>{% endif %}</tr></thead>
   <tbody>
     {% for r in rows %}
     {% set using = r.data.get('containers_using') or [] %}
@@ -84,6 +92,7 @@
       <td data-filter-value="{{ 'orphan' if (r.data.get('orphan_candidate') or not using) else 'no' }}">{% if r.data.get('orphan_candidate') or not using %}<span class="badge badge-amber">orphan</span>{% else %}no{% endif %}</td>
       <td>{{ m.owner_cell(r) }}</td>
       <td data-filter-value="{{ 'yes' if r.shared else 'no' }}">{% if r.shared %}<span class="badge badge-amber">shared</span>{% else %}no{% endif %}</td>
+      {% if ask_rows %}{{ m.ask_link(res_type, r.key) }}{% endif %}
     </tr>
     {% endfor %}
   </tbody>
@@ -93,7 +102,7 @@
 {% elif res_type == 'network' %}
 <table id="resources-table" class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
   <caption class="sr-only">{{ res_label }} from the latest scan, with the application(s) that own each one.</caption>
-  <thead><tr><th scope="col">Name</th><th scope="col">Driver</th><th scope="col">Attached</th><th scope="col">Owner app(s)</th><th scope="col">Shared</th></tr></thead>
+  <thead><tr><th scope="col">Name</th><th scope="col">Driver</th><th scope="col">Attached</th><th scope="col">Owner app(s)</th><th scope="col">Shared</th>{% if ask_rows %}<th scope="col" data-nosort>Ask</th>{% endif %}</tr></thead>
   <tbody>
     {% for r in rows %}
     <tr>
@@ -102,6 +111,7 @@
       <td>{{ (r.data.get('attached_containers') or []) | length }}</td>
       <td>{{ m.owner_cell(r) }}</td>
       <td data-filter-value="{{ 'yes' if (r.shared or r.data.get('shared_across_projects')) else 'no' }}">{% if r.shared or r.data.get('shared_across_projects') %}<span class="badge badge-amber">shared</span>{% else %}no{% endif %}</td>
+      {% if ask_rows %}{{ m.ask_link(res_type, r.key) }}{% endif %}
     </tr>
     {% endfor %}
   </tbody>

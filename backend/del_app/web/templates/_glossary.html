@@ -173,6 +173,20 @@
     </dl>
   </section>
 
+  <section class="glossary-section" data-g="assistant">
+    <h3>Assistant</h3>
+    <dl class="glossary-dl">
+      <dt>Read-only</dt>
+      <dd>The assistant has no tools and cannot change anything. Removal still goes through an app's plan/confirm flow.</dd>
+      <dt>Scope</dt>
+      <dd>What the model is told about: the whole server, one application, the orphan list, one resource type, or a single resource.</dd>
+      <dt>Context truncated</dt>
+      <dd>The inventory facts were cut to the configured budget; the answer may miss items. Narrow the scope for full coverage.</dd>
+      <dt>Privacy</dt>
+      <dd>Inventory metadata (names, paths, tags, ports, evidence) is sent to Ollama Cloud. File contents, env values and secrets never are.</dd>
+    </dl>
+  </section>
+
   <section class="glossary-section glossary-section-muted" data-g="apps app-detail resources resources-container resources-image resources-volume resources-network resources-directory resources-git_repo resources-nginx_site orphans jobs job-detail general">
     <h3>Times</h3>
     <p class="muted text-sm mt-0">

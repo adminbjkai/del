@@ -32,6 +32,22 @@ def static_js() -> FileResponse:
     )
 
 
+@router.get("/static/assistant.css")
+def static_assistant_css() -> FileResponse:
+    return FileResponse(
+        STATIC_DIR / "assistant.css", media_type="text/css",
+        headers={"Cache-Control": _STATIC_CACHE},
+    )
+
+
+@router.get("/static/assistant.js")
+def static_assistant_js() -> FileResponse:
+    return FileResponse(
+        STATIC_DIR / "assistant.js", media_type="application/javascript",
+        headers={"Cache-Control": _STATIC_CACHE},
+    )
+
+
 @router.get("/static/theme-init.js")
 def static_theme_init() -> FileResponse:
     return FileResponse(

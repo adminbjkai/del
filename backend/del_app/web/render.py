@@ -79,3 +79,19 @@ templates.env.globals["format_dt"] = _format_dt
 templates.env.globals["relative_dt"] = _relative_dt
 templates.env.globals["iso_sort"] = _iso_sort_key
 templates.env.globals["resource_labels"] = RESOURCE_TYPE_LABELS
+
+
+def assistant_enabled() -> bool:
+    """True when the assistant is enabled *and* configured, so templates can
+    show/hide "Ask the assistant" deep links. Looked up lazily through
+    del_app.web.assistant (which owns the guarded import) so a missing or
+    failing assistant lane simply hides the buttons."""
+    try:
+        from del_app.web import assistant as assistant_web
+
+        return assistant_web.is_enabled()
+    except Exception:
+        return False
+
+
+templates.env.globals["assistant_enabled"] = assistant_enabled

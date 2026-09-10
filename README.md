@@ -23,6 +23,12 @@ The admin UI itself defaults to a dark theme with a header toggle for light mode
 (persisted in browser local storage) and a `Ctrl`/`Cmd`+`K` command palette for
 jumping to any sidebar page or application.
 
+The **Assistant** at `/assistant` is a read-only Q&A over the latest inventory
+(Ollama Cloud `glm-5.3-flash`). Suggested prompts cover the whole server, one app,
+orphans, or images/containers/networks/volumes (including “is this shared / ok to
+delete?”). It cannot change anything; removal still uses the planner. See
+[docs/ASSISTANT.md](docs/ASSISTANT.md).
+
 ## Quick facts
 
 | Item | Value |
@@ -44,7 +50,7 @@ jumping to any sidebar page or application.
 | TLS | Nginx, existing `bjk.ai` wildcard cert |
 | Protection | DEL is flagged `protected=1`; the planner refuses to build a removal plan for it |
 | Inventory export | Self-contained, whole-server inventory dump (`/apps/del/miscwork/`, gitignored) served at `https://del.bjk.ai/miscwork.html` (and aliased at `/inventory`), the only basic-auth-protected location in the vhost (`auth_basic_user_file /etc/nginx/.del-docs-htpasswd`). `/docs` has no `auth_basic` at all |
-| Unauthenticated routes | `/login`, `/healthz`, `/favicon.ico`, and the four `/static/*` assets (`app.css`, `app.js`, `theme-init.js`, `favicon.svg`). Everything else — including `/app-icon/{domain}` and `/palette.json` — requires a session |
+| Unauthenticated routes | `/login`, `/healthz`, `/favicon.ico`, and `/static/*` (`app.css`, `app.js`, `theme-init.js`, `favicon.svg`, `assistant.css`, `assistant.js`). Everything else — including `/app-icon/{domain}` and `/palette.json` — requires a session |
 
 ## Quick start
 
@@ -71,6 +77,7 @@ Rendered documentation (Fern) is served at https://del.bjk.ai/docs (no basic aut
 | [SECURITY.md](SECURITY.md) | Auth model, session/CSRF/rate limiting, helper privilege split, threat model |
 | [RECOVERY.md](RECOVERY.md) | DB restore, helper socket troubleshooting, nginx rollback, venv rebuild, outage behavior |
 | [UNINSTALL.md](UNINSTALL.md) | Manual steps to remove DEL itself (DEL cannot do this to itself) |
+| [docs/ASSISTANT.md](docs/ASSISTANT.md) | Read-only inventory assistant (Ollama Cloud, scopes, prompts, security) |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Stack, process/privilege model, component layout, data model |
 | [docs/DISCOVERY.md](docs/DISCOVERY.md) | Discovery sources, confidence scoring, correlation rules, manifest format |
 | [docs/REMOVAL-LIFECYCLE.md](docs/REMOVAL-LIFECYCLE.md) | The six removal-job stages and the safety gates around them |

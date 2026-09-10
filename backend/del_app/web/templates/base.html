@@ -9,6 +9,7 @@
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/app.css">
   <script src="/static/theme-init.js"></script>
+  {% block head %}{% endblock %}
 </head>
 {% set path = request.url.path %}
 {% if path == '/' %}
@@ -27,6 +28,8 @@
   {% set glossary_ctx = 'resources' %}
 {% elif path.startswith('/orphans') %}
   {% set glossary_ctx = 'orphans' %}
+{% elif path.startswith('/assistant') %}
+  {% set glossary_ctx = 'assistant' %}
 {% elif path.startswith('/jobs/') %}
   {% set glossary_ctx = 'job-detail' %}
 {% elif path.startswith('/jobs') %}
@@ -64,6 +67,7 @@
           <li><a href="/apps" title="Applications"{% if path.startswith('/apps') %} class="active"{% endif %}><span class="nav-ico" aria-hidden="true">▦</span><span class="nav-label">Applications</span></a></li>
           <li><a href="/resources/container" title="Resources"{% if path.startswith('/resources') %} class="active"{% endif %}><span class="nav-ico" aria-hidden="true">⧉</span><span class="nav-label">Resources</span></a></li>
           <li><a href="/orphans" title="Orphans"{% if path.startswith('/orphans') %} class="active"{% endif %}><span class="nav-ico" aria-hidden="true">◌</span><span class="nav-label">Orphans</span></a></li>
+          <li><a href="/assistant" title="Assistant"{% if path.startswith('/assistant') %} class="active"{% endif %}><span class="nav-ico" aria-hidden="true">◍</span><span class="nav-label">Assistant</span></a></li>
           <li><a href="/jobs" title="Jobs"{% if path.startswith('/jobs') %} class="active"{% endif %}><span class="nav-ico" aria-hidden="true">▶</span><span class="nav-label">Jobs</span></a></li>
           <li><a href="/docs" title="Docs" target="_blank" rel="noopener"><span class="nav-ico" aria-hidden="true">?</span><span class="nav-label">Docs</span></a></li>
           <li><a href="/settings" title="Settings"{% if path.startswith('/settings') %} class="active"{% endif %}><span class="nav-ico" aria-hidden="true">⚙</span><span class="nav-label">Settings</span></a></li>
@@ -122,5 +126,6 @@
   </dialog>
 
   <script src="/static/app.js"></script>
+  {% block scripts %}{% endblock %}
 </body>
 </html>

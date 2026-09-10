@@ -37,6 +37,9 @@
     <a class="btn" href="/apps/{{ app.get('slug') }}/plan" title="Choose what to remove and review the plan before running it">Plan removal first…</a>
   {% endif %}
   <a class="btn" href="/manifests/{{ app.get('slug') }}">Edit manifest</a>
+  {% if assistant_enabled() %}
+  <a class="btn btn-ghost" href="/assistant?scope=app&amp;target={{ app.get('slug') | urlencode }}" title="Ask the read-only assistant about this application">Ask the assistant</a>
+  {% endif %}
 </div>
 
 {% set shared_items = sections.get('shared', []) %}

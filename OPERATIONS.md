@@ -115,6 +115,23 @@ is simply not there yet — install it per INSTALL.md before troubleshooting fur
    '<some text you just added>'`, or open `https://del.bjk.ai/docs/...`
    (docs are not basic-auth protected).
 
+## Assistant (inventory Q&A)
+
+Read-only chat at `/assistant` using Ollama Cloud `glm-5.3-flash`. It cannot
+run helper ops or start removal jobs.
+
+Enable:
+
+```bash
+install -m 600 /dev/stdin /apps/del/config/ollama-api-key.txt <<< "<ollama-cloud-key>"
+# [assistant] enabled = true is the default in config/del.toml
+sudo systemctl restart del-web
+```
+
+Then Settings → Assistant → Test connection. Disable by setting
+`[assistant] enabled = false` or removing the key file and restarting.
+The key is never logged; the file is gitignored (`config/*-api-key.txt`).
+
 ## Rescan (refresh the application inventory)
 
 Either:

@@ -11,6 +11,7 @@ from del_app import auditlog, auth
 from del_app.auth import User
 from del_app.config import get_settings
 from del_app.db import get_db, q
+from del_app.web import assistant as assistant_web
 from del_app.web.queries import _rows
 from del_app.web.render import _csrf_response, _render, _require_csrf
 
@@ -45,6 +46,7 @@ def settings_view(
         settings=settings.model_dump(),
         db_settings=db_settings,
         recent_scans=recent_scans,
+        assistant_status=assistant_web.current_status(),
         user=user,
     )
 

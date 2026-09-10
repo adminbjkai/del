@@ -1,0 +1,42 @@
+---
+title: Assistant
+subtitle: Read-only inventory Q&A with suggested prompts
+slug: guides/assistant
+---
+
+The **Assistant** at `/assistant` is a read-only chat over the latest DEL inventory.
+It uses **Ollama Cloud** (`glm-5.3-flash`). It cannot run commands, change the host,
+or build a removal plan. Plans still go through Applications → plan → job.
+
+## What you can ask
+
+Pick a **scope**, then click a suggested question or type your own:
+
+- **General** — whole-server summary, stale apps, shared resources
+- **Application** — one app's pieces, blast radius, what to back up
+- **Orphans** — whether unattributed leftovers look safe to review
+- **Resource type** — images, containers, networks, or volumes as a class
+- **Resource** — one image/container/network/volume: owners, shared flag, delete caution
+
+Suggested prompts are the same library for every operator. Deep links from an app
+page, Orphans, or a Resources row pre-select the matching scope.
+
+## What it sees
+
+Only inventory metadata DEL already stores: names, paths, image tags, ports,
+association confidence, shared/owners, evidence strings. **Not** file contents,
+`.env` values, secrets, or job output.
+
+Answers are grounded in that snapshot. If something is missing from the scan,
+the assistant should say so rather than guess.
+
+## Enablement
+
+1. Write the Ollama Cloud key to `/apps/del/config/ollama-api-key.txt` mode `600`.
+2. Keep `[assistant] enabled = true` in `config/del.toml` (default).
+3. `systemctl restart del-web`
+4. Settings → Assistant → **Test connection**
+
+Without a key the page explains how to enable it; the API returns 503.
+
+See `docs/ASSISTANT.md` for the architecture contract.
