@@ -9,6 +9,15 @@ Two things bracket those six but are not stages: **analysis and preview** happen
 at plan-build time, and the **report** is the job's terminal status plus its
 audit-log records. Neither produces a `job_steps` row.
 
+Two routes build and run this: the step-by-step `/apps/{slug}/plan` →
+`/plans/{id}` preview → `/plans/{id}/execute` flow (dry-run or live, operator
+chooses each option), and the one-click `POST /apps/{slug}/remove` ("Remove
+app now" on the app detail page), which builds a complete-removal plan with
+every option on and runs it live immediately, with no preview or dry-run
+step. Both call the same `planner.build_plan()`/`persist_plan()` and the same
+job engine described below, so every rule in this document applies equally to
+both.
+
 ## Before the stages: building the plan
 
 `planner.build_plan()` resolves the app's associations against the latest scan

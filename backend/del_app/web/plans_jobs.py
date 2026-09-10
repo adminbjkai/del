@@ -119,6 +119,28 @@ def app_remove_now(
             raise HTTPException(status_code=404, detail=f"no such application: {slug}")
         if rows[0].get("protected"):
             return JSONResponse({"error": "protected apps cannot be removed"}, status_code=403)
+        # Double-submit guard: create_job only refuses a second live job on
+        # the *same* plan id, but "Remove app now" builds a fresh plan every
+        # click, so a double click (or double form-post) would otherwise
+        # build two plans and start two independent live jobs against the
+        # same app concurrently. Check across all of this app's plans.
+        active_jobs = _rows(
+            q(
+                conn,
+                """
+                SELECT j.id FROM jobs j
+                JOIN plans p ON p.id = j.plan_id
+                JOIN applications ap ON ap.id = p.app_id
+                WHERE ap.slug = ? AND j.mode = 'live' AND j.status IN ('pending', 'running')
+                """,
+                (slug,),
+            )
+        )
+        if active_jobs:
+            return JSONResponse(
+                {"error": f"a removal job (id={active_jobs[0]['id']}) is already running for this app"},
+                status_code=409,
+            )
         volumes = _rows(
             q(
                 conn,
@@ -143,12 +165,28 @@ def app_remove_now(
         "remove_networks": True,
         "backup": "none",
     }
-    plan = planner.build_plan(slug, options)
+    try:
+        plan = planner.build_plan(slug, options)
+    except planner.PlanError as exc:
+        # e.g. the app vanished between page load and submit, or planning
+        # itself refuses (protected/unknown app races). Surface it rather
+        # than a bare 500.
+        return JSONResponse({"error": str(exc)}, status_code=409)
     plan_id = planner.persist_plan(plan)
     auditlog.audit(user.id, "plan.build", slug, {"options": options, "plan_id": plan_id, "one_click": True})
 
     phrase = getattr(jobs, "CONFIRM_VOLUMES_PHRASE", "y")
-    job_id = jobs.create_job(plan_id, "live", user.id)
+    job_error = getattr(jobs, "JobError", Exception)
+    try:
+        job_id = jobs.create_job(plan_id, "live", user.id)
+    except job_error as exc:
+        # Guards a double-submit: create_job refuses a second concurrent
+        # live job against the same plan. A fresh plan was already built
+        # above (each one-click click builds its own plan id), so this can
+        # only fire if the *very same* plan_id somehow gets two live jobs
+        # requested at once (e.g. a duplicated form submit racing this
+        # handler); report it instead of a bare 500.
+        return JSONResponse({"error": str(exc)}, status_code=409)
     jobs.execute_job(job_id, confirm_phrase=phrase)
     auditlog.audit(user.id, "job.execute", f"plan#{plan_id}", {"mode": "live", "one_click": True})
     return RedirectResponse(url=f"/jobs/{job_id}", status_code=303)
@@ -173,6 +211,9 @@ def _load_plan_dict(plan_id: int) -> dict | None:
     row["tampered"] = tampered
     row.setdefault("status", "draft")
     row.setdefault("created", None)
+    row["has_volume_deletion"] = any(
+        step.get("operation") == "volume_rm" for step in row.get("steps", [])
+    )
     return row
 
 
@@ -301,6 +342,10 @@ def job_detail(
     }
     current_step = next((s for s in steps if s.get("state") == "running"), None)
 
+    plan_row = _load_plan_dict(job.get("plan_id")) if job.get("plan_id") else None
+    preserved = plan_row.get("preserved") if plan_row else []
+    warnings = plan_row.get("warnings") if plan_row else []
+
     return _render(
         "job_detail.html",
         request,
@@ -310,6 +355,8 @@ def job_detail(
         stages=stages,
         progress=progress,
         current_step=current_step,
+        preserved=preserved,
+        warnings=warnings,
     )
 
 

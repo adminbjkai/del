@@ -4,9 +4,12 @@ DEL is a self-hosted administrative application for **discovering, reviewing, an
 safely uninstalling** applications from this host (bjkai-2tb-ubuntu). It scans
 Docker/Compose, Nginx, systemd, cron, running processes, and the filesystem;
 correlates what it finds into applications with a confidence score; and drives
-removal through a six-stage, dry-run-by-default job engine executed by a separate
-privileged helper over a unix socket (backups are per-plan and opt-in — the
-default backup mode is None). DEL cannot remove itself.
+removal through a six-stage job engine executed by a separate privileged
+helper over a unix socket (backups are per-plan and opt-in — the default
+backup mode is None). The step-by-step plan builder defaults to dry-run;
+a one-click "Remove app now" button on each app's detail page instead builds
+a complete-removal plan and runs it live immediately, behind a single confirm
+dialog. DEL cannot remove itself.
 
 The authenticated **View Apps** tab at `/view-apps` is a homelab-style launcher
 for current, enabled domains that pass a live HTTPS check. It supports search,

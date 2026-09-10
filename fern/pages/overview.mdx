@@ -11,15 +11,21 @@ correlates everything it finds into *applications* — each with a confidence sc
 the full list of resources it owns (containers, images, volumes, networks, nginx
 sites, units, timers, cron jobs, directories, and more).
 
-When you want an application gone, DEL builds a **staged, dry-run-first removal
-plan** and executes it through a separate privileged helper. Every deletion is
-previewed before it runs, optionally backed up before it happens (choose a backup
-mode — the default is *None*), and validated after. The one truly irreversible step
-— deleting a named volume — is gated behind a typed confirmation phrase. DEL is
-careful by construction: it cannot remove itself, it refuses shared resources unless
-you approve them, and anything it is unsure about is preserved rather than deleted.
+When you want an application gone, DEL builds a **staged removal plan** and
+executes it through a separate privileged helper. The step-by-step plan
+builder previews every deletion before it runs, is dry-run first by default,
+and can optionally back the app up before deleting anything (choose a backup
+mode — the default is *None*). Deleting a named volume through that flow is
+additionally gated behind a typed confirmation phrase. A one-click
+**Remove app now** button skips the preview, the dry-run, and that typed
+phrase, and instead runs a complete-removal plan live immediately behind a
+single confirm dialog. Either way, every deletion is validated after the
+fact, and DEL is careful by construction: it cannot remove itself, it refuses
+shared resources unless you approve them, and anything it is unsure about is
+preserved rather than deleted. See
+[Removing an Application](/guides/removing-an-application) for both paths.
 
-<Frame caption="Every removal follows the same path: discover the app, review what it owns, build a plan, dry-run it, then remove.">
+<Frame caption="The step-by-step removal path: discover the app, review what it owns, build a plan, dry-run it, then remove.">
   <img src="../assets/infographic-flow.png" alt="How DEL removes an app: discover, review, plan, dry-run, remove" />
 </Frame>
 

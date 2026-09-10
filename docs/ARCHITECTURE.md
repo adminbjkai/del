@@ -346,6 +346,19 @@ top of a page the operator was already authenticated to.
   integrity/other `PlanError` checks. `/jobs/{id}/status` returns a 404 JSON
   body for an unknown job and otherwise includes `progress {done, total, pct}`
   and `current_step` alongside the raw job status.
+- `POST /apps/{slug}/remove` is the one-click "Remove app now" button on the
+  app detail page: it builds a complete-removal plan (all discovered named
+  volumes approved, `remove_images=exclusive`, bind data/repo/networks all
+  on, backup=none) and runs it live immediately — no separate dry-run or
+  execute step. It still goes through `planner.build_plan`/`persist_plan`, so
+  the same safe-delete checks, shared-resource preservation and
+  `probable`/`possible` preservation apply as the step-by-step plan builder.
+  404 for an unknown slug, 403 if the app is `protected`. The browser's single
+  native confirm dialog is the only prompt; there is no typed-phrase gate
+  (unlike `/plans/{id}/execute`, which still demands the `y` phrase for live
+  volume deletion, this route supplies that phrase internally). The
+  step-by-step "Plan removal…" flow (`/apps/{slug}/plan`) still exists
+  alongside it for anyone who wants to review or dry-run before running live.
 
 ## Confidence scoring
 

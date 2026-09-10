@@ -774,8 +774,10 @@
     if (!executeBtn) return;
     var isLive = modeLive && modeLive.checked;
     if (liveBox) liveBox.hidden = !isLive;
-    if (isLive) {
-      executeBtn.disabled = !(phraseInput && phraseInput.value === REQUIRED_PHRASE);
+    // The confirm-phrase field only exists on plans that actually contain a
+    // volume_rm step (see plan.html); plans without one have nothing to gate.
+    if (isLive && phraseInput) {
+      executeBtn.disabled = phraseInput.value !== REQUIRED_PHRASE;
     } else {
       executeBtn.disabled = false;
     }
@@ -788,7 +790,7 @@
     if (phraseInput) phraseInput.addEventListener("input", refreshExecuteGate);
     executeForm.addEventListener("submit", function (evt) {
       var isLive = modeLive && modeLive.checked;
-      if (isLive && (!phraseInput || phraseInput.value !== REQUIRED_PHRASE)) {
+      if (isLive && phraseInput && phraseInput.value !== REQUIRED_PHRASE) {
         evt.preventDefault();
         window.alert('Type "' + REQUIRED_PHRASE + '" to confirm live volume deletion.');
         return;

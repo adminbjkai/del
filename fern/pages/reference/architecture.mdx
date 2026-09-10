@@ -327,6 +327,17 @@ and 409 for any other plan integrity failure; `/jobs/{id}/status` returns 404
 JSON for an unknown job and otherwise includes `progress {done, total, pct}`
 and `current_step`.
 
+`POST /apps/{slug}/remove` is the one-click "Remove app now" path behind the
+app detail page's button: it builds a complete-removal plan (every named
+volume approved, `remove_images=exclusive`, bind data/repo/networks all on,
+backup=none) through the same `planner.build_plan`/`persist_plan` used by the
+step-by-step builder — so the same safe-delete checks and shared/`probable`
+preservation apply — then runs it live immediately, supplying the typed
+volume-deletion confirmation phrase internally rather than prompting for it.
+404 for an unknown slug, 403 if the app is `protected`. The step-by-step
+`/apps/{slug}/plan` builder, with its separate dry-run and live-execute
+steps, still exists alongside it.
+
 ## Discovery pipeline
 
 A scan fans out to independent, read-only source modules, folds their results into a

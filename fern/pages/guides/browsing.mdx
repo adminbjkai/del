@@ -177,9 +177,13 @@ For each associated resource you see:
 - an **Actions** cell with **approve**, **exclude**, and **mark shared** — see
   [approving resources](#approving-and-excluding-resources).
 
-At the top of the page, **Plan removal** starts a
-[removal plan](/guides/removing-an-application) (disabled and greyed out for
-protected apps), and **Edit manifest** lets you correct DEL's correlation by hand.
+At the top of the page, non-protected apps show two removal entry points —
+**Remove app now**, a one-click button that runs a complete removal live
+behind a single confirm dialog, and **Plan removal…**, which opens the
+step-by-step [removal plan](/guides/removing-an-application) builder with a
+preview and dry-run — plus **Edit manifest**, which lets you correct DEL's
+correlation by hand. Protected apps show a single disabled, greyed-out
+**Plan removal** button instead of either.
 
 The **Readiness** tab lists every association for the app in one flat,
 sortable/filterable table — the same Confidence/Risk/Removal columns as the other

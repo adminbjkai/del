@@ -1740,3 +1740,161 @@ def test_app_detail_shows_remove_now_button(authed_client, settings_env):
     assert resp.status_code == 200
     assert 'action="/apps/oneclick3/remove"' in resp.text
     assert "Remove app now" in resp.text
+
+
+def test_remove_now_409s_when_a_live_job_is_already_running(authed_client, monkeypatch, settings_env):
+    """Two rapid clicks used to build two separate plans and start two
+    independent live jobs, since create_job's guard only checks the
+    *same* plan id. The app-level check must catch the second click too."""
+    from del_app.db import get_db, q, x
+
+    _seed_app("racey")
+    conn = get_db()
+    try:
+        app_id = q(conn, "SELECT id FROM applications WHERE slug = 'racey'")[0]["id"]
+        x(conn, "INSERT INTO users (username, password_hash) VALUES (?, 'x')", ("racey-user",))
+        plan_id = x(
+            conn,
+            "INSERT INTO plans (app_id, steps_json, status) VALUES (?, '[]', 'draft')",
+            (app_id,),
+        )
+        x(
+            conn,
+            "INSERT INTO jobs (plan_id, mode, status, user_id) VALUES (?, 'live', 'running', 1)",
+            (plan_id,),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    class _Boom:
+        def __getattr__(self, name):
+            raise AssertionError(f"{name} must not be called while a live job is active")
+
+    monkeypatch.setattr(plans_jobs, "planner", _Boom())
+    monkeypatch.setattr(plans_jobs, "jobs", _Boom())
+
+    csrf = _with_csrf(authed_client)
+    resp = authed_client.post("/apps/racey/remove", data={"csrf_token": csrf})
+    assert resp.status_code == 409
+    assert "already running" in resp.json()["error"]
+
+
+def test_remove_now_409s_when_build_plan_raises_plan_error(authed_client, monkeypatch, settings_env):
+    """build_plan can refuse (e.g. a race where the app vanished). It used
+    to propagate as an unhandled 500."""
+    _seed_app("erroring")
+
+    class _FakePlanner:
+        class PlanError(Exception):
+            pass
+
+        class PlanNotFoundError(PlanError):
+            pass
+
+        def build_plan(self, slug, options):
+            raise self.PlanError(f"application '{slug}' vanished mid-plan")
+
+    monkeypatch.setattr(plans_jobs, "planner", _FakePlanner())
+    monkeypatch.setattr(plans_jobs, "jobs", object())
+
+    csrf = _with_csrf(authed_client)
+    resp = authed_client.post("/apps/erroring/remove", data={"csrf_token": csrf})
+    assert resp.status_code == 409
+    assert "vanished" in resp.json()["error"]
+
+
+def test_job_detail_shows_preserved_and_warnings_from_the_plan(authed_client, monkeypatch, settings_env):
+    """The job page used to show only steps; preserved resources and
+    warnings from the plan must be visible so the user sees what was NOT
+    removed and why."""
+    from del_app.db import get_db, q, x
+
+    _seed_app("presapp")
+    conn = get_db()
+    try:
+        app_id = q(conn, "SELECT id FROM applications WHERE slug = 'presapp'")[0]["id"]
+        x(conn, "INSERT INTO users (username, password_hash) VALUES (?, 'x')", ("presapp-user",))
+        plan_id = x(
+            conn,
+            "INSERT INTO plans (app_id, steps_json, status) VALUES (?, '[]', 'success')",
+            (app_id,),
+        )
+        job_id = x(
+            conn,
+            "INSERT INTO jobs (plan_id, mode, status, user_id) VALUES (?, 'live', 'success', 1)",
+            (plan_id,),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    fake_plan = _FakePlan(id=plan_id, app_slug="presapp", steps=[])
+    fake_plan.preserved = ["volume:presapp_data"]
+    fake_plan.warnings = ["volume:presapp_data: volume removal not approved, preserving"]
+
+    class _FakePlanner:
+        def load_plan(self, plan_id):
+            return fake_plan, "abc", "abc"
+
+    monkeypatch.setattr(plans_jobs, "planner", _FakePlanner())
+
+    resp = authed_client.get(f"/jobs/{job_id}")
+    assert resp.status_code == 200
+    assert "volume:presapp_data" in resp.text
+    assert "volume removal not approved, preserving" in resp.text
+
+
+def test_plan_html_hides_confirm_phrase_when_no_volume_rm_step(authed_client, monkeypatch, settings_env):
+    """The typed-confirmation field is only meaningful (and must only
+    appear) when the plan actually deletes a volume."""
+    step = _FakePlanStep(seq=1, stage="remove_runtime", operation="container_rm")
+    fake_plan = _FakePlan(id=55, app_slug="noplanvol", steps=[step])
+
+    class _FakePlanner:
+        def load_plan(self, plan_id):
+            return fake_plan, "abc", "abc"
+
+    monkeypatch.setattr(plans_jobs, "planner", _FakePlanner())
+    resp = authed_client.get("/plans/55")
+    assert resp.status_code == 200
+    assert 'id="confirm-phrase"' not in resp.text
+
+
+def test_plan_html_shows_confirm_phrase_when_volume_rm_step_present(authed_client, monkeypatch, settings_env):
+    step = _FakePlanStep(seq=1, stage="remove_runtime", operation="volume_rm")
+    fake_plan = _FakePlan(id=56, app_slug="planvol", steps=[step])
+
+    class _FakePlanner:
+        def load_plan(self, plan_id):
+            return fake_plan, "abc", "abc"
+
+    monkeypatch.setattr(plans_jobs, "planner", _FakePlanner())
+    resp = authed_client.get("/plans/56")
+    assert resp.status_code == 200
+    assert 'id="confirm-phrase"' in resp.text
+
+
+def test_app_detail_hides_remove_button_when_app_is_stale(authed_client, settings_env):
+    """A removed/stale app (not present in the latest scan) has nothing
+    left to remove; the button must be disabled with a clear note rather
+    than silently building an empty/no-op plan."""
+    from del_app.db import get_db, x
+
+    conn = get_db()
+    try:
+        scan1 = x(conn, "INSERT INTO scans (status) VALUES ('done')")
+        x(conn, "INSERT INTO scans (status) VALUES ('done')")  # scan2: makes scan1 stale
+        x(
+            conn,
+            "INSERT INTO applications (slug, name, status, kind, last_seen) VALUES (?,?,?,?,?)",
+            ("stalegone", "Stale Gone", "running", "compose", scan1),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    resp = authed_client.get("/apps/stalegone")
+    assert resp.status_code == 200
+    assert 'action="/apps/stalegone/remove"' not in resp.text
+    assert "not present in the latest scan" in resp.text.lower() or "already gone" in resp.text.lower()

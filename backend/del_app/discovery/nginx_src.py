@@ -74,7 +74,10 @@ def _extract_location_blocks(text: str) -> list[tuple[str, str]]:
 
 def _parse_server_block(block: str) -> dict:
     server_names: list[str] = []
-    for m in re.finditer(r"server_name\s+([^;]+);", block):
+    # (?<![\w_]) excludes directives that merely end in "server_name", such
+    # as `proxy_ssl_server_name on;` — without the boundary, that line's
+    # value ("on") was captured as a bogus extra server_name/domain.
+    for m in re.finditer(r"(?<![\w_])server_name\s+([^;]+);", block):
         server_names.extend(m.group(1).split())
 
     listens = [m.group(1).strip() for m in re.finditer(r"listen\s+([^;]+);", block)]

@@ -23,6 +23,22 @@
   </div>
 </div>
 
+{% if warnings %}
+<div class="box box-warning">
+  <h3>Warnings from the plan</h3>
+  <ul>{% for w in warnings %}<li>{{ w }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
+{% if preserved %}
+<div class="box box-info">
+  <h3>Preserved, not removed ({{ preserved | length }})</h3>
+  <p class="muted">These resources were kept — shared with another app, not approved for
+    removal, or unsafe to delete automatically. See the warnings above for why.</p>
+  <ul>{% for p in preserved %}<li>{{ p }}</li>{% endfor %}</ul>
+</div>
+{% endif %}
+
 <label class="job-autoscroll-label">
   <input type="checkbox" id="autoscroll-toggle" checked> Auto-scroll output
 </label>

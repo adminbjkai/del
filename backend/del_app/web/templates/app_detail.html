@@ -22,16 +22,19 @@
 
 <div class="action-bar">
   {% if app.get('protected') %}
-    <button class="btn btn-danger" disabled title="This app is protected and cannot be removed">Plan removal</button>
+    <button class="btn btn-danger" disabled title="This app is protected and cannot be removed">Remove app now</button>
     <span class="muted">Protected apps cannot be removed through DEL.</span>
+  {% elif removed %}
+    <button class="btn btn-danger" disabled title="This app was not seen in the latest scan, so there is nothing left to remove">Remove app now</button>
+    <span class="muted">Already gone: this app was not present in the latest scan, so removal is disabled.</span>
   {% else %}
     <form method="post" action="/apps/{{ app.get('slug') }}/remove" class="inline-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <button type="submit" class="btn btn-danger"
-              data-confirm="Remove {{ app.get('name', app.get('slug')) }} completely? Containers, images, named volumes, bind-mounted data, the project directory and app networks will be deleted. Shared resources are preserved. This cannot be undone."
-              title="Build a complete-removal plan and run it live now">Remove app now</button>
+              data-confirm="Remove {{ app.get('name', app.get('slug')) }} completely right now? This immediately builds a complete-removal plan (containers, images, named volumes, bind-mounted data, the project directory, and app networks) and runs it live — no review step. Resources shared with other apps are kept. This cannot be undone."
+              title="Skip planning and permanently remove this app's containers, volumes, files and networks right now">Remove app now (skips review)</button>
     </form>
-    <a class="btn" href="/apps/{{ app.get('slug') }}/plan">Plan removal…</a>
+    <a class="btn" href="/apps/{{ app.get('slug') }}/plan" title="Choose what to remove and review the plan before running it">Plan removal first…</a>
   {% endif %}
   <a class="btn" href="/manifests/{{ app.get('slug') }}">Edit manifest</a>
 </div>

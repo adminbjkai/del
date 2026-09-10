@@ -209,6 +209,27 @@ def test_nginx_parser_extracts_server_names_listens_upstreams(tmp_path):
     assert resource.data["websocket"] is True
 
 
+def test_nginx_parser_ignores_proxy_ssl_server_name_directive(tmp_path):
+    # `proxy_ssl_server_name on;` ends in the substring "server_name" — the
+    # parser must not mistake it for a `server_name` directive and capture
+    # its value ("on") as a bogus extra domain.
+    conf = """
+server {
+    listen 443 ssl;
+    server_name real.bjk.ai;
+    location /proxy {
+        proxy_ssl_server_name on;
+        proxy_pass http://127.0.0.1:9205;
+    }
+}
+"""
+    conf_path = tmp_path / "real.bjk.ai"
+    conf_path.write_text(conf)
+    resource = nginx_src._resource_from_file(str(conf_path), enabled=True)
+    assert resource is not None
+    assert resource.data["server_names"] == ["real.bjk.ai"]
+
+
 def test_nginx_parser_tolerates_snippet_with_no_server_block(tmp_path):
     conf_path = tmp_path / "snippet.conf"
     conf_path.write_text("auth_basic \"Restricted\";\nauth_basic_user_file /etc/nginx/.htpasswd;\n")

@@ -16,10 +16,42 @@ touch. The example app throughout is a disposable demo called *DEL Demo*.
   the steps; don't skip the dry-run.
 </Callout>
 
-## The easy way: "Complete removal (everything)"
+## The fastest way: "Remove app now"
 
-If your goal is to wipe an application off the host **entirely**, don't hand-pick
-options one at a time — the plan builder has a single checkbox for exactly this.
+If your goal is to wipe an application off the host **entirely** and you don't
+need a preview or a dry-run first, the app detail page has a single button for
+exactly this: **Remove app now (skips review)**, next to **Plan removal first…**
+in the action bar. For `protected` apps, and for apps no longer present in the
+latest scan, the button is disabled with a note and the plan link is not shown.
+
+Clicking it shows one native browser confirm dialog listing what will be
+deleted — containers, images, named volumes, bind-mounted data, the project
+directory, and app networks, with shared resources preserved — and, on
+confirm, immediately builds and **runs live** a complete-removal plan: every
+discovered named volume approved, images set to *Exclusive to this app*, bind
+data, repository, and networks all on, and no backup. There is no dry-run
+step and no typed `y` phrase to type — the one confirm dialog is the only
+prompt, and the typed-phrase gate that the step-by-step flow enforces at
+execute time is supplied automatically for this route. It is otherwise built
+by the same plan engine as the step-by-step flow below, so the same
+preservation rules apply: shared resources, `probable`/`possible`-confidence
+resources, `.env`/`.git`, and anything failing the safe-delete path check are
+still preserved, not deleted. You land on the job page, which links to the
+plan (`/plans/{id}`) — open it to see the **Preserved (not removed)** list.
+
+<Callout intent="warning">
+  **Remove app now skips the dry-run and preview that the step-by-step flow
+  gives you.** Use it when you're already confident about what the app owns
+  (e.g. you've reviewed its detail page and nothing is misattributed). If you
+  want to see the plan, warnings, and preserved list *before* anything runs,
+  use **Plan removal…** instead — described next.
+</Callout>
+
+## The step-by-step way: "Complete removal (everything)"
+
+If you'd rather preview the plan and dry-run it first, but still don't want to
+hand-pick options one at a time, the plan builder has a single checkbox for
+exactly this.
 
 <Steps>
   <Step title="Open the plan builder and check the box">

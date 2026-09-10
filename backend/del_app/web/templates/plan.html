@@ -9,17 +9,19 @@
 
   <section class="panel box-danger">
     <h2>Execute</h2>
-    <form method="post" action="/plans/{{ plan.get('id') }}/execute" id="execute-form" class="stacked-form" data-submit-guard="Executing…">
+    <form method="post" action="/plans/{{ plan.get('id') }}/execute" id="execute-form" class="stacked-form" data-submit-guard="Executing…" data-has-volume-deletion="{{ 'true' if plan.get('has_volume_deletion') else 'false' }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <label><input type="radio" name="mode" value="dry_run" checked> Dry run</label>
-      <label><input type="radio" name="mode" value="live" id="mode-live"> Live (irreversible steps will run)</label>
+      <label><input type="radio" name="mode" value="dry_run" checked> Dry run — simulate every step and show what would happen, without changing anything on the server.</label>
+      <label><input type="radio" name="mode" value="live" id="mode-live"> Live — actually run every step, including permanent deletions. Some steps cannot be undone.</label>
+      {% if plan.get('has_volume_deletion') %}
       <div id="live-confirm-box" class="box box-danger" hidden>
-        <p id="confirm-phrase-help">Type <code>y</code> to confirm permanent volume deletion.
-          This deletes data that cannot be recovered.</p>
+        <p id="confirm-phrase-help">This plan permanently deletes one or more named volumes.
+          Type <code>y</code> below to confirm — that data cannot be recovered afterward.</p>
         <label for="confirm-phrase">Confirmation phrase</label>
         <input type="text" name="confirm_phrase" id="confirm-phrase" placeholder="y"
                autocomplete="off" aria-describedby="confirm-phrase-help">
       </div>
+      {% endif %}
       <button type="submit" class="btn btn-danger" id="execute-btn">Execute plan</button>
     </form>
   </section>
