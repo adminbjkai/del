@@ -2041,3 +2041,34 @@ html[data-density="compact"] .panel { padding: 0.85rem; }
   box-shadow: var(--shadow);
 }
 
+/* Owner / Ask chips (cluster wrap already defined above) */
+.chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 18rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  border: 1px solid var(--border);
+  background: var(--bg-alt);
+  color: var(--text);
+  border-radius: 999px;
+  padding: 0.12rem 0.55rem;
+  font-size: 0.78rem;
+  text-decoration: none;
+  line-height: 1.3;
+}
+a.chip:hover {
+  border-color: var(--accent);
+  color: var(--accent);
+  text-decoration: none;
+}
+.owner-cluster { gap: 0.35rem; }
+.owner-chip-unassigned {
+  background: var(--tone-neutral-bg);
+  color: var(--tone-neutral-fg);
+}
+a.assistant-ask-link.chip {
+  font-weight: 550;
+}
+

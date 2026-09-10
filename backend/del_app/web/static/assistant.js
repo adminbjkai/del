@@ -177,6 +177,7 @@
     }
 
     function loadPrompts() {
+      if (!promptsBox) return Promise.resolve();
       var url = "/assistant/prompts?scope=" + encodeURIComponent(state.scope) +
         (state.target ? "&target=" + encodeURIComponent(state.target) : "");
       return fetchJson(url).then(function (d) {
@@ -196,23 +197,81 @@
           b.setAttribute("data-prompt-id", p.id);
           b.setAttribute("data-text", p.text);
           b.title = p.description || p.text;
-          b.textContent = p.label;
+          var lab = document.createElement("span");
+          lab.className = "assistant-prompt-label";
+          lab.textContent = p.label || p.id;
+          b.appendChild(lab);
+          if (p.description) {
+            var desc = document.createElement("span");
+            desc.className = "assistant-prompt-desc";
+            desc.textContent = p.description;
+            b.appendChild(desc);
+          }
           promptsBox.appendChild(b);
         });
       }).catch(function () {});
+    }
+
+    function updatePlaceholder() {
+      if (!input) return;
+      var names = {
+        general: "the inventory",
+        app: "this app",
+        orphans: "orphans",
+        resource_type: "this type",
+        resource: "this resource",
+      };
+      var named = "";
+      if (state.target && targetSel && targetSel.value === state.target) {
+        var opt = targetSel.options[targetSel.selectedIndex];
+        named = (opt && opt.textContent) ? opt.textContent.trim() : "";
+      }
+      if (!named && state.target) named = state.target;
+      input.placeholder = named
+        ? ("Ask about " + named + "…")
+        : ("Ask about " + (names[state.scope] || "this screen") + "…");
+    }
+
+    function syncChips() {
+      chips.forEach(function (c) {
+        c.setAttribute("aria-pressed", c.getAttribute("data-scope") === state.scope ? "true" : "false");
+      });
+      root.setAttribute("data-scope", state.scope);
+      root.setAttribute("data-target", state.target || "");
+      if (state.rtype) root.setAttribute("data-resource-type", state.rtype);
     }
 
     function setScope(scope) {
       if (scope === state.scope) return;
       state.scope = scope;
       state.target = "";
-      search.value = "";
-      chips.forEach(function (c) {
-        c.setAttribute("aria-pressed", c.getAttribute("data-scope") === scope ? "true" : "false");
-      });
+      if (search) search.value = "";
+      syncChips();
       newConversation();
-      loadTargets().catch(function (e) { toast(e.message, "error"); });
+      loadTargets().then(updatePlaceholder).catch(function (e) { toast(e.message, "error"); });
       loadPrompts();
+    }
+
+    function applyAsk(scope, target, rtype) {
+      if (scope) state.scope = scope;
+      state.target = target || "";
+      if (rtype) {
+        state.rtype = rtype;
+        if (rtypeSel) rtypeSel.value = rtype;
+      }
+      if (search) search.value = "";
+      syncChips();
+      newConversation();
+      loadTargets().then(function () {
+        if (state.target && targetSel) {
+          targetSel.value = state.target;
+          if (targetSel.value !== state.target) targetSel.value = "";
+          else state.target = targetSel.value;
+        }
+        updatePlaceholder();
+      }).catch(function (e) { toast(e.message, "error"); });
+      loadPrompts();
+      input.focus();
     }
 
     function newConversation() {
@@ -233,8 +292,10 @@
     });
     targetSel.addEventListener("change", function () {
       state.target = targetSel.value;
+      root.setAttribute("data-target", state.target || "");
       if (state.conversation) newConversation();
       loadPrompts();
+      updatePlaceholder();
     });
     rtypeSel.addEventListener("change", function () {
       state.target = "";
@@ -327,7 +388,7 @@
           if (evt.conversation_id && !state.conversation) {
             state.conversation = String(evt.conversation_id);
             addConversationEntry(evt.conversation_id, message);
-            if (window.history && window.history.replaceState) {
+            if (root.id === "assistant-page" && window.history && window.history.replaceState) {
               window.history.replaceState(null, "", "/assistant?conversation=" + evt.conversation_id);
             }
           }
@@ -427,14 +488,24 @@
     });
 
     // Initial population (preselection from data-attributes / server render).
-    loadTargets().catch(function (e) { toast(e.message, "error"); });
-    if (!promptsBox.querySelector(".assistant-prompt")) loadPrompts();
+    loadTargets().then(updatePlaceholder).catch(function (e) { toast(e.message, "error"); });
+    loadPrompts();
+    updatePlaceholder();
+
+    return { applyAsk: applyAsk, root: root };
   }
 
   window.DEL = window.DEL || {};
-  window.DEL.assistant = { init: init, renderMarkdown: renderMarkdown };
+  var live = null;
+  window.DEL.assistant = {
+    init: init,
+    renderMarkdown: renderMarkdown,
+    applyAsk: function (scope, target, rtype) {
+      if (live && live.applyAsk) live.applyAsk(scope, target, rtype);
+    },
+  };
   var page = document.getElementById("assistant-page");
   var dock = document.getElementById("assistant-dock");
-  if (page) init(page);
-  else if (dock) init(dock);
+  if (page) live = init(page);
+  else if (dock) live = init(dock);
 })();

@@ -13,7 +13,7 @@
       <a class="btn btn-sm btn-ghost" href="/orphans?show=all">Show system &amp; expected too</a>
     {% endif %}
     {% if assistant_enabled() %}
-    <a class="btn btn-sm btn-ghost" href="/assistant?scope=orphans" title="Ask the read-only assistant to review the orphan list">Ask the assistant</a>
+    <a class="btn btn-sm btn-ghost" href="/assistant?scope=orphans" data-ask-scope="orphans" data-ask-target="" title="Ask the read-only assistant to review the orphan list">Ask the assistant</a>
     {% endif %}
   </div>
 </div>
@@ -40,6 +40,9 @@
         <th scope="col">State</th>
         <th scope="col">Class</th>
         <th scope="col">Why listed</th>
+        {% if g.type in ('container', 'image', 'volume', 'network') and assistant_enabled() %}
+        <th scope="col" data-nosort>Ask</th>
+        {% endif %}
       </tr>
     </thead>
     <tbody>
@@ -65,6 +68,9 @@
           {% endif %}
         </td>
         <td class="muted text-sm">{{ r.reason }}</td>
+        {% if g.type in ('container', 'image', 'volume', 'network') and assistant_enabled() %}
+        {{ m.ask_link(g.type, r.key) }}
+        {% endif %}
       </tr>
       {% endfor %}
     </tbody>

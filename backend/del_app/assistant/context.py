@@ -274,6 +274,47 @@ def _shared_resource_rows(conn, latest: int | None) -> list[dict]:
     )
 
 
+def _type_owner_rows(conn, latest: int | None, res_type: str) -> list[dict]:
+    """Every current resource of one type with owner slugs (empty = unassigned)."""
+    if latest is None:
+        return []
+    return _rows(
+        q(
+            conn,
+            """
+            SELECT r.type, r.key, r.display, r.state,
+                   GROUP_CONCAT(DISTINCT ap.slug) AS slugs,
+                   COUNT(DISTINCT a.app_id) AS n,
+                   MAX(a.shared) AS flagged_shared,
+                   MAX(CASE WHEN a.data_loss_risk = 'data' THEN 1 ELSE 0 END) AS has_data
+            FROM resources r
+            LEFT JOIN associations a ON a.resource_id = r.id AND a.excluded = 0
+            LEFT JOIN applications ap ON ap.id = a.app_id AND ap.last_seen = ?
+            WHERE r.last_seen = ? AND r.type = ?
+            GROUP BY r.id
+            ORDER BY n DESC, r.key
+            """,
+            (latest, latest, res_type),
+        )
+    )
+
+
+def _owner_index_lines(rows: list[dict], heading: str) -> list[str]:
+    lines = [f"## {heading}: {len(rows)}"]
+    if not rows:
+        lines.append("(none)")
+        return lines
+    for r in rows:
+        slugs = r.get("slugs") or "-"
+        lines.append(
+            f"- {r['type']} {r['key']} | display={r.get('display') or '-'} | "
+            f"owners={r.get('n') or 0} [{slugs}] | state={r.get('state') or '-'} | "
+            f"shared={'true' if (r.get('flagged_shared') or (r.get('n') or 0) > 1) else 'false'} | "
+            f"data_loss={'data' if r.get('has_data') else '-'}"
+        )
+    return lines
+
+
 def build_general(conn, budget: int) -> ContextBundle:
     latest = _latest_scan_id(conn)
     apps = _apps_in_scan(conn, latest)
@@ -288,6 +329,10 @@ def build_general(conn, budget: int) -> ContextBundle:
     actionable = sum(1 for o in orphans if o["bucket"] == "actionable")
     agg = _app_aggregates(conn, [a["id"] for a in apps], latest)
     shared_rows = _shared_resource_rows(conn, latest)
+    volume_rows = _type_owner_rows(conn, latest, "volume")
+    image_rows = _type_owner_rows(conn, latest, "image")
+    network_rows = _type_owner_rows(conn, latest, "network")
+    container_rows = _type_owner_rows(conn, latest, "container")
 
     lines = [
         _scan_line(conn, latest),
@@ -311,6 +356,11 @@ def build_general(conn, budget: int) -> ContextBundle:
                 f"owners={r.get('n')} [{slugs}] | state={r.get('state') or '-'} | "
                 f"flagged_shared={'true' if r.get('flagged_shared') else 'false'}"
             )
+    # Ownership indexes before the app list so truncation cannot drop owners.
+    lines += [""] + _owner_index_lines(volume_rows, "Volumes (every current volume + owners)")
+    lines += [""] + _owner_index_lines(image_rows, "Images (every current image + owners)")
+    lines += [""] + _owner_index_lines(network_rows, "Networks (every current network + owners)")
+    lines += [""] + _owner_index_lines(container_rows, "Containers (every current container + owners)")
     lines += ["", "## Applications"]
     for a in sorted(apps, key=lambda r: (r.get("name") or r.get("slug") or "").lower()):
         g = agg.get(a["id"], {})
@@ -336,6 +386,8 @@ def build_general(conn, budget: int) -> ContextBundle:
         "disk_usage_bytes": disk,
         "actionable_orphans": actionable,
         "shared_or_multi_owner": len(shared_rows),
+        "volume_count": len(volume_rows),
+        "image_count": len(image_rows),
     }
     return ContextBundle("general", None, "Whole server", facts, text, truncated)
 

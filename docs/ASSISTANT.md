@@ -124,7 +124,7 @@ The key is never written to the database, the audit log, journald, or a template
 
 | scope | target | context block contains |
 |---|---|---|
-| `general` | — | last completed scan (id, finished), app count by status/kind, resource counts by type, disk usage, actionable-orphan count, a **shared / multi-owner resources** section (`_shared_resource_rows`: n>1 owners or `shared` flag), then the app list (slug, name, kind, status, protected, domains, ports, resource count, warning count) |
+| `general` | — | last completed scan (id, finished), app count by status/kind, resource counts by type, disk usage, actionable-orphan count, a **shared / multi-owner resources** section (`_shared_resource_rows`: n>1 owners or `shared` flag), then a complete ownership index for every current volume, image, network and container (owner slugs, shared, data_loss), then the app list (slug, name, kind, status, protected, domains, ports, resource count, warning count). Ownership indexes are emitted before the app list so a budget cut cannot drop owners. |
 | `app` | app slug | application row, manifest presence, domains/ports, then every association: resource type/key/display/path/state, confidence + level, ownership, shared, data_loss_risk, removal_eligible, recommended_action, up to 3 evidence statements |
 | `orphans` | — | the orphan candidate list exactly as `/orphans` computes it: type, key, display, path, state, size where known, classification bucket/label/reason; counts per bucket |
 | `resource_type` | `container` \| `image` \| `network` \| `volume` | every resource of that type in the latest scan with its owners (slug list), `shared`, state, size/dangling/containers_using/driver as available, plus whether it appears in the orphan list |
@@ -163,11 +163,14 @@ list[Prompt]`. Initial set (ids are stable API):
 
 - general: `general.overview` "Summarise this server's inventory", `general.risky`
   "Which apps look most expensive or risky to remove?", `general.stale` "Which
-  apps look unused or stale?", `general.shared` "What is shared between apps?"
+  apps look unused or stale?", `general.shared` "What is shared between apps?",
+  `general.owners` "Map every volume/image/network/container to its owners",
+  `general.protected` "Which apps are protected and why that matters"
 - app: `app.explain` "Explain what this app consists of", `app.remove_impact`
   "What would removing this app affect?", `app.data` "What data would be lost and
   what should be backed up?", `app.shared` "Which of its resources are shared with
-  other apps?", `app.confidence` "Which associations are uncertain and why?"
+  other apps?", `app.confidence` "Which associations are uncertain and why?",
+  `app.trace` "Trace this app to every shared resource and other app"
 - orphans: `orphans.review` "Review the orphan list and group it", `orphans.safe`
   "Which orphans are clearly safe to remove?", `orphans.suspicious` "Which orphans
   might belong to an app DEL missed?", `orphans.reclaim` "Rank by disk reclaimable"

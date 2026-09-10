@@ -3,10 +3,12 @@
 {% macro owner_cell(r) -%}
   {% set apps = r.get('owners', []) %}
   {% if apps %}
-    {% for a in apps %}<a href="/apps/{{ a.slug }}">{{ a.name }}</a>{% if not loop.last %}, {% endif %}{% endfor %}
-    {% if r.get('shared') %} <span class="badge badge-amber" title="Shared: more than one current app. Do not delete with a single app.">shared</span>{% endif %}
+    <span class="cluster owner-cluster">
+      {% for a in apps %}<a class="chip owner-chip" href="/apps/{{ a.slug }}">{{ a.name }}</a>{% endfor %}
+      {% if r.get('shared') %}<span class="badge badge-amber" title="Shared: more than one current app. Do not delete with a single app.">shared</span>{% endif %}
+    </span>
   {% else %}
-    <span class="badge badge-grey" title="No probable current owner — review on Orphans">unassigned</span>
+    <a class="chip owner-chip owner-chip-unassigned" href="/orphans" title="No probable current owner — review on Orphans">unassigned</a>
   {% endif %}
 {%- endmacro %}
 
@@ -62,7 +64,8 @@
 
 {# Per-row deep link into the assistant's `resource` scope (docker types only). #}
 {% macro ask_link(res_type, key) -%}
-  <td class="text-sm"><a class="assistant-ask-link" href="/assistant?scope=resource&amp;target={{ (res_type ~ ':' ~ key) | urlencode }}" title="Ask the read-only assistant about this {{ res_type }}">Ask</a></td>
+  {% set ask_target = res_type ~ ':' ~ key %}
+  <td class="text-sm"><a class="chip assistant-ask-link" href="/assistant?scope=resource&amp;target={{ ask_target | urlencode }}" data-ask-scope="resource" data-ask-target="{{ ask_target }}" title="Ask the read-only assistant about this {{ res_type }}">Ask</a></td>
 {%- endmacro %}
 
 {% macro domain_links(domains, sep=', ') -%}

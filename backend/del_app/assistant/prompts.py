@@ -21,7 +21,7 @@ file still declares).
 
 Hard rules:
 1. Answer only from the supplied context. If something is not in it, say so plainly; \
-never guess at contents, sizes or owners that are not listed.
+never guess at contents, sizes or owners that are not listed. If a Shared resources or ownership-index section is present, that list is complete for the types it covers — quote every owner slug.
 2. Never call a resource "safe to delete" when shared is true or it has more than one \
 owner. Call that out explicitly and name every owner.
 3. For anything with data_loss_risk: data, state that a backup is required first.
@@ -66,6 +66,23 @@ PROMPT_LIBRARY: list[dict] = [
         "description": "Cross-app dependencies.",
     },
     {
+        "id": "general.owners",
+        "scope": "general",
+        "label": "Map every volume/image/network/container to its owners",
+        "text": "Using the ownership index, list every volume, image, network and container with "
+                "its owner slugs. Call out shared=true, unassigned (owners=0), and data_loss=data. "
+                "If the context says it was truncated, say which section was cut.",
+        "description": "Complete who-uses-what map.",
+    },
+    {
+        "id": "general.protected",
+        "scope": "general",
+        "label": "Which apps are protected and why that matters",
+        "text": "Which applications are protected=true? Explain that DEL will not build a removal "
+                "plan for them, and list any resources they share with unprotected apps.",
+        "description": "Protected apps and shared blast radius.",
+    },
+    {
         "id": "app.explain",
         "scope": "app",
         "label": "Explain what this app consists of",
@@ -104,6 +121,15 @@ PROMPT_LIBRARY: list[dict] = [
         "text": "Which of this application's associations are uncertain (possible or probable "
                 "confidence, or removal_eligible uncertain) and what evidence supports them?",
         "description": "Weak associations to verify by hand.",
+    },
+    {
+        "id": "app.trace",
+        "scope": "app",
+        "label": "Trace this app to every shared resource and other app",
+        "text": "Trace this application: for each resource, name ownership, shared, other owner "
+                "apps if listed, data_loss_risk, and recommended_action. End with a go / no-go "
+                "for building a removal plan (protected = no-go).",
+        "description": "End-to-end ownership trace.",
     },
     {
         "id": "orphans.review",

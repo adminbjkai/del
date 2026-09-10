@@ -23,7 +23,7 @@ class AssistantSettings(pydantic.BaseModel):
     temperature: float = 0.2
     # "low" | "high" | True — never False (see docs/ASSISTANT.md, Provider).
     think: str | bool = "low"
-    context_budget_chars: int = 36000
+    context_budget_chars: int = 48000
     history_messages: int = 12
 
 

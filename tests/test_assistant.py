@@ -387,6 +387,8 @@ def test_general_context(settings_env):
     assert "actionable_orphans: 2" in b.text
     assert "shared_or_multi_owner_resources:" in b.text
     assert "## Shared resources (multi-owner)" in b.text
+    assert "## Volumes (every current volume + owners)" in b.text
+    assert "## Images (every current image + owners)" in b.text
     assert "image sha256:1111" in b.text and "owners=" in b.text
     assert "disk_usage:" in b.text and "4096 bytes" in b.text
     line = next(ln for ln in b.text.splitlines() if ln.startswith("- web-owner"))
@@ -608,7 +610,8 @@ def test_prompt_library_integrity():
         assert len(prompt_library(scope)) >= 3, scope
     expected = {
         "general.overview", "general.risky", "general.stale", "general.shared",
-        "app.explain", "app.remove_impact", "app.data", "app.shared", "app.confidence",
+        "general.owners", "general.protected",
+        "app.explain", "app.remove_impact", "app.data", "app.shared", "app.confidence", "app.trace",
         "orphans.review", "orphans.safe", "orphans.suspicious", "orphans.reclaim",
         "rtype.review", "rtype.unused", "rtype.multi_owner",
         "res.safe", "res.owners", "res.contents",

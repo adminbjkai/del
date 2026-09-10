@@ -36,7 +36,7 @@
   <span class="muted text-sm">More</span>
   <a class="btn btn-ghost" href="/manifests/{{ app.get('slug') }}">Edit manifest</a>
   {% if assistant_enabled() %}
-  <a class="btn btn-ghost" href="/assistant?scope=app&amp;target={{ app.get('slug') | urlencode }}" title="Ask the read-only assistant about this application">Ask the assistant</a>
+  <a class="btn btn-ghost" href="/assistant?scope=app&amp;target={{ app.get('slug') | urlencode }}" data-ask-scope="app" data-ask-target="{{ app.get('slug') }}" title="Ask the read-only assistant about this application">Ask the assistant</a>
   {% endif %}
 </div>
 
@@ -44,6 +44,12 @@
 {% if shared_items %}
 <div class="box box-warning">
   <strong>{{ shared_items | length }} shared resource(s).</strong> Shared means more than one current app uses them. They stay if you plan or remove this app — do not treat them as exclusive.
+  <div class="cluster owner-cluster mt-2" aria-label="Shared with other apps">
+    <span class="muted text-sm">Shared with other apps</span>
+    {% for a in shared_items %}
+    <a class="chip owner-chip" href="/resources/{{ a.get('resource_type') }}" title="{{ a.get('resource_type') }} {{ a.get('resource_key') }}">{{ a.get('resource_display') or a.get('resource_key') }}</a>
+    {% endfor %}
+  </div>
 </div>
 {% endif %}
 

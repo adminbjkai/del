@@ -752,6 +752,77 @@
     host.classList.add("del-ag-grid");
   }
 
+  // Persist column chrome only (order/width/sort/filter/page size). Never row data.
+  function tableStateKey(table) {
+    var id = (table && table.id) ? String(table.id).trim() : "";
+    if (id) return "del.ag.colstate." + id;
+    var path = "";
+    try { path = (location.pathname || ""); } catch (e) { path = ""; }
+    var cap = "";
+    var block = table && table.closest ? table.closest("section, article, .card, main") : null;
+    var capEl = block && block.querySelector ? block.querySelector("caption, h1, h2, h3, legend") : null;
+    if (table && table.caption) cap = (table.caption.textContent || "").trim();
+    else if (capEl) cap = (capEl.textContent || "").trim();
+    return "del.ag.colstate." + path + "|" + cap;
+  }
+
+  function loadTableColState(table) {
+    try {
+      var raw = localStorage.getItem(tableStateKey(table));
+      if (!raw) return null;
+      var parsed = JSON.parse(raw);
+      if (!parsed || typeof parsed !== "object") return null;
+      if (parsed.rowData) delete parsed.rowData;
+      return parsed;
+    } catch (e) {
+      return null;
+    }
+  }
+
+  function saveTableColState(table, api, pageSel) {
+    if (!api) return;
+    var payload = {};
+    try {
+      if (typeof api.getColumnState === "function") payload.columnState = api.getColumnState();
+    } catch (e1) {}
+    try {
+      if (typeof api.getFilterModel === "function") payload.filterModel = api.getFilterModel();
+    } catch (e2) {}
+    try {
+      var n = pageSel ? parseInt(pageSel.value, 10) : 0;
+      if (!n && typeof api.paginationGetPageSize === "function") n = api.paginationGetPageSize();
+      if (n) payload.pageSize = n;
+    } catch (e3) {}
+    try {
+      localStorage.setItem(tableStateKey(table), JSON.stringify(payload));
+    } catch (e4) {}
+  }
+
+  function restoreTableColState(table, api, pageSel) {
+    var saved = loadTableColState(table);
+    if (!saved || !api) return;
+    try {
+      if (saved.columnState && typeof api.applyColumnState === "function") {
+        api.applyColumnState({ state: saved.columnState, applyOrder: true });
+      }
+    } catch (e1) {}
+    try {
+      if (saved.filterModel && typeof api.setFilterModel === "function") {
+        api.setFilterModel(saved.filterModel);
+      }
+    } catch (e2) {}
+    if (saved.pageSize) {
+      var n = parseInt(saved.pageSize, 10);
+      if (n > 0) {
+        try { api.setGridOption("paginationPageSize", n); } catch (e3) {}
+        if (pageSel) {
+          var opt = pageSel.querySelector('option[value="' + n + '"]');
+          if (opt) pageSel.value = String(n);
+        }
+      }
+    }
+  }
+
   function enhanceTableAgGrid(table) {
     var ag = window.agGrid;
     if (!ag || typeof ag.createGrid !== "function") return false;
@@ -832,6 +903,8 @@
         headerName: header || ("Col " + (idx + 1)),
         filter: numeric ? "agNumberColumnFilter" : "agTextColumnFilter",
         menuTabs: ["filterMenuTab", "generalMenuTab", "columnsMenuTab"],
+        suppressMovable: false,
+        lockPinned: false,
         filterParams: numeric ? {
           filterOptions: ["equals", "notEqual", "lessThan", "greaterThan", "inRange", "blank", "notBlank"],
           defaultOption: "equals",
@@ -889,6 +962,7 @@
     var compact = table.getAttribute("data-density") === "compact" ||
       document.documentElement.getAttribute("data-density") === "compact";
     var api;
+    var persist = function () {};
     try {
       api = ag.createGrid(host, {
         columnDefs: columnDefs,
@@ -903,9 +977,12 @@
           wrapText: false,
           autoHeight: false,
           suppressHeaderMenuButton: false,
+          suppressMovable: false,
+          lockPinned: false,
         },
         columnMenu: "legacy",
         suppressMenuHide: true,
+        suppressMovableColumns: false,
         animateRows: false,
         pagination: true,
         paginationPageSize: pageSize,
@@ -921,9 +998,13 @@
         rowHeight: compact ? 28 : 36,
         overlayNoRowsTemplate: "<div class=\"empty-state-msg\">" +
           (table.getAttribute("data-empty") || "No rows match the current filter.") + "</div>",
-        onFilterChanged: function () { updateStatus(); },
-        onSortChanged: function () { updateStatus(); },
+        onFilterChanged: function () { updateStatus(); persist(); },
+        onSortChanged: function () { updateStatus(); persist(); },
         onPaginationChanged: function () { updateStatus(); },
+        onColumnMoved: function (ev) { if (!ev || ev.finished !== false) persist(); },
+        onColumnResized: function (ev) { if (!ev || ev.finished !== false) persist(); },
+        onColumnPinned: function () { persist(); },
+        onColumnVisible: function () { persist(); },
       });
     } catch (err) {
       restoreStolenNode(stolenExport);
@@ -942,7 +1023,9 @@
       return false;
     }
 
-    pageSel.value = String(pageSize);
+    persist = function () { saveTableColState(table, api, pageSel); };
+    restoreTableColState(table, api, pageSel);
+    if (!pageSel.value) pageSel.value = String(pageSize);
     function updateStatus() {
       var total = rowData.length;
       var afterFilter = total;
@@ -989,6 +1072,7 @@
       var n = parseInt(pageSel.value, 10) || 50;
       api.setGridOption("paginationPageSize", n);
       api.paginationGoToFirstPage();
+      persist();
       updateStatus();
     });
     prevBtn.addEventListener("click", function () { api.paginationGoToPreviousPage(); });
@@ -1749,6 +1833,24 @@
       if (layout) layout.classList.add("ask-open");
     });
   }
+
+  document.addEventListener("click", function (evt) {
+    var link = evt.target && evt.target.closest && evt.target.closest("[data-ask-scope], [data-ask-target]");
+    if (!link) return;
+    if (!document.getElementById("assistant-dock")) return;
+    evt.preventDefault();
+    var scope = link.getAttribute("data-ask-scope") || link.getAttribute("data-scope") || "general";
+    var target = link.getAttribute("data-ask-target") || "";
+    var rtype = link.getAttribute("data-resource-type") || "";
+    if (!rtype && scope === "resource" && target.indexOf(":") !== -1) rtype = target.split(":")[0];
+    if (!rtype && scope === "resource_type") rtype = target;
+    if (window.DEL && window.DEL.assistant && typeof window.DEL.assistant.applyAsk === "function") {
+      window.DEL.assistant.applyAsk(scope, target, rtype);
+    }
+    setRailTab("ask");
+    var composer = document.getElementById("assistant-input");
+    if (composer) composer.focus();
+  });
 
   var GLOSSARY_LABELS = {
     general: "General",

@@ -30,6 +30,7 @@
       <th scope="col">Resources</th>
       <th scope="col" data-priority="low">Warnings</th>
       <th scope="col" data-priority="low">Protected</th>
+      {% if assistant_enabled() %}<th scope="col" data-nosort>Ask</th>{% endif %}
     </tr>
   </thead>
   <tbody>
@@ -52,6 +53,9 @@
       <td data-sort-value="{{ app.res_count }}">{{ app.res_count }}</td>
       <td data-priority="low" data-sort-value="{{ app.warn_count }}">{% if app.warn_count %}<span class="badge badge-amber">{{ app.warn_count }}</span>{% else %}0{% endif %}</td>
       <td data-priority="low" data-filter-value="{{ 'yes' if app.protected else 'no' }}">{% if app.protected %}<span class="badge badge-blue">protected</span>{% else %}—{% endif %}</td>
+      {% if assistant_enabled() %}
+      <td class="text-sm"><a class="chip assistant-ask-link" href="/assistant?scope=app&amp;target={{ app.slug | urlencode }}" data-ask-scope="app" data-ask-target="{{ app.slug }}" title="Ask the read-only assistant about this application">Ask</a></td>
+      {% endif %}
     </tr>
     {% endfor %}
   </tbody>
