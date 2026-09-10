@@ -211,7 +211,12 @@ def _app_aggregates(conn, app_ids: list[int], latest: int | None) -> dict[int, d
     return out
 
 
-def _assoc_line(a: dict, *, with_resource: bool) -> list[str]:
+def _slug_csv(raw: str | None) -> str:
+    parts = sorted({p.strip() for p in str(raw or "").split(",") if p.strip()})
+    return ",".join(parts) if parts else "-"
+
+
+def _assoc_line(a: dict, *, with_resource: bool, all_owner_slugs: list[str] | None = None) -> list[str]:
     """Bullet line(s) for one association row (joined with its resource)."""
     level = _level(a.get("confidence"), a.get("source"))
     head = f"{a['resource_type']} {a['resource_key']}" if with_resource else f"app {a['slug']}"
@@ -225,6 +230,11 @@ def _assoc_line(a: dict, *, with_resource: bool) -> list[str]:
     parts.append(f"confidence={a.get('confidence')} ({level})")
     parts.append(f"ownership={a.get('ownership') or 'unknown'}")
     parts.append(f"shared={'true' if a.get('shared') else 'false'}")
+    if with_resource and all_owner_slugs is not None:
+        mine = a.get("slug") or ""
+        others = sorted({s for s in all_owner_slugs if s and s != mine})
+        parts.append(f"all_owners={','.join(sorted(set(all_owner_slugs))) or '-'}")
+        parts.append(f"also_owners={','.join(others) if others else '-'}")
     parts.append(f"data_loss_risk={a.get('data_loss_risk') or 'unknown'}")
     parts.append(f"removal_eligible={a.get('removal_eligible') or 'unknown'}")
     if a.get("recommended_action"):
@@ -305,7 +315,7 @@ def _owner_index_lines(rows: list[dict], heading: str) -> list[str]:
         lines.append("(none)")
         return lines
     for r in rows:
-        slugs = r.get("slugs") or "-"
+        slugs = _slug_csv(r.get("slugs"))
         lines.append(
             f"- {r['type']} {r['key']} | display={r.get('display') or '-'} | "
             f"owners={r.get('n') or 0} [{slugs}] | state={r.get('state') or '-'} | "
@@ -350,7 +360,7 @@ def build_general(conn, budget: int) -> ContextBundle:
         lines.append("(none — no resource is claimed by more than one current app)")
     else:
         for r in shared_rows:
-            slugs = r.get("slugs") or "-"
+            slugs = _slug_csv(r.get("slugs"))
             lines.append(
                 f"- {r['type']} {r['key']} | display={r.get('display') or '-'} | "
                 f"owners={r.get('n')} [{slugs}] | state={r.get('state') or '-'} | "
@@ -433,13 +443,16 @@ def build_app(conn, slug: str, budget: int) -> ContextBundle:
         "",
         "## Associations (shared / data-risk first)",
     ]
+    owner_map = _owner_map(conn, [int(a["resource_id"]) for a in assocs if a.get("resource_id") is not None])
     assocs.sort(key=lambda a: (
         _risk_rank(bool(a.get("shared")), a.get("data_loss_risk")),
         a.get("resource_type") or "",
         (a.get("resource_display") or a.get("resource_key") or "").lower(),
     ))
     for a in assocs:
-        lines.extend(_assoc_line(a, with_resource=True))
+        apps = (owner_map.get(int(a["resource_id"]), {}) or {}).get("apps") or []
+        slugs = sorted({x.get("slug") for x in apps if x.get("slug")})
+        lines.extend(_assoc_line(a, with_resource=True, all_owner_slugs=slugs))
     text, truncated = render_budgeted(lines, budget)
     facts = {
         "slug": app["slug"],

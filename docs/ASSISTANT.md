@@ -81,7 +81,7 @@ api_key_file = "/apps/del/config/ollama-api-key.txt"   # 0600, one line
 timeout_seconds = 120              # whole streamed response
 temperature = 0.2
 think = "low"                      # "low" | "high" | true — never false (see Provider)
-context_budget_chars = 24000       # hard cap on the inventory context block
+context_budget_chars = 48000       # hard cap on the inventory context block
 history_messages = 12              # prior turns replayed to the model
 ```
 
@@ -169,10 +169,10 @@ list[Prompt]`. Initial set (ids are stable API):
 - app: `app.explain` "Explain what this app consists of", `app.remove_impact`
   "What would removing this app affect?", `app.data` "What data would be lost and
   what should be backed up?", `app.shared` "Which of its resources are shared with
-  other apps?", `app.confidence` "Which associations are uncertain and why?",
+  other apps?", `app.confidence` "Which associations are weak (possible / uncertain eligibility)?",
   `app.trace` "Trace this app to every shared resource and other app"
 - orphans: `orphans.review` "Review the orphan list and group it", `orphans.safe`
-  "Which orphans are clearly safe to remove?", `orphans.suspicious` "Which orphans
+  "Which orphans look lowest-risk to investigate next?", `orphans.suspicious` "Which orphans
   might belong to an app DEL missed?", `orphans.reclaim` "Rank by disk reclaimable"
 - resource_type: `rtype.review` "Review all <type>s and flag anything shared",
   `rtype.unused` "Which <type>s are unused or dangling?", `rtype.multi_owner` "Which

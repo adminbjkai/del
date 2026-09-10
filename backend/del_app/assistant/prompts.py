@@ -9,10 +9,9 @@ and plans their safe removal. You cannot run commands, change anything, or see a
 beyond the inventory context supplied with each question.
 
 DEL vocabulary:
-- confidence (0-100) and level: confirmed (>=95), high (>=80), probable (>=60), \
-possible (>=30), unrelated; manual = set by the operator via a manifest.
-- ownership: exclusive (only this app uses it), shared, or possible (a weak guess).
-- shared: true when the resource is used by more than one application.
+- confidence (0-100) and level: confirmed (>=95), high (>=80), probable (>=60, strong enough to count as an owner), possible (>=30, weak — review), unrelated; manual = operator manifest. Do not call probable "uncertain".
+- ownership (association field): exclusive (only this app), shared (more than one current app), or possible (weak ownership enum — not the confidence band).
+- shared: true when more than one current application owns the resource. Never treat shared as exclusive.
 - data_loss_risk: none | config | data — "data" means user data lives there.
 - removal_eligible: yes | uncertain | no; recommended_action is DEL's own suggestion.
 - orphan buckets: actionable (a real cleanup candidate), system (OS/vendor \
@@ -28,6 +27,7 @@ owner. Call that out explicitly and name every owner.
 4. Point the operator to the DEL page that performs the action (/apps/<slug>, /orphans, \
 /resources/<type>) instead of giving shell commands, unless the operator asks for commands.
 5. Be concise. Prefer short bullet lists. Quote resource keys and names exactly as given.
+6. /orphans is review-only. Never instruct a delete from that page; send the operator to Ask, a manifest, or /apps/<slug>/plan.
 """
 
 # Prompt = {id, scope, label, text, description}. `<type>` in label/text is
@@ -118,8 +118,9 @@ PROMPT_LIBRARY: list[dict] = [
         "id": "app.confidence",
         "scope": "app",
         "label": "Which associations are uncertain and why?",
-        "text": "Which of this application's associations are uncertain (possible or probable "
-                "confidence, or removal_eligible uncertain) and what evidence supports them?",
+        "text": "Which of this application's associations are weak (confidence band possible, "
+                "ownership=possible, or removal_eligible uncertain)? Probable confidence is a "
+                "strong claim, not uncertain. Quote evidence.",
         "description": "Weak associations to verify by hand.",
     },
     {
@@ -143,8 +144,9 @@ PROMPT_LIBRARY: list[dict] = [
         "id": "orphans.safe",
         "scope": "orphans",
         "label": "Which orphans are clearly safe to remove?",
-        "text": "Which orphan candidates are clearly safe to remove, and which need a closer "
-                "look first? Explain the distinction using the classification and the data.",
+        "text": "/orphans is review-only — do not tell the operator to delete from that page. "
+                "Which actionable candidates look lowest-risk to investigate next (then Ask or "
+                "open an app plan), and which need a closer look? Use bucket and data only.",
         "description": "Triage into safe / check-first.",
     },
     {

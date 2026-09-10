@@ -891,6 +891,7 @@
     var rowData = [];
     Array.prototype.forEach.call(headRow.cells, function (th, idx) {
       var header = (th.textContent || "").replace(/[\u25be\u21e9]/g, "").trim();
+      var nosort = th.hasAttribute("data-nosort");
       var numeric = false;
       Array.prototype.forEach.call(tbody.rows, function (tr) {
         var cell = tr.cells[idx];
@@ -901,10 +902,12 @@
         colId: "c" + idx,
         field: "c" + idx,
         headerName: header || ("Col " + (idx + 1)),
-        filter: numeric ? "agNumberColumnFilter" : "agTextColumnFilter",
-        menuTabs: ["filterMenuTab", "generalMenuTab", "columnsMenuTab"],
-        suppressMovable: false,
-        lockPinned: false,
+        sortable: !nosort,
+        filter: nosort ? false : (numeric ? "agNumberColumnFilter" : "agTextColumnFilter"),
+        menuTabs: nosort ? ["generalMenuTab"] : ["filterMenuTab", "generalMenuTab", "columnsMenuTab"],
+        suppressMovable: nosort,
+        pinned: nosort ? "right" : null,
+        lockPinned: nosort,
         filterParams: numeric ? {
           filterOptions: ["equals", "notEqual", "lessThan", "greaterThan", "inRange", "blank", "notBlank"],
           defaultOption: "equals",

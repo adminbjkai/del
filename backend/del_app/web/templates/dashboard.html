@@ -26,12 +26,12 @@
 <section class="panel sop-panel" id="how-to-use" aria-labelledby="sop-heading">
   <h2 id="sop-heading">How to use DEL</h2>
   <ol class="sop-list">
-    <li>Press <strong>Run scan now</strong> in this panel (or the same control under Recent scans / <a href="/settings#scan-now">Settings → Scanning</a>). Wait until the scan strip shows <span class="badge status-done">done</span>.</li>
-    <li>Open <a href="/apps">Applications</a>. Sort/filter on warnings and uncertain mappings before you touch a plan.</li>
-    <li>Open <a href="/resources/container">Resources → Containers</a>, then the other resource tabs. Check owner app(s) and shared flags.</li>
-    <li>Open <a href="/orphans">Orphans</a> (actionable view). Read “why listed” on the row before any delete.</li>
-    <li>Select the right-rail <strong>Ask</strong> tab (mobile: Ask FAB). Type in the composer — read-only; it cannot remove anything.</li>
-    <li>On an app page, build a removal plan. Confirm on <a href="/jobs">Jobs</a>: dry-run first, LIVE only if the plan matches what you intend.</li>
+    <li>Press <strong>Run scan now</strong> in this panel. Wait until the scan strip shows <span class="badge status-done">done</span>. Scan config lives under <a href="/settings#scan-now">Settings → Scanning</a>.</li>
+    <li>Open <a href="/apps">Applications</a>. Review warnings and possible (weak) mappings before you plan. Protected apps have no plan.</li>
+    <li>Open <a href="/resources/container">Resources → Containers</a>, then the other tabs. Owner chips = current apps; shared = more than one current app (do not delete with a single app).</li>
+    <li>Open <a href="/orphans">Orphans</a> (actionable view). Review-only — there is no delete on that page. Read Why listed; Ask the row if unsure.</li>
+    <li>Use the right-rail <strong>Ask</strong> tab (or an Ask chip). Read-only; it cannot plan or remove.</li>
+    <li>On the app page, <strong>Plan removal</strong> — not “Remove app now (skips review)” unless you mean it. Dry-run first on the plan, then LIVE. Track it on <a href="/jobs">Jobs</a>.</li>
   </ol>
   <div class="cluster sop-actions">
     <form method="post" action="/scan" data-submit-guard="Starting scan…">
@@ -92,7 +92,7 @@
   <div class="cluster scan-run-form">
     <form method="post" action="/scan" data-submit-guard="Starting scan…">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <button type="submit" class="btn btn-primary" id="run-scan-btn">Run scan now</button>
+      <button type="submit" class="btn" id="run-scan-btn">Run another scan</button>
     </form>
     <a class="btn" href="/settings#scan-now">Scan settings</a>
   </div>

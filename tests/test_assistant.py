@@ -414,6 +414,8 @@ def test_app_context_lists_associations_with_evidence_and_ordering(settings_env)
     assert len(bullets) == 5
     # shared / data-risk items first
     assert "image sha256:1111" in bullets[0] and "shared=true" in bullets[0]
+    assert "also_owners=second-app" in bullets[0]
+    assert "all_owners=" in bullets[0] and "web-owner" in bullets[0]
     assert "volume web-owner_data" in bullets[1] and "data_loss_risk=data" in bullets[1]
     assert "confidence=90 (high)" in bullets[0]
     assert "removal_eligible=uncertain" in bullets[0]

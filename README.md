@@ -121,4 +121,4 @@ above is intentional audit history, not stale content — leave it as-is.
 cd /apps/del/backend && ../.venv/bin/python -m pytest ../tests/ -q
 ```
 
-237 passed, 1 skipped as of this writing.
+337 passed, 1 skipped as of this writing.
