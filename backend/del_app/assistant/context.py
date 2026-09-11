@@ -168,7 +168,10 @@ def _apps_in_scan(conn, latest: int | None) -> list[dict]:
 def _app_aggregates(conn, app_ids: list[int], latest: int | None) -> dict[int, dict]:
     """Per app: resource count, warning count, domains, ports — mirrors /apps."""
     out: dict[int, dict] = {
-        aid: {"res_count": 0, "warn_count": 0, "domains": set(), "ports": set()}
+        aid: {
+            "res_count": 0, "warn_count": 0, "shared_count": 0, "data_risk_count": 0,
+            "domains": set(), "ports": set(),
+        }
         for aid in app_ids
     }
     if not app_ids:
@@ -178,7 +181,9 @@ def _app_aggregates(conn, app_ids: list[int], latest: int | None) -> dict[int, d
         conn,
         f"""
         SELECT ap.id AS app_id, COUNT(a.id) AS res_count,
-               SUM(CASE WHEN a.ownership = 'possible' OR a.confidence < 50 THEN 1 ELSE 0 END) AS warn_count
+               SUM(CASE WHEN a.ownership = 'possible' OR a.confidence < 60 THEN 1 ELSE 0 END) AS warn_count,
+               SUM(CASE WHEN a.shared = 1 THEN 1 ELSE 0 END) AS shared_count,
+               SUM(CASE WHEN a.data_loss_risk = 'data' THEN 1 ELSE 0 END) AS data_risk_count
         FROM applications ap
         LEFT JOIN associations a ON a.app_id = ap.id AND a.excluded = 0
         WHERE ap.id IN ({ph}) GROUP BY ap.id
@@ -187,6 +192,8 @@ def _app_aggregates(conn, app_ids: list[int], latest: int | None) -> dict[int, d
     )):
         out[r["app_id"]]["res_count"] = r.get("res_count") or 0
         out[r["app_id"]]["warn_count"] = r.get("warn_count") or 0
+        out[r["app_id"]]["shared_count"] = r.get("shared_count") or 0
+        out[r["app_id"]]["data_risk_count"] = r.get("data_risk_count") or 0
     detail_sql = f"""
         SELECT a.app_id AS app_id, r.type AS type, r.data_json AS data_json
         FROM associations a JOIN resources r ON r.id = a.resource_id
@@ -251,6 +258,35 @@ def _assoc_line(a: dict, *, with_resource: bool, all_owner_slugs: list[str] | No
 def _risk_rank(shared: bool, risk: str | None, owners: int = 1) -> tuple:
     """Sort key: shared / multi-owner / data-risk first (0 sorts first)."""
     return (0 if (shared or owners > 1) else 1, 0 if risk == "data" else 1)
+
+
+_STALE_STATUS = {"stopped", "exited", "inactive", "unknown", "paused", "dead"}
+
+
+def _is_stale_app(app: dict, g: dict) -> bool:
+    kind = (app.get("kind") or "").lower()
+    status = (app.get("status") or "unknown").lower()
+    if "stopped" in kind or status in _STALE_STATUS:
+        return True
+    return not g.get("domains") and not g.get("ports")
+
+
+def _app_compact_line(app: dict, g: dict) -> str:
+    domains = ", ".join(sorted(g.get("domains", ()))) or "-"
+    ports = ", ".join(sorted(g.get("ports", ()), key=lambda s: (len(s), s))) or "-"
+    return "- " + " | ".join([
+        app["slug"],
+        f"name={app.get('name')}",
+        f"kind={app.get('kind') or 'unknown'}",
+        f"status={app.get('status') or 'unknown'}",
+        f"protected={'true' if app.get('protected') else 'false'}",
+        f"resources={g.get('res_count', 0)}",
+        f"warnings={g.get('warn_count', 0)}",
+        f"shared_assocs={g.get('shared_count', 0)}",
+        f"data_risk={g.get('data_risk_count', 0)}",
+        f"domains={domains}",
+        f"ports={ports}",
+    ])
 
 
 # ---------------------------------------------------------------------------
@@ -366,26 +402,43 @@ def build_general(conn, budget: int) -> ContextBundle:
                 f"owners={r.get('n')} [{slugs}] | state={r.get('state') or '-'} | "
                 f"flagged_shared={'true' if r.get('flagged_shared') else 'false'}"
             )
-    # Ownership indexes before the app list so truncation cannot drop owners.
+    def _g(a: dict) -> dict:
+        return agg.get(a["id"], {})
+
+    protected_apps = [a for a in apps if a.get("protected")]
+    stale_apps = [a for a in apps if _is_stale_app(a, _g(a))]
+    risk_apps = sorted(apps, key=lambda a: (
+        0 if a.get("protected") else 1,
+        -(_g(a).get("shared_count") or 0),
+        -(_g(a).get("data_risk_count") or 0),
+        -(_g(a).get("warn_count") or 0),
+        -(_g(a).get("res_count") or 0),
+        (a.get("slug") or ""),
+    ))
+    lines += ["", f"## Protected apps: {len(protected_apps)}"]
+    if not protected_apps:
+        lines.append("(none)")
+    else:
+        for a in protected_apps:
+            lines.append(_app_compact_line(a, _g(a)))
+    lines += ["", f"## Stale candidates (stopped / unknown / no domain+port): {len(stale_apps)}"]
+    if not stale_apps:
+        lines.append("(none)")
+    else:
+        for a in sorted(stale_apps, key=lambda r: (r.get("slug") or "")):
+            lines.append(_app_compact_line(a, _g(a)))
+    lines += ["", f"## Removal-risk ranking (every current app): {len(risk_apps)}"]
+    lines.append(
+        "Fields: shared_assocs and data_risk are per-app association counts. "
+        "This list is complete for general.risky / general.stale — do not say they are missing."
+    )
+    for a in risk_apps:
+        lines.append(_app_compact_line(a, _g(a)))
+    # Ownership indexes after the prompt-answer sections so truncation drops maps, not answers.
     lines += [""] + _owner_index_lines(volume_rows, "Volumes (every current volume + owners)")
     lines += [""] + _owner_index_lines(image_rows, "Images (every current image + owners)")
     lines += [""] + _owner_index_lines(network_rows, "Networks (every current network + owners)")
     lines += [""] + _owner_index_lines(container_rows, "Containers (every current container + owners)")
-    lines += ["", "## Applications"]
-    for a in sorted(apps, key=lambda r: (r.get("name") or r.get("slug") or "").lower()):
-        g = agg.get(a["id"], {})
-        parts = [
-            f"{a['slug']}",
-            f"name={a.get('name')}",
-            f"kind={a.get('kind') or 'unknown'}",
-            f"status={a.get('status') or 'unknown'}",
-            f"protected={'true' if a.get('protected') else 'false'}",
-            f"domains={', '.join(sorted(g.get('domains', ()))) or '-'}",
-            f"ports={', '.join(sorted(g.get('ports', ()), key=lambda s: (len(s), s))) or '-'}",
-            f"resources={g.get('res_count', 0)}",
-            f"warnings={g.get('warn_count', 0)}",
-        ]
-        lines.append("- " + " | ".join(parts))
     text, truncated = render_budgeted(lines, budget)
     facts = {
         "scan_id": latest,

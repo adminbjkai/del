@@ -124,7 +124,7 @@ The key is never written to the database, the audit log, journald, or a template
 
 | scope | target | context block contains |
 |---|---|---|
-| `general` | — | last completed scan (id, finished), app count by status/kind, resource counts by type, disk usage, actionable-orphan count, a **shared / multi-owner resources** section (`_shared_resource_rows`: n>1 owners or `shared` flag), then a complete ownership index for every current volume, image, network and container (owner slugs, shared, data_loss), then the app list (slug, name, kind, status, protected, domains, ports, resource count, warning count). Ownership indexes are emitted before the app list so a budget cut cannot drop owners. |
+| `general` | — | last completed scan; counts; **shared / multi-owner resources**; **protected apps**; **stale candidates** (stopped/unknown/no domain+port); **removal-risk ranking** of every current app (`shared_assocs`, `data_risk`, warnings, resources, domains, ports); then ownership indexes (volumes/images/networks/containers). Prompt-answer sections come first so a budget cut cannot drop shared/stale/risk. |
 | `app` | app slug | application row, manifest presence, domains/ports, then every association: resource type/key/display/path/state, confidence + level, ownership, shared, data_loss_risk, removal_eligible, recommended_action, up to 3 evidence statements |
 | `orphans` | — | the orphan candidate list exactly as `/orphans` computes it: type, key, display, path, state, size where known, classification bucket/label/reason; counts per bucket |
 | `resource_type` | `container` \| `image` \| `network` \| `volume` | every resource of that type in the latest scan with its owners (slug list), `shared`, state, size/dangling/containers_using/driver as available, plus whether it appears in the orphan list |
@@ -156,6 +156,9 @@ rules:
 4. Point the operator to the DEL page that performs the action (`/apps/<slug>`,
    `/orphans`, `/resources/<type>`) instead of giving shell commands, unless asked.
 5. Be concise; use short bullet lists; quote resource keys exactly.
+6. `/orphans` is review-only.
+7. Cannot change the host; send change requests to the matching DEL page.
+8. Shared / Stale / Risk / Protected sections are complete when present — do not claim those fields are missing.
 
 `PROMPT_LIBRARY: list[Prompt]` where
 `Prompt = {id, scope, label, text, description}`; `prompt_library(scope) ->

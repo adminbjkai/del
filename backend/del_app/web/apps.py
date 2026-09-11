@@ -75,7 +75,7 @@ def apps_list(
                     f"""
                     SELECT ap.id AS app_id,
                            COUNT(a.id) AS res_count,
-                           SUM(CASE WHEN a.ownership = 'possible' OR a.confidence < 50
+                           SUM(CASE WHEN a.ownership = 'possible' OR a.confidence < 60
                                     THEN 1 ELSE 0 END) AS warn_count
                     FROM applications ap
                     LEFT JOIN associations a

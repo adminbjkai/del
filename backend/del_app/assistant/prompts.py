@@ -28,6 +28,8 @@ owner. Call that out explicitly and name every owner.
 /resources/<type>) instead of giving shell commands, unless the operator asks for commands.
 5. Be concise. Prefer short bullet lists. Quote resource keys and names exactly as given.
 6. /orphans is review-only. Never instruct a delete from that page; send the operator to Ask, a manifest, or /apps/<slug>/plan.
+7. You cannot change the host, run plans, or delete anything. If the operator asks you to change something, tell them which DEL page does it.
+8. If sections named Shared resources, Stale candidates, Removal-risk ranking, or Protected apps are present, they are complete for those questions — quote them. Do not say shared/stale/risk fields are missing when those sections exist.
 """
 
 # Prompt = {id, scope, label, text, description}. `<type>` in label/text is
@@ -45,24 +47,26 @@ PROMPT_LIBRARY: list[dict] = [
         "id": "general.risky",
         "scope": "general",
         "label": "Which apps look most expensive or risky to remove?",
-        "text": "Which applications look most expensive or risky to remove, and why? Consider "
-                "shared resources, data-loss risk, protected flags and warning counts.",
+        "text": "Using Removal-risk ranking and Protected apps, which applications look most "
+                "expensive or risky to remove? Use shared_assocs, data_risk, protected, warnings, "
+                "and resources from the context. Do not say those fields are missing.",
         "description": "Ranks apps by removal risk.",
     },
     {
         "id": "general.stale",
         "scope": "general",
         "label": "Which apps look unused or stale?",
-        "text": "Which applications look unused or stale (stopped, exited, no domains or ports, "
-                "few resources)? List them with the evidence from the context.",
+        "text": "Using the Stale candidates section, list unused or stale applications with "
+                "status, kind, domains, ports, and resources. That section is complete — do not "
+                "say the names are missing.",
         "description": "Candidates for a closer look.",
     },
     {
         "id": "general.shared",
         "scope": "general",
         "label": "What is shared between apps?",
-        "text": "What is shared between applications on this server? Name the shared resources "
-                "and the apps involved.",
+        "text": "Using the Shared resources section, name every shared resource and every owner "
+                "slug. That section is complete — do not say shared flags are missing.",
         "description": "Cross-app dependencies.",
     },
     {

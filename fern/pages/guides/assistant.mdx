@@ -41,8 +41,10 @@ Only inventory metadata DEL already stores: names, paths, image tags, ports,
 association confidence, shared/owners, evidence strings. **Not** file contents,
 `.env` values, secrets, or job output.
 
-Answers are grounded in that snapshot. If something is missing from the scan,
-the assistant should say so rather than guess.
+General scope now includes **Shared resources**, **Stale candidates**, and
+**Removal-risk ranking** *before* the owner maps, so those suggested questions
+can be answered even when the context is truncated. It still cannot change the
+host — Ask is read-only; plans stay on the app page.
 
 ## Enablement
 

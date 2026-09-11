@@ -387,6 +387,9 @@ def test_general_context(settings_env):
     assert "actionable_orphans: 2" in b.text
     assert "shared_or_multi_owner_resources:" in b.text
     assert "## Shared resources (multi-owner)" in b.text
+    assert "## Stale candidates" in b.text
+    assert "## Removal-risk ranking" in b.text
+    assert "shared_assocs=" in b.text and "data_risk=" in b.text
     assert "## Volumes (every current volume + owners)" in b.text
     assert "## Images (every current image + owners)" in b.text
     assert "image sha256:1111" in b.text and "owners=" in b.text
