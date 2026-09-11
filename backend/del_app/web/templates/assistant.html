@@ -72,6 +72,7 @@
 
     <section class="card assistant-prompts-card">
       <h2 class="text-md">Suggested questions</h2>
+      <p class="muted text-xs mt-0">Templates — click to edit in the box, then Enter to send. Shift+Enter for a new line. If you see <code>[app]</code>, replace it before sending.</p>
       <div class="stack-sm" id="assistant-prompts">
         {% for p in prompts %}
         <button type="button" class="assistant-prompt" data-prompt-id="{{ p.id }}" data-text="{{ p.text }}" title="{{ p.description or p.text }}"><span class="assistant-prompt-label">{{ p.label }}</span>{% if p.description %}<span class="assistant-prompt-desc">{{ p.description }}</span>{% endif %}</button>
@@ -110,7 +111,7 @@
         {% endfor %}
       {% else %}
         <div class="empty-state" id="assistant-empty">
-          <div class="empty-state-msg">Pick a scope, then ask a question or choose a suggestion. Primary action is Ask; this never scans, plans, or removes.</div>
+          <div class="empty-state-msg">Click a light suggestion to fill the box, edit if you need an app slug, then Enter. Ask never scans, plans, or removes.</div>
         </div>
       {% endif %}
     </div>
@@ -123,11 +124,11 @@
 
     <form class="assistant-composer" id="assistant-form">
       <label for="assistant-input" class="sr-only">Your question</label>
-      <textarea id="assistant-input" rows="3" placeholder="Ask about the inventory… (Ctrl+Enter to send)" required></textarea>
+      <textarea id="assistant-input" rows="3" placeholder="Ask about the inventory… (Enter to send, Shift+Enter for a new line)" required></textarea>
       <div class="cluster assistant-composer-actions">
         <button type="submit" class="btn btn-primary" id="assistant-send">Ask</button>
         <button type="button" class="btn" id="assistant-stop" hidden>Stop</button>
-        <span class="muted text-xs">Ctrl/Cmd+Enter sends</span>
+        <span class="muted text-xs">Enter sends · Shift+Enter newline</span>
       </div>
     </form>
   </section>

@@ -252,7 +252,7 @@
       loadPrompts();
     }
 
-    function applyAsk(scope, target, rtype) {
+    function applyAsk(scope, target, rtype, draft) {
       if (scope) state.scope = scope;
       state.target = target || "";
       if (rtype) {
@@ -270,8 +270,10 @@
         }
         updatePlaceholder();
       }).catch(function (e) { toast(e.message, "error"); });
-      loadPrompts();
-      input.focus();
+      loadPrompts().then(function () {
+        if (draft) fillComposer(draft);
+        else input.focus();
+      });
     }
 
     function newConversation() {
@@ -307,10 +309,33 @@
       var rt = state.rtype;
       if (cache.resource[rt]) fillTargets(cache.resource[rt], "Choose a resource…");
     });
+    function fillComposer(text, promptId) {
+      var body = promptTemplate(text || "");
+      input.value = body;
+      input.setAttribute("data-filled-id", promptId || "");
+      input.setAttribute("data-filled-text", body);
+      input.focus();
+      var slot = body.search(/\[(app|APP|type:key)\]/);
+      if (slot >= 0) {
+        var end = body.indexOf("]", slot);
+        if (end > slot) input.setSelectionRange(slot, end + 1);
+      } else {
+        input.setSelectionRange(body.length, body.length);
+      }
+    }
+    function promptTemplate(text) {
+      if (state.scope === "app" && !state.target && text.indexOf("[app]") === -1) {
+        return text.replace(/\?\s*$/, "") + " for [app]?";
+      }
+      if (state.scope === "resource" && !state.target && text.indexOf("[type:key]") === -1) {
+        return text.replace(/\?\s*$/, "") + " Resource: [type:key]";
+      }
+      return text;
+    }
     promptsBox.addEventListener("click", function (evt) {
       var btn = evt.target.closest(".assistant-prompt");
       if (!btn) return;
-      ask(btn.getAttribute("data-text"), btn.getAttribute("data-prompt-id"));
+      fillComposer(btn.getAttribute("data-text"), btn.getAttribute("data-prompt-id"));
     });
 
     // ----- transcript helpers -----
@@ -475,13 +500,15 @@
 
     form.addEventListener("submit", function (evt) {
       evt.preventDefault();
-      ask(input.value, null);
+      var pid = (input.getAttribute("data-filled-text") === input.value)
+        ? (input.getAttribute("data-filled-id") || null) : null;
+      ask(input.value, pid);
     });
     input.addEventListener("keydown", function (evt) {
-      if (evt.key === "Enter" && (evt.ctrlKey || evt.metaKey)) {
-        evt.preventDefault();
-        ask(input.value, null);
-      }
+      if (evt.key !== "Enter") return;
+      if (evt.shiftKey) return;
+      evt.preventDefault();
+      form.requestSubmit ? form.requestSubmit() : form.dispatchEvent(new Event("submit", { cancelable: true }));
     });
     stopBtn.addEventListener("click", function () {
       if (state.controller) state.controller.abort();
@@ -500,8 +527,8 @@
   window.DEL.assistant = {
     init: init,
     renderMarkdown: renderMarkdown,
-    applyAsk: function (scope, target, rtype) {
-      if (live && live.applyAsk) live.applyAsk(scope, target, rtype);
+    applyAsk: function (scope, target, rtype, draft) {
+      if (live && live.applyAsk) live.applyAsk(scope, target, rtype, draft);
     },
   };
   var page = document.getElementById("assistant-page");

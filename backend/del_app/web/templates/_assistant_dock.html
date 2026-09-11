@@ -35,6 +35,7 @@
               data-resources="[]"></select>
     </label>
   </div>
+  <p class="muted text-xs mt-2 mb-0">This screen. Click a suggestion to edit, Enter to send.</p>
   <div class="stack-sm mt-2" id="assistant-prompts" aria-label="Suggested questions"></div>
   <div class="assistant-transcript assistant-transcript-dock" id="assistant-transcript" aria-live="polite"></div>
   <div class="assistant-statusline muted text-xs" id="assistant-statusline">
@@ -44,7 +45,7 @@
   </div>
   <form class="assistant-composer" id="assistant-form">
     <label for="assistant-input" class="sr-only">Your question</label>
-    <textarea id="assistant-input" rows="2" placeholder="Ask about this screen…" required></textarea>
+    <textarea id="assistant-input" rows="2" placeholder="Ask this screen… Enter to send" required></textarea>
     <div class="cluster assistant-composer-actions">
       <button type="submit" class="btn btn-primary" id="assistant-send">Ask</button>
       <button type="button" class="btn" id="assistant-stop" hidden>Stop</button>

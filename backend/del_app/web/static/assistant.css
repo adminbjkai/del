@@ -20,11 +20,16 @@
 .assistant-prompt {
   display: flex; flex-direction: column; align-items: flex-start; gap: 0.15rem;
   width: 100%; text-align: left;
-  background: var(--bg-alt); border: 1px solid var(--border); color: var(--text);
+  background: color-mix(in srgb, var(--accent) 8%, var(--bg-card));
+  border: 1px dashed color-mix(in srgb, var(--accent) 38%, var(--border));
+  color: var(--text);
   border-radius: var(--radius-sm); padding: 0.5rem 0.65rem;
   font: inherit; font-size: var(--text-sm); cursor: pointer; line-height: 1.35;
 }
-.assistant-prompt:hover, .assistant-prompt:focus-visible { border-color: var(--accent); background: var(--bg-card); }
+.assistant-prompt:hover, .assistant-prompt:focus-visible {
+  border-style: solid; border-color: var(--accent);
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-card));
+}
 .assistant-prompt-label { display: block; font-weight: 600; }
 .assistant-prompt-label::before { content: "\2192\00a0"; color: var(--accent); font-weight: 500; }
 .assistant-prompt-desc {

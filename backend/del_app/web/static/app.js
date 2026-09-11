@@ -1847,12 +1847,13 @@
     var rtype = link.getAttribute("data-resource-type") || "";
     if (!rtype && scope === "resource" && target.indexOf(":") !== -1) rtype = target.split(":")[0];
     if (!rtype && scope === "resource_type") rtype = target;
+    var draft = link.getAttribute("data-ask-draft") || "";
+    if (!draft && target) draft = "What should I know about " + target + "? Name every owner, shared, and data_loss_risk.";
+    else if (!draft) draft = "What should I know about this screen?";
     if (window.DEL && window.DEL.assistant && typeof window.DEL.assistant.applyAsk === "function") {
-      window.DEL.assistant.applyAsk(scope, target, rtype);
+      window.DEL.assistant.applyAsk(scope, target, rtype, draft);
     }
     setRailTab("ask");
-    var composer = document.getElementById("assistant-input");
-    if (composer) composer.focus();
   });
 
   var GLOSSARY_LABELS = {
