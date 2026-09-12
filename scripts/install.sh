@@ -44,15 +44,18 @@ curl -fsS http://127.0.0.1:8075/healthz
 
 echo "== 6. Nginx site"
 TS=$(date +%Y%m%d-%H%M%S)
-for f in /etc/nginx/sites-available/del.bjk.ai /etc/nginx/sites-enabled/del.bjk.ai; do
-  [ -e "$f" ] && sudo cp -a "$f" "$f.bak.$TS"
-done
+# Back up only the real vhost file. Copying the enabled symlink under another
+# name leaves Nginx loading both links and produces duplicate server blocks.
+if [ -e /etc/nginx/sites-available/del.bjk.ai ]; then
+  sudo cp -a /etc/nginx/sites-available/del.bjk.ai \
+    "/etc/nginx/sites-available/del.bjk.ai.bak.$TS"
+fi
 sudo cp config/nginx-del.bjk.ai.conf /etc/nginx/sites-available/del.bjk.ai
 sudo ln -sf /etc/nginx/sites-available/del.bjk.ai /etc/nginx/sites-enabled/del.bjk.ai
 sudo nginx -t
 sudo systemctl reload nginx
 
 echo "== 7. HTTPS check"
-curl -fsSI https://del.bjk.ai/login | head -1
+curl -fsS -o /dev/null -w '%{http_code}\n' https://del.bjk.ai/login | grep -qx 200
 
 echo "DONE. Create admin with: /apps/del/scripts/del-admin create-admin"

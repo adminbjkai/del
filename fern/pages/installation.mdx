@@ -62,11 +62,12 @@ cd /apps/del
    holds the admin argon2 hash and session token hashes.
 6. **Wait for local health** — polls `http://127.0.0.1:8075/healthz` for up to 30s,
    then confirms it.
-7. **Nginx site** — backs up any existing
-   `/etc/nginx/sites-{available,enabled}/del.bjk.ai` with a timestamp suffix
-   (`.bak.YYYYMMDD-HHMMSS`), installs `config/nginx-del.bjk.ai.conf`, symlinks it into
-   `sites-enabled`, runs `nginx -t`, then `systemctl reload nginx`.
-8. **HTTPS check** — `curl -fsSI https://del.bjk.ai/login` and prints the status line.
+7. **Nginx site** — backs up the existing real file in `sites-available` with a
+   timestamp suffix (`.bak.YYYYMMDD-HHMMSS`), installs
+   `config/nginx-del.bjk.ai.conf`, refreshes its one `sites-enabled` symlink, runs
+   `nginx -t`, then `systemctl reload nginx`. Backups never go in `sites-enabled`,
+   where Nginx would load them as duplicate vhosts.
+8. **HTTPS check** — sends `GET https://del.bjk.ai/login` and requires HTTP 200.
 
 The script does not touch any other application, container, compose project, nginx
 site, systemd unit, or cron entry on the host — installing DEL is additive only.
@@ -129,7 +130,7 @@ been deleted and is not recreated. If you find one on an older host, log in, run
 
 ```bash
 curl -fsS http://127.0.0.1:8075/healthz          # local, no auth required
-curl -fsSI https://del.bjk.ai/login               # through nginx + TLS
+curl -fsS -o /dev/null -w '%{http_code}\n' https://del.bjk.ai/login  # expect 200
 systemctl status del-web.service del-helper.service
 ```
 

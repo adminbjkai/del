@@ -12,6 +12,9 @@ active. UI fixes cover the Assistant page's empty mobile Ask panel, complete rai
 tab semantics, command-palette keyboard focus, selected-theme browser chrome,
 and shared danger-color tokens. The CSP no longer permits inline styles, and the
 security/operations/system-state docs now match the repository and deployment.
+The installer now checks `/login` with GET (the route does not support HEAD) and
+keeps timestamped Nginx backups out of `sites-enabled`, preventing duplicate
+vhosts during repeated deployments.
 
 Calm palette in both themes (warm paper neutrals in light, soft slate in
 dark; never pure black or white), theme following `localStorage`, else OS
