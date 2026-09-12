@@ -758,7 +758,7 @@
   // Persist column chrome only (order/width/sort/filter/page size). Never row data.
   function tableStateKey(table) {
     var id = (table && table.id) ? String(table.id).trim() : "";
-    if (id) return "del.ag2.colstate." + id;
+    if (id) return "del.ag3.colstate." + id;
     var path = "";
     try { path = (location.pathname || ""); } catch (e) { path = ""; }
     var cap = "";
@@ -766,7 +766,7 @@
     var capEl = block && block.querySelector ? block.querySelector("caption, h1, h2, h3, legend") : null;
     if (table && table.caption) cap = (table.caption.textContent || "").trim();
     else if (capEl) cap = (capEl.textContent || "").trim();
-    return "del.ag2.colstate." + path + "|" + cap;
+    return "del.ag3.colstate." + path + "|" + cap;
   }
 
   function loadTableColState(table) {
@@ -806,7 +806,13 @@
     if (!saved || !api) return;
     try {
       if (saved.columnState && typeof api.applyColumnState === "function") {
-        api.applyColumnState({ state: saved.columnState, applyOrder: true });
+        var cleaned = saved.columnState.map(function (col) {
+          var copy = {};
+          Object.keys(col || {}).forEach(function (k) { copy[k] = col[k]; });
+          copy.pinned = null;
+          return copy;
+        });
+        api.applyColumnState({ state: cleaned, applyOrder: true });
       }
     } catch (e1) {}
     try {
@@ -1053,6 +1059,7 @@
     var headH = compact ? 32 : 40;
     var api;
     var persist = function () {};
+    host.style.height = (Math.min(Math.max(rowData.length, 1), pageSize) * rowH + headH + 4) + "px";
     try {
       api = ag.createGrid(host, {
         columnDefs: columnDefs,
@@ -1061,18 +1068,22 @@
           sortable: true,
           filter: true,
           floatingFilter: false,
-          // Long headers wrap to a second line instead of truncating.
-          wrapHeaderText: true,
-          autoHeaderHeight: true,
+          wrapHeaderText: false,
+          autoHeaderHeight: false,
           resizable: true,
           minWidth: 72,
           flex: 1,
           suppressMovable: false,
-          lockPinned: false,
+          lockPinned: true,
         },
-        // Normal grid height from the page of rows. Rows are fixed-height and
-        // not absolutely stacked into a collapsed autoHeight body.
+        // Fixed-height rows, positioned by AG Grid (translateY). ensureDomOrder
+        // plus position:absolute left every row at top:0 after header clicks.
         domLayout: "normal",
+        suppressRowVirtualisation: true,
+        getRowId: function (params) {
+          var tr = params.data && params.data._tr;
+          return tr ? String(tr.sectionRowIndex) : String(params.rowIndex);
+        },
         columnMenu: "new",
         suppressMenuHide: true,
         suppressMovableColumns: false,
@@ -1083,7 +1094,7 @@
         rowBuffer: 20,
         suppressCellFocus: false,
         enableCellTextSelection: true,
-        ensureDomOrder: true,
+        ensureDomOrder: false,
         tooltipShowDelay: 500,
         tooltipInteraction: true,
         enterNavigatesVertically: true,

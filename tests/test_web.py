@@ -349,6 +349,9 @@ def test_table_engine_uses_fixed_row_layout():
     assert 'domLayout: "normal"' in js
     assert "autoHeight: false" in js
     assert "pinned: null" in js
+    assert "ensureDomOrder: false" in js
+    assert "suppressRowVirtualisation: true" in js
+    assert "del.ag3.colstate." in js
     assert "host.style.height" in js
     assert "min-height: 0 !important" not in css
     assert ".ag-center-cols-container { min-height: 0; }" not in css

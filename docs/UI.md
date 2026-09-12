@@ -33,9 +33,9 @@ is remembered (`del.glossaryCollapsed`). Below 1280px Help and Ask are
 floating buttons that open bottom sheets.
 
 Inventory tables share the page background (DEL tokens override Quartz; `app.css`
-loads after the vendor theme). The grid uses fixed row height and `domLayout:
-normal` sized to the current page, so header-click sorting keeps every row on
-the page visible and evenly spaced.
+loads after the vendor theme). The grid uses fixed row height, is sized before
+create, and keeps AG Grid's `translateY` row positions (`ensureDomOrder` off) so
+repeated header-click sorting does not stack every row onto the first line.
 
 On desktop, the slim divider beside each panel is a resize handle. Drag it,
 focus it and use Left/Right (Shift for larger steps), or double-click to reset.
