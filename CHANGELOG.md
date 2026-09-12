@@ -1,5 +1,39 @@
 # Changelog
 
+## 2026.9.12
+
+Calm palette in both themes (warm paper neutrals in light, soft slate in
+dark; never pure black or white), theme following `localStorage`, else OS
+`prefers-color-scheme`, else dark. Sidebar regrouped into Inventory / Removal
+/ Help with Settings and Log out at the foot, and inline SVG icons replace
+the old icon set. Table engine fixes: widths come from content, rich cells
+grow their row instead of scrolling, grids size to their own rows with no
+inner scroll box, one filter icon per column header instead of a floating
+filter row, and the AG Grid enterprise-option console error is gone.
+Resources gained server-side `?filter=shared|dangling|unassigned`, matching
+the dashboard's stat tiles, with a "Filtered:" callout and per-type shared
+chips. The plan page now derives its status from the jobs that ran it (not
+run yet / dry-run only / ran live) with a "Runs of this plan" list, and the
+execute button reads "Run dry run" or "Execute live — deletes for real"
+depending on the selected mode. Orphans gained four summary tiles, jump
+chips, and a collapsible section per resource type. Docs across README,
+architecture, interfaces, and the Fern reference/guide pages were corrected
+to match the shipped UI (theme fallback order, Resources sub-navigation vs.
+tab bar, action-bar order and styling, sidebar grouping). 339 tests pass, 1
+skipped.
+
+Fixes found along the way: the mobile **Ask** button never showed (an
+`assistant.css` rule hid it); the dashboard "scanning…" label could stay
+visible after a scan (the `hidden` attribute lost to a display rule); the
+rows-per-page menu showed 25 while grids paged at 50; only a live run asks for
+browser confirmation now (a dry run changes nothing); the plan builder groups
+its options with descriptions checked against the planner; the app page's
+duplicate Evidence column is gone (the confidence cell lists every item); the
+Reclaimable and Disk usage tiles say what they measure. Docs: `tomli` added to
+the dependency lists in INSTALL, RECOVERY and INTERFACES (the recovery venv
+command left `del-web` unable to start without it), unauthenticated static
+routes listed in full, and migration `003_assistant.sql` documented.
+
 ## 2026.9.10 docs
 
 Operator-loop docs page (steps, mermaid, screenshots, collapsible vocabulary).

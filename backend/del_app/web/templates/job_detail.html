@@ -1,17 +1,26 @@
 {% extends "base.html" %}
 {% block title %}Job #{{ job.get('id') }}{% endblock %}
 {% block content %}
+<nav class="crumbs" aria-label="Breadcrumb">
+  <a href="/jobs">Jobs</a><span class="sep">›</span><span aria-current="page">Job #{{ job.get('id') }}</span>
+</nav>
 <div class="page-header">
   <h1>Job #{{ job.get('id') }}</h1>
 </div>
 <p class="page-lede">This run of a removal plan. LIVE changes the host; dry-run does not. Shared = more than one current app, so those resources stay preserved. Protected apps never reach this page.</p>
+
+<div class="meta-row">
+  <span class="meta"><span class="meta-k">Mode</span> <span class="meta-v"><span class="badge {{ 'badge-danger' if job.get('mode') == 'live' else 'badge-grey' }}">{{ 'LIVE' if job.get('mode') == 'live' else 'dry-run' }}</span></span></span>
+  <span class="meta"><span class="meta-k">Status</span> <span class="meta-v"><span class="badge status-{{ job.get('status') }}" id="job-status" aria-live="polite">{{ job.get('status') }}</span></span></span>
+  <span class="meta"><span class="meta-k">Started</span> <span class="meta-v dt">{{ format_dt(job.get('started')) }}</span></span>
+  <span class="meta"><span class="meta-k">Finished</span> <span class="meta-v dt">{{ format_dt(job.get('finished')) }}</span></span>
+  {% if job.get('app_slug') %}
+  <span class="meta"><span class="meta-k">App</span> <span class="meta-v"><a href="/apps/{{ job.get('app_slug') }}">{{ job.get('app_name') or job.get('app_slug') }}</a></span></span>
+  {% endif %}
+  <span class="meta"><span class="meta-k">Plan</span> <span class="meta-v"><a href="/plans/{{ job.get('plan_id') }}">#{{ job.get('plan_id') }}</a></span></span>
+</div>
+
 <div class="job-summary">
-  <p class="muted">
-    {% if job.get('app_slug') %}app: <a href="/apps/{{ job.get('app_slug') }}">{{ job.get('app_name') or job.get('app_slug') }}</a> · {% endif %}
-    plan: <a href="/plans/{{ job.get('plan_id') }}">#{{ job.get('plan_id') }}</a> ·
-    mode: <span class="badge {{ 'badge-danger' if job.get('mode') == 'live' else 'badge-grey' }}">{{ 'LIVE' if job.get('mode') == 'live' else 'dry-run' }}</span> ·
-    status: <span class="badge status-{{ job.get('status') }}" id="job-status" aria-live="polite">{{ job.get('status') }}</span>
-  </p>
   {% set pct = progress.get('pct', 0) if progress is defined and progress else 0 %}
   <div class="job-progress-track" role="progressbar" id="job-progress" aria-valuemin="0" aria-valuemax="100" aria-valuenow="{{ pct }}" aria-label="Job progress">
     <div class="job-progress-fill" id="job-progress-fill" data-width="{{ pct }}"></div>
@@ -25,15 +34,15 @@
 </div>
 
 {% if warnings %}
-<div class="box box-warning">
-  <h3>Warnings from the plan</h3>
+<div class="callout callout-warn">
+  <span class="callout-title">Warnings from the plan</span>
   <ul>{% for w in warnings %}<li>{{ w }}</li>{% endfor %}</ul>
 </div>
 {% endif %}
 
 {% if preserved %}
-<div class="box box-info">
-  <h3>Preserved, not removed ({{ preserved | length }})</h3>
+<div class="callout callout-info">
+  <span class="callout-title">Preserved, not removed ({{ preserved | length }})</span>
   <p class="muted">These resources were kept — shared with another app, not approved for
     removal, or unsafe to delete automatically. See the warnings above for why.</p>
   <ul>{% for p in preserved %}<li>{{ p }}</li>{% endfor %}</ul>

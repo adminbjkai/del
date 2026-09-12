@@ -5,8 +5,7 @@
   gap: var(--space-5);
   align-items: start;
 }
-.assistant-side .card { margin-bottom: 0; padding: var(--space-4); }
-.assistant-side h2 { font-size: var(--text-md); margin-bottom: var(--space-3); }
+.assistant-side .section { margin-bottom: 0; }
 
 /* Selects / inputs in the picker (same recipe as .stacked-form controls). */
 .assistant-select {
@@ -20,15 +19,15 @@
 .assistant-prompt {
   display: flex; flex-direction: column; align-items: flex-start; gap: 0.15rem;
   width: 100%; text-align: left;
-  background: color-mix(in srgb, var(--accent) 8%, var(--bg-card));
-  border: 1px dashed color-mix(in srgb, var(--accent) 38%, var(--border));
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
   color: var(--text);
   border-radius: var(--radius-sm); padding: 0.5rem 0.65rem;
   font: inherit; font-size: var(--text-sm); cursor: pointer; line-height: 1.35;
 }
 .assistant-prompt:hover, .assistant-prompt:focus-visible {
-  border-style: solid; border-color: var(--accent);
-  background: color-mix(in srgb, var(--accent) 14%, var(--bg-card));
+  border-color: var(--accent);
+  background: var(--bg-alt);
 }
 .assistant-prompt-label { display: block; font-weight: 600; }
 .assistant-prompt-label::before { content: "\2192\00a0"; color: var(--accent); font-weight: 500; }
@@ -63,11 +62,11 @@
 
 .assistant-msg {
   max-width: 85%; padding: 0.65rem 0.9rem; border-radius: var(--radius);
-  border: 1px solid var(--border); font-size: var(--text-md); line-height: 1.5;
+  border: 1px solid var(--border-subtle); font-size: var(--text-md); line-height: 1.5;
   overflow-wrap: anywhere;
 }
 .assistant-msg-user {
-  align-self: flex-end; background: var(--accent-bg); border-color: var(--accent-bg); color: #fff;
+  align-self: flex-end; background: var(--accent-bg); border-color: var(--accent-bg); color: var(--on-accent);
   white-space: pre-wrap;
 }
 .assistant-msg-assistant { align-self: flex-start; background: var(--bg-alt); }
@@ -87,16 +86,22 @@
 .assistant-msg-assistant li { margin: 0.15rem 0; }
 .assistant-msg-assistant code {
   font-family: var(--mono); font-size: 0.85em; background: var(--bg-card);
-  border: 1px solid var(--border); border-radius: 4px; padding: 0.05rem 0.3rem;
+  border: 1px solid var(--border-subtle); border-radius: 4px; padding: 0.05rem 0.3rem;
 }
 .assistant-msg-assistant pre {
   margin: 0.4rem 0 0.6rem; padding: 0.6rem 0.75rem; overflow-x: auto;
-  background: var(--bg-card); border: 1px solid var(--border); border-radius: var(--radius-sm);
+  background: var(--bg-card); border: 1px solid var(--border-subtle); border-radius: var(--radius-sm);
 }
 .assistant-msg-assistant pre code { border: none; padding: 0; background: none; font-size: 0.85em; }
 .assistant-msg-assistant a { color: var(--accent); }
 
-.assistant-statusline { display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2); }
+/* Statusline sits directly above the composer, both inside the same panel
+   as the transcript above — a hairline divider reads as one surface, not
+   three stacked cards. */
+.assistant-statusline {
+  display: flex; flex-wrap: wrap; align-items: center; gap: var(--space-2);
+  padding-top: var(--space-2); border-top: 1px solid var(--border-subtle);
+}
 
 .assistant-composer { display: flex; flex-direction: column; gap: var(--space-2); }
 .assistant-composer textarea {
@@ -141,7 +146,7 @@
   overflow: auto;
   margin-top: 0;
   padding: var(--space-2);
-  border: 1px solid var(--border);
+  border: 1px solid var(--border-subtle);
   border-radius: var(--radius-sm);
   background: var(--bg);
   font-size: var(--text-sm);
@@ -154,7 +159,7 @@
   margin: auto -0.75rem -0.75rem;
   padding: var(--space-2) 0.75rem 0.75rem;
   background: var(--bg-card);
-  border-top: 1px solid var(--border);
+  border-top: 1px solid var(--border-subtle);
 }
 .assistant-dock .assistant-composer textarea {
   min-height: 3.2rem;
@@ -164,15 +169,10 @@
 }
 .assistant-dock .assistant-composer-actions { justify-content: flex-start; }
 .assistant-dock #assistant-send { min-width: 4.75rem; }
-.assistant-dock .assistant-statusline { font-size: var(--text-xs); }
+.assistant-dock .assistant-statusline { font-size: var(--text-xs); border-top: 0; padding-top: 0; }
 @media (max-width: 1279px) {
   .layout.ask-open .assistant-transcript-dock { max-height: 28vh; }
 }
-.assistant-fab {
-  display: none;
-  right: calc(max(1rem, env(safe-area-inset-right)) + 4.75rem);
-  bottom: max(1rem, env(safe-area-inset-bottom));
-  background: var(--bg-card);
-  color: var(--text);
-}
+/* The mobile Ask button is placed and shown by app.css (.glossary-fab.assistant-fab,
+   under 1280px). No display rule here: this file loads after app.css and would win. */
 

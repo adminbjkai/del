@@ -1,0 +1,116 @@
+---
+title: UI conventions
+subtitle: Tokens, page anatomy, components, and the table engine's data-* contract
+slug: reference/ui
+---
+
+How the server-rendered UI is put together: tokens, page anatomy, the
+component classes templates compose from, and the table engine's `data-*`
+contract. The stylesheet is `backend/del_app/web/static/app.css` (sections
+1-10 are listed at its top); behaviour is `static/app.js`; the assistant has
+its own `assistant.css` / `assistant.js`. Everything is served from `/static/`
+under CSP `script-src 'self'` — no inline scripts or `on*=` handlers, ever.
+
+## Look and feel
+
+- **Calm palette.** Light = warm paper neutrals; dark = soft slate (never
+  pure black or white). One muted sea-glass accent (`--accent`), hairline
+  borders (`--border-subtle`), almost no shadows, no gradients.
+- **Colour means state, not decoration.** Tone pairs
+  `` --tone-{ok,warn,danger,info,neutral}-{bg,fg} `` back every badge; each
+  pair is ≥ 4.5:1 in both themes. Solid fills are reserved for the one
+  primary action on a page (`.btn-primary`) and truly destructive buttons
+  (`.btn-danger`).
+- **Themes.** `data-theme` on `<html>` (`light` / `dark`), set before first
+  paint by `/static/theme-init.js` from `localStorage["del.theme"]`, falling
+  back to `prefers-color-scheme`, and to dark if neither is available.
+  Toggle: the half-moon button in the sidebar.
+- **Icons.** Inline SVG from `templates/_icons.html`
+  (`` {{ i.icon('layers') }} `` after `` {% import "_icons.html" as i %} ``);
+  stroke uses `currentColor`.
+
+## Shell
+
+`base.html`: left sidebar (grouped nav: Inventory / Removal / Help, Settings
+and Log out at the foot; collapsible to icons on desktop, a flyout drawer
+below 900px) · main content (`.content > .content-inner`, max 1320px) · right
+rail with **Help** (context glossary) and **Ask** (assistant dock) tabs.
+The rail starts hidden below 1600px wide until the user opens it; the choice
+is remembered (`del.glossaryCollapsed`). Below 1280px Help and Ask are
+floating buttons that open bottom sheets.
+
+## Page anatomy
+
+```html
+<nav class="crumbs" aria-label="Breadcrumb">…</nav>          <!-- detail pages -->
+<div class="page-header">
+  <h1>Title <span class="count-pill">171</span></h1>
+  <div class="page-actions">…buttons…</div>
+</div>
+<div class="meta-row"><span class="meta"><span class="meta-k">Status</span> …</span></div>
+<p class="page-lede">One or two sentences: what this page is for.</p>
+<details class="explain"><summary>What do these words mean?</summary>
+  <div class="explain-body">…</div></details>
+…sections / panels…
+```
+
+## Components
+
+| Class | Use |
+|---|---|
+| `.panel` (+ `.panel-head`, `.panel-actions`) | Default content container. |
+| `` details.section > summary `` (+ `.section-hint`, `.section-aside`, `.count-pill`) `` > .section-body `` | Collapsible block with a count. Add `id` + `data-remember` to persist open state per page; a `#id` link opens it. |
+| `` [data-expand-all="open\|close"] `` (+ `` data-scope="#sel" ``) | Button that opens/closes every `details.section` in scope. |
+| `.section-group-label` | Small caps label above a group of sections. |
+| `` details.explain > .explain-body `` | Inline "what does this mean" disclosure. |
+| `.callout` + `-info` / `-warn` / `-danger` / `-ok` (+ `.callout-title`) | Notices. `.box-*` and `.flash-*` are the older names, same look. |
+| `.meta-row` / `.meta` / `.meta-k` / `.meta-v` | Inline facts under a title. |
+| `.kv` (`<dl>`) | Key/value grid. |
+| `` .stat-grid > a.stat-card `` (`.stat-value`, `.stat-label`, `.stat-hint`, `.is-warn`, `.is-danger`) | Linked metric tiles. |
+| `` .subnav > .subnav-group > .subnav-label `` + links (`.active`, `.is-empty`) | Grouped navigation between sibling views (resource types). |
+| `.jump-nav` | In-page anchor chips on long pages. |
+| `` .tabs > .tablist > button.tab[role=tab] `` + `.tabpanel` | ARIA tabs (roving tabindex + arrows in app.js). |
+| `` .relation-list > li `` (`.relation-type`, `.relation-name`, `.relation-arrow`, `.relation-aside`) | "this → that" relationship rows with links. |
+| `.btn` + `-primary` / `-danger` / `-danger-quiet` / `-ghost` / `-sm`, `.btn-group` | Buttons. One primary per view. |
+| `.chip`, `.owner-chip`, `.owner-chip-unassigned` | Link chips (owners, legend). |
+| `.badge` + tone / `status-*` / `badge-confidence-*` / `badge-danger-*` | Status labels. `.is-live` pulses (live jobs only). |
+| `.dot` + `-ok` / `-warn` / `-danger` / `-info` | Small state dot. |
+| `.choice` (`.choice-title`, `.choice-desc`) | Radio/checkbox cards (dry-run vs live). |
+| `.empty-state` / macro `` m.empty_state(msg) `` | Nothing-to-show message. |
+
+Utilities: `.stack`, `.cluster`, `.grid-2`, `.muted`, `.faint`, `.mono`,
+`` .text-xs|sm|md ``, `.mt-*`, `.mb-*`, `.ml-auto`, `.nowrap`, `.sr-only`.
+
+## Tables
+
+Any `` <table class="table" data-enhanced> `` becomes an AG Grid Community grid
+(vendored 32.3.3); if AG Grid is unavailable, a vanilla sorter/filter runs
+instead. The engine reads:
+
+| Attribute | Effect |
+|---|---|
+| `` data-page-size="25" `` | Rows per page (default 50). |
+| `` data-empty="…" `` | Message when nothing matches. |
+| `` data-search-placeholder="…" `` | Quick-filter placeholder. |
+| `` data-prefill="…" `` | Initial quick-filter text. |
+| `data-toolbar` | Force the full toolbar even for ≤ 10 rows. |
+| `th[data-nosort]` | Not sortable/filterable; fixed width; the last such column is pinned right (actions like **Ask**). |
+| `th[title]` | Header tooltip. |
+| `td[data-sort-value]` | Sort key (numbers sort numerically). |
+| `td[data-filter-value]` | Filter/export text instead of the cell text. |
+
+Behaviour: column widths come from header and content length; cells with
+block content (meters, `<details>`, forms, chip clusters) wrap and grow the
+row; plain cells stay on one line with a tooltip. Grids size to their rows
+(no internal scroll box). Tables with ≤ 10 rows hide search and pager, and
+each column header shows one filter icon rather than a separate floating
+filter row. Column layout, filters and page size persist per table in
+`` localStorage["del.ag2.colstate.<table id or path|caption>"] ``. Every
+`table.table` is enhanced; add class `table-plain` (or `job-steps`) to keep
+plain HTML.
+
+## Accessibility
+
+Skip link, landmark roles, `` aria-current="page" `` on active nav,
+focus-visible rings, focus traps on the mobile drawer and sheets,
+`prefers-reduced-motion` honoured, text ≥ 4.5:1 in both themes.

@@ -509,11 +509,18 @@ def orphans_view(
         for t in ALL_RESOURCE_TYPES
         if t in groups
     ]
+    # Jump-nav needs every type (including zero-count ones, dimmed) for the
+    # current view (actionable-only, or all with ?show=all).
+    type_summary = [
+        {"type": t, "label": RESOURCE_TYPE_LABELS.get(t, t), "count": len(groups.get(t, []))}
+        for t in ALL_RESOURCE_TYPES
+    ]
     return _render(
         "orphans.html",
         request,
         response,
         grouped=grouped,
+        type_summary=type_summary,
         total=len(classified),
         show_all=show_all,
         counts=counts,

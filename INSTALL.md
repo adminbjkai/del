@@ -6,7 +6,8 @@
 - User `bjkai` with sudo (install.sh calls `sudo` for the systemd/nginx steps).
 - `/apps/del` project root already checked out with:
   - `.venv/` — Python 3.10 virtualenv with `uvicorn`, `fastapi`, `jinja2`, `pydantic`,
-    `argon2-cffi`, `pyyaml`, `python-multipart`, `itsdangerous` installed.
+    `argon2-cffi`, `pyyaml`, `python-multipart`, `itsdangerous`, `tomli` installed
+    (`tomli` parses `config/del.toml` on Python 3.10).
   - `backend/del_app` — the application package.
   - `helper/del_helper.py` + `helper/validation.py` — the privileged helper daemon
     and its pure validation module (stdlib only, no venv needed since it's invoked

@@ -6,8 +6,8 @@
     <p class="glossary-sub"><span class="glossary-context-chip glossary-context-label">Help</span></p>
   </div>
 
-  <section class="glossary-section" data-g="apps app-detail general">
-    <h3>Applications</h3>
+  <details class="glossary-section" data-g="apps app-detail general" open>
+    <summary>Applications</summary>
     <dl class="glossary-dl">
       <dt>Status</dt>
       <dd>
@@ -27,10 +27,10 @@
       <dt>Kind</dt>
       <dd>Primary runtime: compose, container, systemd, …</dd>
     </dl>
-  </section>
+  </details>
 
-  <section class="glossary-section" data-g="view-apps">
-    <h3>View Apps</h3>
+  <details class="glossary-section" data-g="view-apps" open>
+    <summary>View Apps</summary>
     <dl class="glossary-dl">
       <dt>Online</dt>
       <dd>The domain is in an enabled Nginx site from the latest completed scan and returned an HTTPS response below 500. DNS, TLS, routing, and an answering upstream all worked.</dd>
@@ -41,20 +41,20 @@
       <dt>My order</dt>
       <dd>Open Customize, drag cards, then choose My order. Stars, hidden cards, card size, spacing, and view mode are also browser-local.</dd>
     </dl>
-  </section>
+  </details>
 
-  <section class="glossary-section" data-g="apps app-detail resources resources-container resources-image resources-volume resources-network resources-directory resources-git_repo resources-nginx_site resources-systemd_unit resources-compose_project orphans general">
-    <h3>Owner apps &amp; sharing</h3>
+  <details class="glossary-section" data-g="apps app-detail resources resources-container resources-image resources-volume resources-network resources-directory resources-git_repo resources-nginx_site resources-systemd_unit resources-compose_project orphans general" open>
+    <summary>Owner apps &amp; sharing</summary>
     <dl class="glossary-dl">
       <dt>Owner app(s)</dt>
       <dd>App(s) DEL attributes this resource to. <span class="badge badge-grey">unassigned</span> = no association rows (no owner chips). Orphans is different: no <em>probable</em> (≥60) owner — a resource can still have possible/weak claims and appear there.</dd>
       <dt>Shared</dt>
       <dd>Used by more than one app. Removal of one app must not delete shared resources.</dd>
     </dl>
-  </section>
+  </details>
 
-  <section class="glossary-section" data-g="resources-container resources app-detail">
-    <h3>Containers — State / health</h3>
+  <details class="glossary-section" data-g="resources-container resources app-detail" open>
+    <summary>Containers — State / health</summary>
     <dl class="glossary-dl">
       <dt>State</dt>
       <dd>Docker runtime: running, exited, paused, restarting, …</dd>
@@ -65,60 +65,60 @@
         <strong>no healthcheck</strong> means none configured — not a failure.
       </dd>
     </dl>
-  </section>
+  </details>
 
-  <section class="glossary-section" data-g="resources-image resources">
-    <h3>Images</h3>
+  <details class="glossary-section" data-g="resources-image resources" open>
+    <summary>Images</summary>
     <dl class="glossary-dl">
       <dt>Dangling</dt>
       <dd>Untagged <code>&lt;none&gt;:&lt;none&gt;</code> leftover after rebuild — often reclaimable if unused.</dd>
       <dt>Used by</dt>
       <dd>How many containers reference this image.</dd>
     </dl>
-  </section>
+  </details>
 
-  <section class="glossary-section" data-g="resources-volume resources orphans">
-    <h3>Volumes</h3>
+  <details class="glossary-section" data-g="resources-volume resources orphans" open>
+    <summary>Volumes</summary>
     <dl class="glossary-dl">
       <dt>Orphan (resources tab)</dt>
       <dd>No container currently mounts this volume.</dd>
       <dt>Shared</dt>
       <dd>Associated with more than one app.</dd>
     </dl>
-  </section>
+  </details>
 
-  <section class="glossary-section" data-g="resources-network resources">
-    <h3>Networks</h3>
+  <details class="glossary-section" data-g="resources-network resources" open>
+    <summary>Networks</summary>
     <dl class="glossary-dl">
       <dt>Shared</dt>
       <dd>Used across apps/projects. Built-ins (<code>bridge</code>/<code>host</code>/<code>none</code>) are never removed.</dd>
       <dt>Attached</dt>
       <dd>Containers currently on this network.</dd>
     </dl>
-  </section>
+  </details>
 
-  <section class="glossary-section" data-g="resources-directory resources-git_repo resources">
-    <h3>Directories &amp; git</h3>
+  <details class="glossary-section" data-g="resources-directory resources-git_repo resources" open>
+    <summary>Directories &amp; git</summary>
     <dl class="glossary-dl">
       <dt>Dirty</dt>
       <dd><strong>dirty</strong> = uncommitted git changes; <strong>clean</strong> = clean tree; <strong>—</strong> = not a repo / unknown.</dd>
       <dt>Size</dt>
       <dd>Approximate on-disk size (<code>du</code>).</dd>
     </dl>
-  </section>
+  </details>
 
-  <section class="glossary-section" data-g="resources-nginx_site resources">
-    <h3>Nginx sites</h3>
+  <details class="glossary-section" data-g="resources-nginx_site resources" open>
+    <summary>Nginx sites</summary>
     <dl class="glossary-dl">
       <dt>not enabled</dt>
       <dd>Config exists but is not in sites-enabled — not serving.</dd>
       <dt>ssl</dt>
       <dd>Config references a TLS certificate.</dd>
     </dl>
-  </section>
+  </details>
 
-  <section class="glossary-section" data-g="orphans general">
-    <h3>Orphans page</h3>
+  <details class="glossary-section" data-g="orphans general" open>
+    <summary>Orphans page</summary>
     <dl class="glossary-dl">
       <dt>Unassociated</dt>
       <dd>Resource has zero rows in the associations table for any app.</dd>
@@ -142,10 +142,10 @@
       <dt>Why listed</dt>
       <dd>Per-row explanation of the classification. This page is review-only — it has no delete. Removal still goes through an app plan.</dd>
     </dl>
-  </section>
+  </details>
 
-  <section class="glossary-section" data-g="jobs job-detail general">
-    <h3>Jobs</h3>
+  <details class="glossary-section" data-g="jobs job-detail general" open>
+    <summary>Jobs</summary>
     <dl class="glossary-dl">
       <dt>dry-run</dt>
       <dd>Simulates every step; changes nothing on the host.</dd>
@@ -154,10 +154,10 @@
       <dt>success / failed / refused</dt>
       <dd>Terminal outcomes. <em>refused</em> = a gate blocked the run.</dd>
     </dl>
-  </section>
+  </details>
 
-  <section class="glossary-section" data-g="apps app-detail resources resources-container resources-image resources-volume resources-network resources-directory resources-git_repo resources-nginx_site orphans jobs job-detail general">
-    <h3>Table filters</h3>
+  <details class="glossary-section" data-g="apps app-detail resources resources-container resources-image resources-volume resources-network resources-directory resources-git_repo resources-nginx_site orphans jobs job-detail general" open>
+    <summary>Table filters</summary>
     <dl class="glossary-dl">
       <dt>Quick filter</dt>
       <dd>Top search box — matches any column. Shortcut: <kbd>/</kbd>.</dd>
@@ -171,10 +171,10 @@
       <dt>Clear all filters</dt>
       <dd>Resets every column filter and the quick filter at once.</dd>
     </dl>
-  </section>
+  </details>
 
-  <section class="glossary-section" data-g="assistant">
-    <h3>Assistant</h3>
+  <details class="glossary-section" data-g="assistant" open>
+    <summary>Assistant</summary>
     <dl class="glossary-dl">
       <dt>Read-only</dt>
       <dd>The assistant has no tools and cannot change anything. Removal still goes through an app's plan/confirm flow.</dd>
@@ -185,13 +185,13 @@
       <dt>Privacy</dt>
       <dd>Inventory metadata (names, paths, tags, ports, evidence) is sent to Ollama Cloud. File contents, env values and secrets never are.</dd>
     </dl>
-  </section>
+  </details>
 
-  <section class="glossary-section glossary-section-muted" data-g="apps app-detail resources resources-container resources-image resources-volume resources-network resources-directory resources-git_repo resources-nginx_site orphans jobs job-detail general">
-    <h3>Times</h3>
+  <details class="glossary-section glossary-section-muted" data-g="apps app-detail resources resources-container resources-image resources-volume resources-network resources-directory resources-git_repo resources-nginx_site orphans jobs job-detail general" open>
+    <summary>Times</summary>
     <p class="muted text-sm mt-0">
       Eastern (New York), compact <code>MM-DD-YY H:MM AM/PM</code>
       (e.g. <code>05-13-26 7:31 AM</code>).
     </p>
-  </section>
+  </details>
 </div>

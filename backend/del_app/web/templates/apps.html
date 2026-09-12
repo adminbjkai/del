@@ -1,27 +1,30 @@
 {% extends "base.html" %}
 {% import "_macros.html" as m %}
+{% import "_icons.html" as i %}
 {% block title %}Applications{% endblock %}
 {% block content %}
 <div class="page-header">
   <h1>Applications <span class="count-pill">{{ apps | length }}</span></h1>
   <div class="page-actions">
-    <span class="muted text-sm">Filter / export</span>
     {% if show_removed %}
-      <a class="btn btn-sm btn-ghost" href="/apps{% if search %}?search={{ search }}{% endif %}">Show live only</a>
+      <a class="filter-chip" href="/apps{% if search %}?search={{ search }}{% endif %}" aria-pressed="true">Show removed too</a>
       <span class="badge badge-amber">including removed</span>
     {% else %}
-      <a class="btn btn-sm btn-ghost" href="/apps?show=removed{% if search %}&amp;search={{ search }}{% endif %}">Show removed too</a>
+      <a class="filter-chip" href="/apps?show=removed{% if search %}&amp;search={{ search }}{% endif %}" aria-pressed="false">Show removed too</a>
     {% endif %}
     <button type="button" class="btn btn-sm btn-ghost" data-export-table="apps-table" title="Export the currently filtered rows as CSV">Export CSV</button>
   </div>
 </div>
-<p class="page-lede">Open an app to see name relatedness — shared, probable owner (≥60), possible (weak), unassigned (no association rows), or Orphans (no probable owner; review-only, no delete).</p>
-<div class="legend-row" aria-label="How rows relate">
-  <span class="chip" title="More than one current application owns it">shared = 2+ current apps</span>
-  <span class="chip" title="Confidence ≥ 60 counts as an owner">probable = strong owner</span>
-  <span class="chip" title="Confidence 30–59; review, do not treat as owner">possible = weak</span>
-  <span class="chip" title="No probable (≥60) current owner; review-only, no delete. Unassigned chips are no association rows.">no probable owner → Orphans</span>
-</div>
+<p class="page-lede">Every application DEL has discovered, with its status, ports, domains and how many resources it owns. Open one to drill into its resources and plan a removal.</p>
+<details class="explain">
+  <summary>How rows relate</summary>
+  <div class="explain-body legend-row" aria-label="How rows relate">
+    <span class="chip" title="More than one current application owns it">shared = 2+ current apps</span>
+    <span class="chip" title="Confidence ≥ 60 counts as an owner">probable = strong owner</span>
+    <span class="chip" title="Confidence 30–59; review, do not treat as owner">possible = weak</span>
+    <span class="chip" title="No probable (≥60) current owner; review-only, no delete. Unassigned chips are no association rows.">no probable owner → Orphans</span>
+  </div>
+</details>
 
 <table id="apps-table" class="table" data-enhanced data-empty="No applications in this view. Primary: run a scan. Secondary: Show removed too for history, or clear filters." data-search-placeholder="Filter apps…"{% if search %} data-prefill="{{ search }}"{% endif %}>
   <caption class="sr-only">Applications discovered by the latest scan, with status, install date, domains, ports and resource counts.</caption>
@@ -34,8 +37,7 @@
       <th scope="col">Domains</th>
       <th scope="col">Host ports</th>
       <th scope="col">Resources</th>
-      <th scope="col" data-priority="low">Warnings</th>
-      <th scope="col" data-priority="low">Protected</th>
+      <th scope="col" data-priority="low" title="Possible or low-confidence associations to review">Warnings</th>
       {% if assistant_enabled() %}<th scope="col" data-nosort>Ask</th>{% endif %}
     </tr>
   </thead>
@@ -44,10 +46,13 @@
     <tr{% if app.is_removed %} class="row-muted"{% endif %}>
       <td>
         <a href="/apps/{{ app.slug }}">{{ app.name }}</a>
+        {% if app.protected %}<span class="badge badge-blue app-shield" title="Protected: DEL will not build a removal plan">{{ i.icon('shield') }}protected</span>{% endif %}
+        {% if app.slug != app.name %}
         <div class="muted mono text-xs">
           <button type="button" class="copy" data-copy="{{ app.slug }}" title="Copy slug" aria-label="Copy slug {{ app.slug }} to clipboard">{{ app.slug }}<span class="copy-mark" aria-hidden="true">⧉</span></button>
-          {% if app.is_removed %}<span class="badge badge-grey ml-2">removed</span>{% endif %}
         </div>
+        {% endif %}
+        {% if app.is_removed %}<div><span class="badge badge-grey">removed</span></div>{% endif %}
       </td>
       <td data-filter-value="{{ app.status }}"><span class="badge status-{{ app.status }}">{{ app.status }}</span></td>
       <td data-priority="low" data-filter-value="{{ app.kind }}">{{ app.kind or '—' }}</td>
@@ -57,8 +62,7 @@
       <td>{{ m.domain_links(app.domains) }}</td>
       <td>{{ m.joinlist(app.ports) }}</td>
       <td data-sort-value="{{ app.res_count }}">{{ app.res_count }}</td>
-      <td data-priority="low" data-sort-value="{{ app.warn_count }}">{% if app.warn_count %}<span class="badge badge-amber">{{ app.warn_count }}</span>{% else %}0{% endif %}</td>
-      <td data-priority="low" data-filter-value="{{ 'yes' if app.protected else 'no' }}">{% if app.protected %}<span class="badge badge-blue">protected</span>{% else %}—{% endif %}</td>
+      <td data-priority="low" data-sort-value="{{ app.warn_count }}">{% if app.warn_count %}<a class="badge badge-amber" href="/apps/{{ app.slug }}#tab-readiness" title="Review these on the app's Readiness tab">{{ app.warn_count }}</a>{% else %}0{% endif %}</td>
       {% if assistant_enabled() %}
       <td class="text-sm"><a class="chip assistant-ask-link" href="/assistant?scope=app&amp;target={{ app.slug | urlencode }}" data-ask-scope="app" data-ask-target="{{ app.slug }}" title="Ask the read-only assistant about this application">Ask</a></td>
       {% endif %}

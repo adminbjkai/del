@@ -28,7 +28,7 @@ flowchart LR
 |---|---|---|
 | Language | Python 3.10 (system python3, venv) | Already on host; excellent for sysadmin tooling; typed with dataclasses/pydantic |
 | Web framework | FastAPI + Uvicorn | Typed request/response models, async, small footprint |
-| Templates/UI | Jinja2 server-rendered + vanilla JS + `app.css` plus assistant and vendored AG Grid styles | No Node toolchain; fully self-contained (CSP `script-src 'self'`, no CDN); dark theme by default with a light-theme toggle (`data-theme`, persisted in `localStorage`) |
+| Templates/UI | Jinja2 server-rendered + vanilla JS + `app.css` plus assistant and vendored AG Grid styles | No Node toolchain; fully self-contained (CSP `script-src 'self'`, no CDN); theme follows `localStorage`, else OS `prefers-color-scheme`, else dark, with a header toggle (`data-theme`, persisted in `localStorage`) |
 | Database | SQLite (WAL mode) via sqlite3 + migration runner | Single admin user; zero-ops; file lives in /apps/del/database/del.db |
 | Privileged layer | del-helper: separate root daemon on a unix socket | Strict allowlist; web app never runs shell as root |
 | Deployment | Host systemd units (del-web.service, del-helper.service, del-docs.service) | See below |
@@ -163,7 +163,8 @@ being uncompromised.
 │   ├── main.py            FastAPI app factory, routes mounting
 │   ├── config.py          settings (port, paths) from /apps/del/config/del.toml
 │   ├── db.py              sqlite connection, migration runner
-│   ├── migrations/        001_init.sql (schema), 002_indexes.sql (secondary indexes)
+│   ├── migrations/        001_init.sql (schema), 002_indexes.sql (secondary indexes),
+│   │                      003_assistant.sql (assistant conversations + messages)
 │   ├── auth.py            login, argon2id hashing, sessions, CSRF, rate limit
 │   ├── models.py          typed dataclasses / pydantic models
 │   ├── discovery/
@@ -266,6 +267,10 @@ unconditionally on every page:
   Deliberately not indexed: nothing in the codebase reads it. It needs a retention
   policy, not an index.
 - settings(key, value)
+- assistant_conversations(id, user_id, scope, target, title, created_at, updated_at)
+  and assistant_messages(id, conversation_id, role, content, prompt_id, usage_json,
+  context_truncated, created_at) — migration `003_assistant.sql`; the inventory
+  context sent to the model is rebuilt per turn and never stored.
 
 ### Indexes (`002_indexes.sql`)
 

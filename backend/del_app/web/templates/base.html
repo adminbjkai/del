@@ -4,7 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="description" content="DEL — application inventory and safe uninstall for this host: discover apps, map their resources, and remove them with an auditable plan.">
-  <meta name="theme-color" content="#0c0e13">
+  <meta name="theme-color" content="#1a1e23" media="(prefers-color-scheme: dark)">
+  <meta name="theme-color" content="#f3f2ee" media="(prefers-color-scheme: light)">
   <title>{% block title %}DEL{% endblock %} · DEL</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/app.css">
@@ -15,6 +16,7 @@
   <meta name="csrf-token" content="{{ csrf_token }}">
   {% block head %}{% endblock %}
 </head>
+{% import "_icons.html" as i %}
 {% set path = request.url.path %}
 {% if path == '/' %}
   {% set glossary_ctx = 'general' %}
@@ -48,38 +50,50 @@
   <div class="layout" id="app-layout">
     <nav class="sidebar" id="sidebar" aria-label="Main">
       <div class="sidebar-top">
-        <a href="/" class="brand" title="Dashboard">DEL</a>
+        <a href="/" class="brand" title="Dashboard"><span class="brand-mark" aria-hidden="true">D</span><span class="brand-text">DEL</span></a>
         <div class="sidebar-controls">
-          <button type="button" id="theme-toggle" class="btn btn-sm icon-btn"
-                  aria-label="Switch to light theme" aria-pressed="false" title="Toggle theme">
-            <span aria-hidden="true">◐</span>
-          </button>
-          <button type="button" id="sidebar-collapse" class="btn btn-sm icon-btn sidebar-collapse-btn"
-                  aria-label="Collapse sidebar" title="Collapse sidebar">‹</button>
-          <button type="button" id="nav-toggle" class="btn btn-sm icon-btn nav-toggle"
-                  aria-label="Open menu" aria-expanded="false" aria-controls="nav-drawer">☰</button>
+          <button type="button" id="theme-toggle" class="icon-btn"
+                  aria-label="Switch to light theme" aria-pressed="false" title="Toggle light / dark">{{ i.icon('theme') }}</button>
+          <button type="button" id="sidebar-collapse" class="icon-btn sidebar-collapse-btn"
+                  aria-label="Collapse sidebar" title="Collapse sidebar">{{ i.icon('chevron-left') }}</button>
+          <button type="button" id="nav-toggle" class="icon-btn nav-toggle"
+                  aria-label="Open menu" aria-expanded="false" aria-controls="nav-drawer">{{ i.icon('menu') }}</button>
         </div>
       </div>
       <div class="nav-drawer" id="nav-drawer">
-        <button type="button" id="cmdk-open" class="btn btn-sm cmdk-trigger">
-          <span aria-hidden="true">⌕</span> <span class="nav-label">Search</span>
+        <button type="button" id="cmdk-open" class="cmdk-trigger" title="Search pages and applications (Ctrl K)">
+          {{ i.icon('search') }}<span class="nav-label">Search</span>
           <kbd class="cmdk-hint" aria-hidden="true">Ctrl K</kbd>
         </button>
+        {% macro nav_item(href, label, ico, active, external=false) -%}
+          <li><a href="{{ href }}" title="{{ label }}"{% if active %} class="active" aria-current="page"{% endif %}{% if external %} target="_blank" rel="noopener"{% endif %}><span class="nav-ico">{{ i.icon(ico) }}</span><span class="nav-label">{{ label }}</span>{% if external %}<span class="nav-ext">{{ i.icon('external') }}</span>{% endif %}</a></li>
+        {%- endmacro %}
+        <div class="nav-section-label">Inventory</div>
         <ul class="nav-links">
-          <li><a href="/" title="Dashboard"{% if path == '/' %} class="active"{% endif %}><span class="nav-ico" aria-hidden="true">⌂</span><span class="nav-label">Dashboard</span></a></li>
-          <li><a href="/view-apps" title="View Apps"{% if path.startswith('/view-apps') %} class="active"{% endif %}><span class="nav-ico" aria-hidden="true">◫</span><span class="nav-label">View Apps</span></a></li>
-          <li><a href="/apps" title="Applications"{% if path.startswith('/apps') %} class="active"{% endif %}><span class="nav-ico" aria-hidden="true">▦</span><span class="nav-label">Applications</span></a></li>
-          <li><a href="/resources/container" title="Resources"{% if path.startswith('/resources') %} class="active"{% endif %}><span class="nav-ico" aria-hidden="true">⧉</span><span class="nav-label">Resources</span></a></li>
-          <li><a href="/orphans" title="Orphans"{% if path.startswith('/orphans') %} class="active"{% endif %}><span class="nav-ico" aria-hidden="true">◌</span><span class="nav-label">Orphans</span></a></li>
-          <li><a href="/assistant" title="Assistant"{% if path.startswith('/assistant') %} class="active"{% endif %}><span class="nav-ico" aria-hidden="true">◍</span><span class="nav-label">Assistant</span></a></li>
-          <li><a href="/jobs" title="Jobs"{% if path.startswith('/jobs') %} class="active"{% endif %}><span class="nav-ico" aria-hidden="true">▶</span><span class="nav-label">Jobs</span></a></li>
-          <li><a href="/docs" title="Docs" target="_blank" rel="noopener"><span class="nav-ico" aria-hidden="true">?</span><span class="nav-label">Docs</span></a></li>
-          <li><a href="/settings" title="Settings"{% if path.startswith('/settings') %} class="active"{% endif %}><span class="nav-ico" aria-hidden="true">⚙</span><span class="nav-label">Settings</span></a></li>
+          {{ nav_item('/', 'Dashboard', 'home', path == '/') }}
+          {{ nav_item('/view-apps', 'View Apps', 'grid', path.startswith('/view-apps')) }}
+          {{ nav_item('/apps', 'Applications', 'apps', path.startswith('/apps') or path.startswith('/manifests')) }}
+          {{ nav_item('/resources/container', 'Resources', 'layers', path.startswith('/resources')) }}
+          {{ nav_item('/orphans', 'Orphans', 'orphan', path.startswith('/orphans')) }}
         </ul>
-        <form method="post" action="/logout" class="logout-form">
-          <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-          <button type="submit" class="btn btn-sm logout-btn" title="Log out"><span class="logout-label">Log out</span></button>
-        </form>
+        <div class="nav-section-label">Removal</div>
+        <ul class="nav-links">
+          {{ nav_item('/jobs', 'Jobs', 'jobs', path.startswith('/jobs') or path.startswith('/plans')) }}
+        </ul>
+        <div class="nav-section-label">Help</div>
+        <ul class="nav-links">
+          {{ nav_item('/assistant', 'Assistant', 'chat', path.startswith('/assistant')) }}
+          {{ nav_item('/docs', 'Docs', 'book', false, true) }}
+        </ul>
+        <div class="sidebar-foot">
+          <ul class="nav-links">
+            {{ nav_item('/settings', 'Settings', 'settings', path.startswith('/settings')) }}
+          </ul>
+          <form method="post" action="/logout" class="logout-form">
+            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+            <button type="submit" class="btn btn-ghost btn-sm logout-btn" title="Log out">{{ i.icon('logout') }}<span class="logout-label">Log out</span></button>
+          </form>
+        </div>
       </div>
     </nav>
 
@@ -88,15 +102,18 @@
         {# Successes time out; errors stay until dismissed (app.js adds the button). #}
         {% if flash %}<div class="flash flash-ok" role="status" data-autodismiss>{{ flash }}</div>{% endif %}
         {% if error %}<div class="flash flash-error" role="alert">{{ error }}</div>{% endif %}
+        <div class="content-inner">
         {% block content %}{% endblock %}
+        </div>
       </main>
 
       <aside class="glossary-rail" id="glossary-rail" aria-label="Help and assistant">
-        <button type="button" id="glossary-collapse" class="btn btn-sm icon-btn glossary-collapse-btn"
-                aria-label="Collapse help" title="Collapse help">›</button>
+        <button type="button" id="glossary-collapse" class="icon-btn glossary-collapse-btn"
+                aria-label="Hide help panel" title="Hide help panel">{{ i.icon('chevron-right') }}</button>
+        <button type="button" class="rail-collapsed-label" data-rail-expand title="Show the Help / Ask panel">Help · Ask</button>
         <div class="rail-tabs" role="tablist" aria-label="Right panel">
-          <button type="button" class="rail-tab is-active" id="rail-tab-help" data-rail-tab="help" role="tab" aria-selected="true">Help</button>
-          <button type="button" class="rail-tab" id="rail-tab-ask" data-rail-tab="ask" role="tab" aria-selected="false">Ask</button>
+          <button type="button" class="rail-tab is-active" id="rail-tab-help" data-rail-tab="help" role="tab" aria-selected="true">{{ i.icon('help') }}Help</button>
+          <button type="button" class="rail-tab" id="rail-tab-ask" data-rail-tab="ask" role="tab" aria-selected="false">{{ i.icon('chat') }}Ask</button>
         </div>
         <div class="rail-panel" id="rail-panel-help" data-rail-panel="help">
           {% include "_glossary.html" %}
@@ -112,10 +129,10 @@
 
   {# Mobile glossary FAB + bottom sheet #}
   <button type="button" class="glossary-fab" id="glossary-fab" aria-controls="glossary-sheet" aria-expanded="false">
-    Help
+    {{ i.icon('help') }}Help
   </button>
   <button type="button" class="glossary-fab assistant-fab" id="assistant-fab" aria-controls="glossary-rail" title="Ask about this screen — suggestions fill the box; Enter sends">
-    Ask
+    {{ i.icon('chat') }}Ask
   </button>
   <div class="glossary-sheet" id="glossary-sheet" hidden>
     <div class="glossary-sheet-backdrop" id="glossary-sheet-backdrop"></div>

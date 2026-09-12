@@ -1,12 +1,16 @@
 {% extends "base.html" %}
 {% block title %}Manifest · {{ slug }}{% endblock %}
 {% block content %}
+<nav class="crumbs" aria-label="Breadcrumb">
+  <a href="/apps">Applications</a><span class="sep">›</span><a href="/apps/{{ slug }}">{{ slug }}</a><span class="sep">›</span><span aria-current="page">Manifest</span>
+</nav>
 <div class="page-header">
-  <h1>Manifest · {{ slug }}</h1>
+  <h1>Manifest <span class="muted">· {{ slug }}</span></h1>
 </div>
+<p class="page-lede">Edit this app's manifest YAML directly. Saved changes take effect on the next scan.</p>
 {% if validation_errors %}
-<div class="box box-warning">
-  <h3>Validation errors</h3>
+<div class="callout callout-warn">
+  <span class="callout-title">Validation errors</span>
   <ul>{% for e in validation_errors %}<li>{{ e }}</li>{% endfor %}</ul>
 </div>
 {% endif %}
@@ -14,7 +18,9 @@
   <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
   <label for="yaml_text">Manifest YAML</label>
   <textarea name="yaml_text" id="yaml_text" rows="24" class="code-area">{{ yaml_text }}</textarea>
-  <button type="submit" class="btn btn-primary">Save manifest</button>
-  <a class="btn" href="/apps/{{ slug }}">Cancel</a>
+  <div class="action-bar">
+    <button type="submit" class="btn btn-primary">Save manifest</button>
+    <a class="btn btn-ghost" href="/apps/{{ slug }}">Cancel</a>
+  </div>
 </form>
 {% endblock %}

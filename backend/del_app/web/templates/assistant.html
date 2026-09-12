@@ -17,7 +17,7 @@
 <p class="page-lede">Read-only questions about this inventory (owners, shared, probable vs possible, protected). Ask is also in the right rail on every other screen. Nothing here can change the host — plan and remove stay on the app.</p>
 
 {% if not assistant_on %}
-<div class="box box-info" id="assistant-disabled">
+<div class="callout callout-info" id="assistant-disabled">
   <p class="mt-0"><strong>The assistant is not available.</strong>
     {% if status.get('reason') %}<span class="muted">{{ status.get('reason') }}</span>{% endif %}
   </p>
@@ -41,66 +41,72 @@
      data-model="{{ status.get('model') or '' }}">
 
   <aside class="assistant-side stack-lg">
-    <section class="card assistant-scope">
-      <h2 class="text-md">Scope</h2>
-      <div class="filter-chip-group" role="group" aria-label="Scope">
-        {% for s in scopes %}
-        <button type="button" class="filter-chip assistant-scope-chip" data-scope="{{ s.id }}" aria-pressed="{{ 'true' if s.id == scope else 'false' }}">{{ s.label }}</button>
-        {% endfor %}
-      </div>
+    <details class="section assistant-scope" id="assistant-scope-section" data-remember open>
+      <summary><h2>Scope</h2></summary>
+      <div class="section-body">
+        <div class="filter-chip-group" role="group" aria-label="Scope">
+          {% for s in scopes %}
+          <button type="button" class="filter-chip assistant-scope-chip" data-scope="{{ s.id }}" aria-pressed="{{ 'true' if s.id == scope else 'false' }}">{{ s.label }}</button>
+          {% endfor %}
+        </div>
 
-      <div class="stack mt-3" id="assistant-target-wrap" hidden>
-        <label class="text-sm" for="assistant-rtype" id="assistant-rtype-wrap" hidden>Resource type
-          <select id="assistant-rtype" class="assistant-select">
-            {% for t in targets.resource_type %}
-            <option value="{{ t.value }}"{% if t.value == resource_type %} selected{% endif %}>{{ t.label }}</option>
-            {% endfor %}
-          </select>
-        </label>
-        <label class="text-sm" for="assistant-target-search" id="assistant-search-wrap" hidden>Find
-          <input type="search" id="assistant-target-search" class="assistant-select" placeholder="Filter resources…" autocomplete="off">
-        </label>
-        <label class="text-sm" for="assistant-target"><span id="assistant-target-label">Target</span>
-          <select id="assistant-target" class="assistant-select"
-                  data-apps='{{ targets.app | tojson }}'
-                  data-rtypes='{{ targets.resource_type | tojson }}'
-                  data-resources='{{ targets.resource | tojson }}'>
-          </select>
-        </label>
+        <div class="stack mt-3" id="assistant-target-wrap" hidden>
+          <label class="text-sm" for="assistant-rtype" id="assistant-rtype-wrap" hidden>Resource type
+            <select id="assistant-rtype" class="assistant-select">
+              {% for t in targets.resource_type %}
+              <option value="{{ t.value }}"{% if t.value == resource_type %} selected{% endif %}>{{ t.label }}</option>
+              {% endfor %}
+            </select>
+          </label>
+          <label class="text-sm" for="assistant-target-search" id="assistant-search-wrap" hidden>Find
+            <input type="search" id="assistant-target-search" class="assistant-select" placeholder="Filter resources…" autocomplete="off">
+          </label>
+          <label class="text-sm" for="assistant-target"><span id="assistant-target-label">Target</span>
+            <select id="assistant-target" class="assistant-select"
+                    data-apps='{{ targets.app | tojson }}'
+                    data-rtypes='{{ targets.resource_type | tojson }}'
+                    data-resources='{{ targets.resource | tojson }}'>
+            </select>
+          </label>
+        </div>
       </div>
-    </section>
+    </details>
 
-    <section class="card assistant-prompts-card">
-      <h2 class="text-md">Suggested questions</h2>
-      <p class="muted text-xs mt-0">Templates — click to edit in the box, then Enter to send. Shift+Enter for a new line. If you see <code>[app]</code>, replace it before sending.</p>
-      <div class="stack-sm" id="assistant-prompts">
-        {% for p in prompts %}
-        <button type="button" class="assistant-prompt" data-prompt-id="{{ p.id }}" data-text="{{ p.text }}" title="{{ p.description or p.text }}"><span class="assistant-prompt-label">{{ p.label }}</span>{% if p.description %}<span class="assistant-prompt-desc">{{ p.description }}</span>{% endif %}</button>
-        {% else %}
-        <div class="muted text-sm">No suggestions for this scope.</div>
-        {% endfor %}
+    <details class="section assistant-prompts-card" id="assistant-prompts-section" data-remember open>
+      <summary><h2>Suggested questions</h2></summary>
+      <div class="section-body">
+        <p class="muted text-xs mt-0">Templates — click to edit in the box, then Enter to send. Shift+Enter for a new line. If you see <code>[app]</code>, replace it before sending.</p>
+        <div class="stack-sm" id="assistant-prompts">
+          {% for p in prompts %}
+          <button type="button" class="assistant-prompt" data-prompt-id="{{ p.id }}" data-text="{{ p.text }}" title="{{ p.description or p.text }}"><span class="assistant-prompt-label">{{ p.label }}</span>{% if p.description %}<span class="assistant-prompt-desc">{{ p.description }}</span>{% endif %}</button>
+          {% else %}
+          <div class="muted text-sm">No suggestions for this scope.</div>
+          {% endfor %}
+        </div>
       </div>
-    </section>
+    </details>
 
-    <section class="card assistant-history">
-      <h2 class="text-md">Recent conversations</h2>
-      <ul class="assistant-conv-list" id="assistant-conversations">
-        {% for c in conversations %}
-        <li class="assistant-conv{% if conversation and c.get('id') == conversation.get('id') %} is-active{% endif %}">
-          <a href="/assistant?conversation={{ c.get('id') }}" class="assistant-conv-link">
-            <span class="assistant-conv-title">{{ c.get('title') }}</span>
-            <span class="muted text-xs">{{ c.get('scope') }}{% if c.get('target') %} · {{ c.get('target') }}{% endif %} · <span class="dt">{{ relative_dt(c.get('updated_at')) }}</span></span>
-          </a>
-          <form method="post" action="/assistant/conversations/{{ c.get('id') }}/delete" class="inline-form" data-submit-guard="…">
-            <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <button type="submit" class="link-button danger" data-confirm="Delete this conversation?" aria-label="Delete conversation">delete</button>
-          </form>
-        </li>
-        {% else %}
-        <li class="muted text-sm" id="assistant-no-conversations">No conversations yet. Ask a question or pick a suggestion to start.</li>
-        {% endfor %}
-      </ul>
-    </section>
+    <details class="section assistant-history" id="assistant-history-section" data-remember open>
+      <summary><h2>Recent conversations</h2></summary>
+      <div class="section-body">
+        <ul class="assistant-conv-list" id="assistant-conversations">
+          {% for c in conversations %}
+          <li class="assistant-conv{% if conversation and c.get('id') == conversation.get('id') %} is-active{% endif %}">
+            <a href="/assistant?conversation={{ c.get('id') }}" class="assistant-conv-link">
+              <span class="assistant-conv-title">{{ c.get('title') }}</span>
+              <span class="muted text-xs">{{ c.get('scope') }}{% if c.get('target') %} · {{ c.get('target') }}{% endif %} · <span class="dt">{{ relative_dt(c.get('updated_at')) }}</span></span>
+            </a>
+            <form method="post" action="/assistant/conversations/{{ c.get('id') }}/delete" class="inline-form" data-submit-guard="…">
+              <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+              <button type="submit" class="link-button danger" data-confirm="Delete this conversation?" aria-label="Delete conversation">delete</button>
+            </form>
+          </li>
+          {% else %}
+          <li class="muted text-sm" id="assistant-no-conversations">No conversations yet. Ask a question or pick a suggestion to start.</li>
+          {% endfor %}
+        </ul>
+      </div>
+    </details>
   </aside>
 
   <section class="card assistant-main">

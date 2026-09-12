@@ -107,6 +107,12 @@ def dashboard(
             shared_sql += " AND r.last_seen = ? AND ap.last_seen = ?"
             shared_params = (latest, latest)
         shared_count = _rows(q(conn, shared_sql, shared_params))[0]["n"]
+        # The tile drills into the resource type holding the most shared rows.
+        top_sql = shared_sql.replace(
+            "SELECT COUNT(DISTINCT a.resource_id) AS n", "SELECT r.type AS type, COUNT(DISTINCT a.resource_id) AS n"
+        ) + " GROUP BY r.type ORDER BY n DESC, r.type LIMIT 1"
+        top_rows = _rows(q(conn, top_sql, shared_params))
+        shared_top_type = top_rows[0]["type"] if top_rows else "volume"
 
         orphan_actionable = _actionable_orphan_count(conn, latest)
         recent_scans = _rows(
@@ -133,6 +139,7 @@ def dashboard(
         "running": len(running_jobs),
         "orphan_candidates": orphan_actionable,
         "shared_resources": shared_count,
+        "shared_top_type": shared_top_type,
         "uncertain_mappings": uncertain_count,
         "disk_usage_bytes": disk_usage_bytes,
         "reclaimable_bytes": _reclaimable_bytes(),

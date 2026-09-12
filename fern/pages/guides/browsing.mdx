@@ -61,19 +61,21 @@ pill next to the heading shows the total. Click any application name to open its
 [detail page](#the-application-detail-page).
 
 <Frame caption="The Applications list, filtered to a single app. Each row shows status, kind, domains, ports, resource count, warnings, and whether the app is protected.">
-  <img src="../../assets/03-apps-list.png" alt="Applications list filtered to deldemo" />
+  <img src="../../assets/03-apps-list.png" alt="Applications list" />
 </Frame>
 
-Columns: **Name** (with the slug beneath — click the slug to copy it), **Status**,
-**Kind**, **Installed** (best available install-time signal: Docker container
-`Created`, project directory age, or when DEL first discovered the app — shown in
-Eastern time as compact `MM-DD-YY H:MM AM/PM`), **Domains**
-(each a clickable link to the site), **Host ports**, **Resources** (count),
-**Warnings** (an amber badge when non-zero), and **Protected** (a blue badge for apps
-DEL will refuse to remove, such as DEL itself).
+Columns: **Name** (with the slug beneath — click the slug to copy it; protected
+apps, such as DEL itself, carry a blue shield **protected** badge right in this
+cell), **Status**, **Kind**, **Installed** (best available install-time signal:
+Docker container `Created`, project directory age, or when DEL first discovered
+the app — shown in Eastern time as compact `MM-DD-YY H:MM AM/PM`), **Domains**
+(each a clickable link to the site), **Host ports**, **Resources** (count), and
+**Warnings** (an amber badge when non-zero, linking straight to that app's
+Readiness tab).
 
-Page actions sit in a header group next to the title: **Show removed too** /
-**Show live only** (or `?show=removed`) and **Export CSV** (currently filtered rows).
+Page actions sit in a header group next to the title: **Show removed too** — a
+toggle chip (`?show=removed`) that adds an "including removed" badge once
+active — and **Export CSV** (currently filtered rows).
 
 <Callout intent="info">
   By default, **Applications** only shows apps present in the **latest completed
@@ -90,11 +92,12 @@ Page actions sit in a header group next to the title: **Show removed too** /
 
 The header has two controls that work on every page:
 
-- **Theme toggle** (the half-circle icon) switches between dark (the default) and
-  light. Your choice is saved in this browser's local storage (`del.theme`) and
-  restored on the next visit; if you've never toggled it, DEL follows your OS/browser
-  `prefers-color-scheme`. A small script (`/static/theme-init.js`) sets the theme
-  before the page paints, so there's no flash of the wrong theme on load.
+- **Theme toggle** (the half-circle icon) switches between dark and light. Your
+  choice is saved in this browser's local storage (`del.theme`) and restored on
+  the next visit; if you've never toggled it, DEL follows your OS/browser
+  `prefers-color-scheme`, and falls back to dark if that can't be read either.
+  A small script (`/static/theme-init.js`) sets the theme before the page
+  paints, so there's no flash of the wrong theme on load.
 - **Search** (or press **`Ctrl`+`K`** / **`Cmd`+`K`** anywhere) opens the command
   palette: type to fuzzy-filter **Pages** (every sidebar link) and **Apps** (fetched
   from `GET /palette.json`). Arrow keys move the selection, **Enter** opens it,
@@ -125,11 +128,12 @@ status line. Vanilla also adds density (compact/comfortable) and, below 900px,
 
 ## The Resources view
 
-**Resources** shows every discovered resource, split into a **tab bar** by type.
-Each tab's count pill tells you how many of that type exist.
+**Resources** shows every discovered resource, split by type into a grouped
+sub-navigation — **Docker**, **Web & services**, and **Files** — with a count
+pill next to each type link.
 
-<Frame caption="The Resources view on the Volumes tab. Note the tab bar with per-type counts, the orphan badges, and the owner column.">
-  <img src="../../assets/11-resources-volume.png" alt="Resources volumes tab" />
+<Frame caption="The Resources view on the Volumes type. Note the grouped sub-navigation with per-type counts, the orphan badges, and the owner column.">
+  <img src="../../assets/11-resources-volume.png" alt="Resources volumes view" />
 </Frame>
 
 The columns are tailored per type — for example volumes show mountpoint, containers
@@ -143,6 +147,12 @@ common to almost every type:
   current owner** — a row can still have possible/weak claims and appear there.
 - **Shared** — amber **shared** badge: used by more than one app. Removing one owner
   must not delete that resource.
+
+Visiting a type with `?filter=shared`, `?filter=dangling`, or `?filter=unassigned`
+(as the dashboard's tiles do) pre-filters the rows server-side and shows a
+"Filtered:" callout with a link back to the unfiltered view; for `shared` it also
+lists a chip per type with a shared count. Any other `?filter=` value just
+pre-fills the quick filter instead.
 
 ## The Application detail page
 
@@ -175,11 +185,12 @@ For each associated resource you see:
 - an **Actions** cell with **approve**, **exclude**, and **mark shared** — see
   [approving resources](#approving-and-excluding-resources).
 
-The detail **action bar** groups: **Remove app now (skips review)** (live complete
-removal behind one confirm; shared resources are kept), **Plan removal first…**
-(step-by-step [plan](/guides/removing-an-application)), **Edit manifest**, and
-**Ask the assistant**. Protected or already-removed apps show a disabled **Remove
-app now** instead of the live/plan pair.
+The detail **action bar** groups: **Plan removal** (primary button; step-by-step
+[plan](/guides/removing-an-application)), **Remove app now (skips review)** (a
+quieter outlined danger button — live complete removal behind one confirm; shared
+resources are kept — with a note explaining the difference from Plan removal),
+**Edit manifest**, and **Ask the assistant**. Protected or already-removed apps
+hide the live/plan pair entirely.
 
 The **Readiness** tab lists every association for the app in one flat,
 sortable/filterable table — the same Confidence/Risk/Removal columns as the other

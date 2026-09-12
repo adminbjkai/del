@@ -569,10 +569,48 @@ def test_resources_singular_type_renders(authed_client, settings_env):
     assert resp.status_code == 200
     assert "data-enhanced" in resp.text
     assert "mycontainer" in resp.text
-    # tab bar exposes every resource type with counts
-    assert 'class="tabbar"' in resp.text
+    # grouped nav exposes every resource type with counts
+    assert 'class="subnav"' in resp.text
     assert "/resources/systemd_timer" in resp.text
     assert "/resources/nginx_site" in resp.text
+
+
+def test_resources_server_filters_match_dashboard_definitions(authed_client, settings_env):
+    """?filter=shared|dangling|unassigned are applied server-side so the
+    dashboard tile drill-downs show exactly the rows the tiles count."""
+    from del_app.db import get_db, x
+
+    conn = get_db()
+    try:
+        scan = x(conn, "INSERT INTO scans (status) VALUES ('done')")
+        a1 = x(conn, "INSERT INTO applications (slug, name, status, kind, last_seen) VALUES ('one','One','running','compose',?)", (scan,))
+        a2 = x(conn, "INSERT INTO applications (slug, name, status, kind, last_seen) VALUES ('two','Two','running','compose',?)", (scan,))
+        shared_vol = x(conn, "INSERT INTO resources (type, key, display, data_json, last_seen) VALUES ('volume','sharedvol','sharedvol','{}',?)", (scan,))
+        own_vol = x(conn, "INSERT INTO resources (type, key, display, data_json, last_seen) VALUES ('volume','ownvol','ownvol','{}',?)", (scan,))
+        x(conn, "INSERT INTO resources (type, key, display, data_json, last_seen) VALUES ('volume','lonevol','lonevol','{}',?)", (scan,))
+        x(conn, "INSERT INTO resources (type, key, display, data_json, last_seen) VALUES ('image','sha256:aa','dangler','{\"dangling\": true}',?)", (scan,))
+        x(conn, "INSERT INTO resources (type, key, display, data_json, last_seen) VALUES ('image','sha256:bb','tagged:1','{\"dangling\": false}',?)", (scan,))
+        for app_id in (a1, a2):
+            x(conn, "INSERT INTO associations (app_id, resource_id, confidence, ownership, shared) VALUES (?,?,90,'shared',1)", (app_id, shared_vol))
+        x(conn, "INSERT INTO associations (app_id, resource_id, confidence, ownership, shared) VALUES (?,?,90,'exclusive',0)", (a1, own_vol))
+    finally:
+        conn.close()
+
+    shared = authed_client.get("/resources/volume?filter=shared").text
+    assert "sharedvol" in shared and "ownvol" not in shared and "lonevol" not in shared
+    assert "Filtered: shared" in shared
+    assert "/resources/volume?filter=shared" in shared  # per-type drill-down chip
+
+    dangling = authed_client.get("/resources/image?filter=dangling").text
+    assert "dangler" in dangling and "tagged:1" not in dangling
+    assert 'data-prefill="dangling"' not in dangling
+
+    unassigned = authed_client.get("/resources/volume?filter=unassigned").text
+    assert "lonevol" in unassigned and "sharedvol" not in unassigned
+
+    # Unknown values stay a client-side quick-filter prefill.
+    free = authed_client.get("/resources/volume?filter=own").text
+    assert 'data-prefill="own"' in free and "sharedvol" in free
 
 
 def test_resources_plural_type_does_not_empty(authed_client, settings_env):
@@ -1874,6 +1912,43 @@ def test_plan_html_shows_confirm_phrase_when_volume_rm_step_present(authed_clien
     resp = authed_client.get("/plans/56")
     assert resp.status_code == 200
     assert 'id="confirm-phrase"' in resp.text
+
+
+def test_plan_view_lists_jobs_that_ran_it(authed_client, monkeypatch, settings_env):
+    """plans.status is written once as 'draft' and never updated (planner.py);
+    the plan page must derive an accurate run label from its jobs instead of
+    showing 'draft' forever after a job has already run it live."""
+    from del_app.db import get_db, x
+
+    conn = get_db()
+    try:
+        app_id = _insert_app(conn, "ranapp", "Ran App")
+        plan_id = x(
+            conn, "INSERT INTO plans (app_id, steps_json) VALUES (?, '[]')", (app_id,)
+        )
+        job_id = x(
+            conn,
+            "INSERT INTO jobs (plan_id, mode, status) VALUES (?, 'live', 'success')",
+            (plan_id,),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    step = _FakePlanStep(seq=1, stage="remove_runtime", operation="container_rm")
+    fake_plan = _FakePlan(id=plan_id, app_slug="ranapp", steps=[step])
+
+    class _FakePlanner:
+        def load_plan(self, plan_id):
+            return fake_plan, "abc", "abc"
+
+    monkeypatch.setattr(plans_jobs, "planner", _FakePlanner())
+
+    resp = authed_client.get(f"/plans/{plan_id}")
+    assert resp.status_code == 200
+    assert f"Job #{job_id}" in resp.text
+    assert "ran live" in resp.text
+    assert "already ran live" in resp.text
 
 
 def test_app_detail_hides_remove_button_when_app_is_stale(authed_client, settings_env):

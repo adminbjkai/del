@@ -5,7 +5,6 @@
 <div class="page-header">
   <h1>Orphan candidates <span class="count-pill">{{ total }}</span></h1>
   <div class="page-actions">
-    <span class="muted text-sm">Filter / ask</span>
     {% if show_all %}
       <a class="btn btn-sm btn-ghost" href="/orphans">Actionable only</a>
       <span class="badge badge-amber">showing all unassociated</span>
@@ -18,70 +17,117 @@
   </div>
 </div>
 
-<p class="page-lede">Name relatedness here is no probable owner (≥60) — review-only, no delete. Possible/weak claims may still exist. Shared and probable owners live on Apps and Resources. Unassigned chips mean no association rows, which is stricter than this page.</p>
+<p class="page-lede">Name relatedness here is no probable owner (≥60). Possible/weak claims may still exist; shared and probable owners live on Apps and Resources. Unassigned chips mean no association rows at all, which is stricter than this page.</p>
+<div class="callout callout-info">
+  <span class="callout-title">Review only</span>
+  Nothing on this page can be deleted from here — decide per app on its own page.
+</div>
+
+<div class="stat-grid">
+  <a class="stat-card{% if not show_all %} is-warn{% endif %}" href="/orphans">
+    <span class="stat-value">{{ counts.get('actionable', 0) }}</span>
+    <span class="stat-label">Actionable</span>
+    <span class="stat-hint">Real review/cleanup candidates</span>
+  </a>
+  <a class="stat-card" href="/orphans?show=all">
+    <span class="stat-value">{{ counts.get('system', 0) }}</span>
+    <span class="stat-label">System</span>
+    <span class="stat-hint">OS/vendor infrastructure, not abandoned apps</span>
+  </a>
+  <a class="stat-card" href="/orphans?show=all">
+    <span class="stat-value">{{ counts.get('expected', 0) }}</span>
+    <span class="stat-label">Expected</span>
+    <span class="stat-hint">Known non-orphan situations, e.g. still declared by compose</span>
+  </a>
+  <span class="stat-card" title="No association rows at all — stricter and broader than the buckets above">
+    <span class="stat-value">{{ unfiltered_total }}</span>
+    <span class="stat-label">Unassociated</span>
+    <span class="stat-hint">Total resources with no owner rows</span>
+  </span>
+</div>
+
 <div class="legend-row" aria-label="How rows relate">
   <span class="chip" title="More than one current application owns it">shared = 2+ current apps</span>
   <span class="chip" title="Confidence ≥ 60 counts as an owner">probable = strong owner</span>
   <span class="chip" title="Confidence 30–59; review, do not treat as owner">possible = weak</span>
   <span class="chip" title="No probable (≥60) current owner; review-only, no delete. Unassigned chips are no association rows.">no probable owner → Orphans</span>
 </div>
-<p class="muted">Actionable {{ counts.get('actionable', 0) }} · System {{ counts.get('system', 0) }} · Expected {{ counts.get('expected', 0) }} · unassociated {{ unfiltered_total }}.</p>
+
+{% if grouped %}
+<nav class="jump-nav" aria-label="Jump to resource type">
+  {% for t in type_summary %}
+    {% if t.count > 0 %}
+      <a href="#orphan-{{ t.type }}">{{ t.label }}<span class="count-pill">{{ t.count }}</span></a>
+    {% else %}
+      <span class="is-empty">{{ t.label }}<span class="count-pill">0</span></span>
+    {% endif %}
+  {% endfor %}
+</nav>
+
+<div class="cluster mb-3">
+  <button type="button" class="btn btn-sm btn-ghost" data-expand-all="open">Expand all</button>
+  <button type="button" class="btn btn-sm btn-ghost" data-expand-all="close">Collapse all</button>
+</div>
+{% endif %}
 
 {% for g in grouped %}
-<section class="panel">
-  <div class="page-header">
-    <h2><a href="/resources/{{ g.type }}">{{ g.label }}</a> <span class="count-pill">{{ g.rows | length }}</span></h2>
-    <div class="page-actions">
+<details class="section" id="orphan-{{ g.type }}" data-remember{% if loop.index <= 2 %} open{% endif %}>
+  <summary>
+    <h2><a href="/resources/{{ g.type }}">{{ g.label }}</a></h2>
+    <span class="count-pill">{{ g.rows | length }}</span>
+    <span class="section-hint">{{ g.explainer }}</span>
+    <span class="section-aside">
       <button type="button" class="btn btn-sm btn-ghost" data-export-table="orphans-{{ g.type }}-table" title="Export the currently filtered rows as CSV">Export CSV</button>
-    </div>
+    </span>
+  </summary>
+  <div class="section-body">
+    <table id="orphans-{{ g.type }}-table" class="table" data-enhanced data-empty="No orphaned {{ g.label|lower }} in this view. Primary: run a scan. Secondary: show system and expected too." data-page-size="25">
+      <caption class="sr-only">Unassociated {{ g.label|lower }} from the latest scan, with why each one is listed.</caption>
+      <thead>
+        <tr>
+          <th scope="col">Display</th>
+          <th scope="col">Key</th>
+          <th scope="col">Path</th>
+          <th scope="col">State</th>
+          <th scope="col">Class</th>
+          <th scope="col">Why listed</th>
+          {% if g.type in ('container', 'image', 'volume', 'network') and assistant_enabled() %}
+          <th scope="col" data-nosort>Ask</th>
+          {% endif %}
+        </tr>
+      </thead>
+      <tbody>
+        {% for r in g.rows %}
+        <tr class="{% if r.bucket == 'system' %}row-muted{% elif r.bucket == 'expected' %}{% endif %}">
+          <td>
+            {% if g.type in ('volume', 'image', 'container', 'network') %}
+              <a href="/resources/{{ g.type }}">{{ r.display or r.key }}</a>
+            {% else %}
+              {{ r.display or r.key }}
+            {% endif %}
+          </td>
+          <td>{{ m.trunc(r.key) }}</td>
+          <td>{{ m.trunc(r.path, 50) }}</td>
+          <td data-filter-value="{{ r.state }}"><span class="badge">{{ r.state or '—' }}</span></td>
+          <td data-filter-value="{{ r.bucket_label }}">
+            {% if r.bucket == 'actionable' %}
+              <span class="badge badge-amber">{{ r.bucket_label }}</span>
+            {% elif r.bucket == 'system' %}
+              <span class="badge">{{ r.bucket_label }}</span>
+            {% else %}
+              <span class="badge badge-grey">{{ r.bucket_label }}</span>
+            {% endif %}
+          </td>
+          <td class="muted text-sm">{{ r.reason }}</td>
+          {% if g.type in ('container', 'image', 'volume', 'network') and assistant_enabled() %}
+          {{ m.ask_link(g.type, r.key) }}
+          {% endif %}
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
   </div>
-  <p class="muted">{{ g.explainer }}</p>
-  <table id="orphans-{{ g.type }}-table" class="table" data-enhanced data-empty="No orphaned {{ g.label|lower }} in this view. Primary: run a scan. Secondary: show system and expected too." data-page-size="25">
-    <caption class="sr-only">Unassociated {{ g.label|lower }} from the latest scan, with why each one is listed.</caption>
-    <thead>
-      <tr>
-        <th scope="col">Display</th>
-        <th scope="col">Key</th>
-        <th scope="col">Path</th>
-        <th scope="col">State</th>
-        <th scope="col">Class</th>
-        <th scope="col">Why listed</th>
-        {% if g.type in ('container', 'image', 'volume', 'network') and assistant_enabled() %}
-        <th scope="col" data-nosort>Ask</th>
-        {% endif %}
-      </tr>
-    </thead>
-    <tbody>
-      {% for r in g.rows %}
-      <tr class="{% if r.bucket == 'system' %}row-muted{% elif r.bucket == 'expected' %}{% endif %}">
-        <td>
-          {% if g.type in ('volume', 'image', 'container', 'network') %}
-            <a href="/resources/{{ g.type }}">{{ r.display or r.key }}</a>
-          {% else %}
-            {{ r.display or r.key }}
-          {% endif %}
-        </td>
-        <td>{{ m.trunc(r.key) }}</td>
-        <td>{{ m.trunc(r.path, 50) }}</td>
-        <td data-filter-value="{{ r.state }}"><span class="badge">{{ r.state or '—' }}</span></td>
-        <td data-filter-value="{{ r.bucket_label }}">
-          {% if r.bucket == 'actionable' %}
-            <span class="badge badge-amber">{{ r.bucket_label }}</span>
-          {% elif r.bucket == 'system' %}
-            <span class="badge">{{ r.bucket_label }}</span>
-          {% else %}
-            <span class="badge badge-grey">{{ r.bucket_label }}</span>
-          {% endif %}
-        </td>
-        <td class="muted text-sm">{{ r.reason }}</td>
-        {% if g.type in ('container', 'image', 'volume', 'network') and assistant_enabled() %}
-        {{ m.ask_link(g.type, r.key) }}
-        {% endif %}
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</section>
+</details>
 {% else %}
 <p class="muted">
   {% if show_all %}

@@ -19,7 +19,8 @@ change DEL inventory or removal data. Card icons are proxied through DEL's own
 `/app-icon/{domain}` route rather than loaded from each app's origin, so an app
 behind HTTP basic auth cannot pop a credential prompt over the gallery.
 
-The admin UI itself defaults to a dark theme with a header toggle for light mode
+The admin UI's theme follows `localStorage["del.theme"]` if set, else the OS
+`prefers-color-scheme`, else dark, with a header toggle for light/dark
 (persisted in browser local storage) and a `Ctrl`/`Cmd`+`K` command palette for
 jumping to any sidebar page or application.
 
@@ -121,4 +122,4 @@ above is intentional audit history, not stale content — leave it as-is.
 cd /apps/del/backend && ../.venv/bin/python -m pytest ../tests/ -q
 ```
 
-337 passed, 1 skipped as of this writing.
+339 passed, 1 skipped as of this writing.

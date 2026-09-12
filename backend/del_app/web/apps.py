@@ -10,10 +10,30 @@ from del_app import auditlog, auth
 from del_app.auth import User
 from del_app.db import get_db, q
 from del_app.web.formatting import _installed_at_from_resources, _level
-from del_app.web.queries import _json_or, _latest_scan_id, _rows, _scan_started_map
+from del_app.web.queries import (
+    RESOURCE_TYPE_LABELS,
+    _json_or,
+    _latest_scan_id,
+    _owner_map,
+    _rows,
+    _scan_started_map,
+)
 from del_app.web.render import _render, _require_csrf, _csrf_response
 
 router = APIRouter()
+
+# Maps each association's resource_type to the app-detail tab that lists it,
+# so "Resources by type" on Overview can link straight to the right tab
+# (mirrors the section_defs grouping in app_detail.html).
+_TYPE_TO_SECTION = {
+    "container": "docker", "image": "docker", "volume": "docker",
+    "network": "docker", "compose_project": "docker",
+    "systemd_unit": "systemd", "systemd_timer": "systemd",
+    "nginx_site": "nginx",
+    "cron_entry": "scheduled",
+    "process": "processes", "port": "processes", "tmux_session": "processes",
+    "directory": "files", "git_repo": "files", "bind_mount": "files", "env_file": "files",
+}
 
 # Sidebar nav entries surfaced by the command palette. Kept in one place so
 # a page rename here does not silently fall out of sync with the sidebar.
@@ -209,6 +229,11 @@ def app_detail(
             assoc_sql += " AND r.last_seen = ?"
             assoc_params = (slug, assoc_scan)
         assoc_rows = _rows(q(conn, assoc_sql, assoc_params))
+        # Every other app (if any) that also holds a non-excluded association
+        # to one of this app's resources — used for the shared-resource
+        # callout's "other apps" links and the Overview "Related apps" list.
+        resource_ids = [a["resource_id"] for a in assoc_rows if a.get("resource_id") is not None]
+        owner_map = _owner_map(conn, resource_ids)
     finally:
         conn.close()
 
@@ -217,6 +242,33 @@ def app_detail(
         a["level"] = _level(a.get("confidence"), a.get("source"))
         a["resource_data"] = _json_or(a.get("resource_data_json"), {})
         a["port_mappings"] = a["resource_data"].get("port_mappings") if a.get("resource_type") == "container" else None
+        entry = owner_map.get(a.get("resource_id")) or {"apps": []}
+        a["co_owners"] = [o for o in entry["apps"] if o["slug"] != slug]
+
+    related_apps_map: dict[str, str] = {}
+    type_counts: dict[str, int] = {}
+    for a in assoc_rows:
+        for o in a["co_owners"]:
+            related_apps_map.setdefault(o["slug"], o["name"])
+        rt = a.get("resource_type")
+        if rt:
+            type_counts[rt] = type_counts.get(rt, 0) + 1
+    related_apps = sorted(
+        ({"slug": s, "name": n} for s, n in related_apps_map.items()),
+        key=lambda x: x["name"],
+    )
+    resources_by_type = sorted(
+        (
+            {
+                "type": rt,
+                "label": RESOURCE_TYPE_LABELS.get(rt, rt),
+                "count": cnt,
+                "section": _TYPE_TO_SECTION.get(rt),
+            }
+            for rt, cnt in type_counts.items()
+        ),
+        key=lambda r: r["label"],
+    )
 
     sections = {
         "docker": [a for a in assoc_rows if a.get("resource_type") in ("container", "image", "volume", "network", "compose_project")],
@@ -267,6 +319,8 @@ def app_detail(
         app=app,
         associations=assoc_rows,
         sections=sections,
+        related_apps=related_apps,
+        resources_by_type=resources_by_type,
         removed=bool(latest_scan and app.get("last_seen") is not None and app["last_seen"] < latest_scan),
     )
 

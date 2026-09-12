@@ -278,8 +278,8 @@ The new JSON-POST + `X-CSRF-Token` convention is documented in `SECURITY.md`
   Help is the glossary; Ask embeds `_assistant_dock.html` except on `/assistant`
   itself (full page there). Page-scoped defaults come from the current route
   (app, orphans, resource type/row). Mobile **Ask** FAB opens the rail.
-- Sidebar nav entry "Assistant" (after Orphans), palette page entry, glossary
-  context `assistant`.
+- Sidebar nav entry "Assistant" in the **Help** group (with Docs), palette page
+  entry, glossary context `assistant`.
 - `/assistant` layout: left column (scope chips: General / Application / Orphans /
   Resource type / Resource; target select shown for the scoped modes, resource
   mode has a type select then a searchable resource select; prompt cards for the

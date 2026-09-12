@@ -2,18 +2,49 @@
 {% block title %}Removal plan{% endblock %}
 {% block content %}
 {% if plan %}
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="/apps">Applications</a><span class="sep">›</span>
+    <a href="/apps/{{ app.get('slug') }}">{{ app.get('name', app.get('slug')) }}</a><span class="sep">›</span>
+    <span aria-current="page">Plan #{{ plan.get('id') }}</span>
+  </nav>
   <div class="page-header">
-    <h1>Plan #{{ plan.get('id') }} · {{ app.get('name', app.get('slug')) }}</h1>
+    <h1>Plan #{{ plan.get('id') }} <span class="muted">· {{ app.get('name', app.get('slug')) }}</span></h1>
   </div>
-  <p class="muted">status: <span class="badge status-{{ plan.get('status') }}">{{ plan.get('status') }}</span> · created <span class="dt">{{ format_dt(plan.get('created')) }}</span></p>
+  <div class="meta-row">
+    <span class="meta"><span class="meta-k">Status</span> <span class="meta-v"><span class="badge {{ plan_run_class or ('status-' ~ plan.get('status')) }}">{{ plan_run_label or plan.get('status') }}</span></span></span>
+    <span class="meta"><span class="meta-k">Created</span> <span class="meta-v dt">{{ format_dt(plan.get('created')) }}</span></span>
+    <span class="meta"><span class="meta-k">Steps</span> <span class="meta-v">{{ plan.get('steps', [])|length }}</span></span>
+    <span class="meta"><span class="meta-k">Estimated reclaim</span> <span class="meta-v">{{ plan.get('est_reclaim_bytes', 0) }} bytes</span></span>
+  </div>
   <p class="page-lede">Review steps, then execute dry-run first. LIVE runs real deletions. Shared = more than one current app, so those resources stay preserved. Protected apps cannot reach a plan.</p>
 
-  <section class="panel box-danger">
+  {% if latest_live_job and latest_live_job.get('status') == 'success' %}
+  <div class="callout callout-info">
+    This plan already ran live (job #{{ latest_live_job.get('id') }}, {{ latest_live_job.get('status') }}).
+    See <a href="/jobs/{{ latest_live_job.get('id') }}">the job</a> for what was removed.
+  </div>
+  {% endif %}
+
+  <section class="panel execute-panel">
     <h2>Execute</h2>
     <form method="post" action="/plans/{{ plan.get('id') }}/execute" id="execute-form" class="stacked-form" data-submit-guard="Executing…" data-has-volume-deletion="{{ 'true' if plan.get('has_volume_deletion') else 'false' }}">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <label><input type="radio" name="mode" value="dry_run" checked> Dry run — simulate every step and show what would happen, without changing anything on the server.</label>
-      <label><input type="radio" name="mode" value="live" id="mode-live"> Live — actually run every step, including permanent deletions. Some steps cannot be undone.</label>
+      <div class="stack">
+        <label class="choice">
+          <input type="radio" name="mode" value="dry_run" checked>
+          <span>
+            <span class="choice-title">Dry run</span>
+            <span class="choice-desc">Simulate every step and show what would happen, without changing anything on the server.</span>
+          </span>
+        </label>
+        <label class="choice">
+          <input type="radio" name="mode" value="live" id="mode-live">
+          <span>
+            <span class="choice-title">Live</span>
+            <span class="choice-desc">Actually run every step, including permanent deletions. Some steps cannot be undone.</span>
+          </span>
+        </label>
+      </div>
       {% if plan.get('has_volume_deletion') %}
       <div id="live-confirm-box" class="box box-danger" hidden>
         <p id="confirm-phrase-help">This plan permanently deletes one or more named volumes.
@@ -23,100 +54,157 @@
                autocomplete="off" aria-describedby="confirm-phrase-help">
       </div>
       {% endif %}
-      <button type="submit" class="btn btn-danger" id="execute-btn">Execute plan</button>
+      <button type="submit" class="btn btn-primary" id="execute-btn" data-label-dry="Run dry run" data-label-live="Execute live — deletes for real">Run dry run</button>
     </form>
   </section>
 
+  {% if plan_jobs %}
+  <section class="panel">
+    <h2>Runs of this plan <span class="count-pill">{{ plan_jobs | length }}</span></h2>
+    <ul class="relation-list">
+      {% for j in plan_jobs %}
+      <li>
+        <span class="relation-type badge {{ 'badge-danger' if j.get('mode') == 'live' else 'badge-grey' }}">{{ 'LIVE' if j.get('mode') == 'live' else 'dry-run' }}</span>
+        <a class="relation-name" href="/jobs/{{ j.get('id') }}">Job #{{ j.get('id') }}</a>
+        <span class="relation-arrow">→</span>
+        <span class="badge status-{{ j.get('status') }}">{{ j.get('status') }}</span>
+        <span class="relation-aside dt">{{ format_dt(j.get('started')) }}</span>
+      </li>
+      {% endfor %}
+    </ul>
+  </section>
+  {% endif %}
+
   {% if plan.get('warnings') %}
-  <div class="box box-warning">
-    <h3>Warnings</h3>
+  <div class="callout callout-warn">
+    <span class="callout-title">Warnings</span>
     <ul>{% for w in plan.get('warnings') %}<li>{{ w }}</li>{% endfor %}</ul>
   </div>
   {% endif %}
 
   <section class="panel">
-    <h2>Steps to remove ({{ plan.get('steps', [])|length }})</h2>
+    <h2>Steps to remove <span class="count-pill">{{ plan.get('steps', [])|length }}</span></h2>
     {% for stage, steps in plan.get('stages', {}).items() %}
-    <h3>{{ stage }} ({{ steps|length }})</h3>
-    <div class="table-scroll">
-    <table class="table" data-enhanced data-empty="No steps in this stage." data-page-size="50">
-      <caption class="sr-only">Planned {{ stage }} steps with danger level and reversibility.</caption>
-      <thead><tr><th scope="col">#</th><th scope="col">Operation</th><th scope="col">Description</th><th scope="col">Danger</th><th scope="col">Reversible</th></tr></thead>
-      <tbody>
-        {% for s in steps %}
-        <tr class="{% if s.get('danger') == 'data_loss' %}row-danger{% elif s.get('danger') == 'warning' %}row-warning{% endif %}">
-          <td>{{ s.get('seq') }}</td>
-          <td>{{ s.get('operation') }}</td>
-          <td>{{ s.get('description') }}</td>
-          <td><span class="badge badge-danger-{{ s.get('danger') }}">{{ s.get('danger') }}</span></td>
-          <td>{{ 'yes' if s.get('reversible') else 'no' }}</td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    </div>
+    {% set warn_ct = namespace(n=0) %}
+    {% set loss_ct = namespace(n=0) %}
+    {% for s in steps %}
+      {% if s.get('danger') == 'warning' %}{% set warn_ct.n = warn_ct.n + 1 %}{% endif %}
+      {% if s.get('danger') == 'data_loss' %}{% set loss_ct.n = loss_ct.n + 1 %}{% endif %}
+    {% endfor %}
+    {% set danger_parts = [] %}
+    {% if loss_ct.n %}{% set _ = danger_parts.append(loss_ct.n ~ ' data_loss') %}{% endif %}
+    {% if warn_ct.n %}{% set _ = danger_parts.append(warn_ct.n ~ ' warning') %}{% endif %}
+    <details class="section" id="stage-{{ stage }}" data-remember open>
+      <summary>
+        <h3>{{ stage }}</h3>
+        <span class="count-pill">{{ steps|length }}</span>
+        <span class="section-hint">{{ danger_parts | join(' · ') if danger_parts else 'no warnings' }}</span>
+      </summary>
+      <div class="section-body">
+        <div class="table-scroll">
+        <table class="table table-plain">
+          <caption class="sr-only">Planned {{ stage }} steps with danger level and reversibility.</caption>
+          <thead><tr><th scope="col">#</th><th scope="col">Operation</th><th scope="col">Description</th><th scope="col">Danger</th><th scope="col">Reversible</th></tr></thead>
+          <tbody>
+            {% for s in steps %}
+            <tr class="{% if s.get('danger') == 'data_loss' %}row-danger{% elif s.get('danger') == 'warning' %}row-warning{% endif %}">
+              <td>{{ s.get('seq') }}</td>
+              <td>{{ s.get('operation') }}</td>
+              <td>{{ s.get('description') }}</td>
+              <td><span class="badge badge-danger-{{ s.get('danger') }}">{{ s.get('danger') }}</span></td>
+              <td>{{ 'yes' if s.get('reversible') else 'no' }}</td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        </div>
+      </div>
+    </details>
     {% endfor %}
   </section>
 
   {% if plan.get('preserved') %}
-  <div class="box box-info">
-    <h3>Preserved, not removed ({{ plan.get('preserved')|length }})</h3>
+  <div class="callout callout-info">
+    <span class="callout-title">Preserved, not removed ({{ plan.get('preserved')|length }})</span>
+    <p class="muted">Shared with another app, not approved for removal, or unsafe to delete automatically.</p>
     <ul>{% for p in plan.get('preserved') %}<li>{{ p }}</li>{% endfor %}</ul>
   </div>
   {% endif %}
 
   {% if plan.get('manual_followup') %}
-  <div class="box box-info">
-    <h3>Manual follow-up required ({{ plan.get('manual_followup')|length }})</h3>
+  <div class="callout callout-info">
+    <span class="callout-title">Manual follow-up required ({{ plan.get('manual_followup')|length }})</span>
     <ul>{% for m in plan.get('manual_followup') %}<li>{{ m }}</li>{% endfor %}</ul>
   </div>
   {% endif %}
-
-  <p>Estimated reclaim: <strong>{{ plan.get('est_reclaim_bytes', 0) }} bytes</strong></p>
 {% else %}
+  <nav class="crumbs" aria-label="Breadcrumb">
+    <a href="/apps">Applications</a><span class="sep">›</span>
+    <a href="/apps/{{ app.get('slug') }}">{{ app.get('name', app.get('slug')) }}</a><span class="sep">›</span>
+    <span aria-current="page">Build removal plan</span>
+  </nav>
   <div class="page-header">
-    <h1>Build removal plan · {{ app.get('name', app.get('slug')) }}</h1>
+    <h1>Build removal plan <span class="muted">· {{ app.get('name', app.get('slug')) }}</span></h1>
   </div>
   <p class="page-lede">Choose what this app may lose, then build the plan. Shared resources (more than one current app) stay. Protected apps have no plan. Complete removal permanently deletes this app's exclusive data.</p>
   <form method="post" action="/apps/{{ app.get('slug') }}/plan" class="stacked-form" data-submit-guard="Building plan…">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
-    <div class="box box-warning" id="preset-complete-removal-box">
-      <label>
+    <div class="callout callout-warn" id="preset-complete-removal-box">
+      <label class="choice">
         <input type="checkbox" id="preset-complete-removal">
-        <strong>Complete removal (everything)</strong> — one-click selects every
-        removal option below: named volumes (and every per-volume approval),
-        images exclusive to this app, bind-mounted data, the project
-        repository/directory, and app-specific networks (no backup by default).
-        <strong>This permanently deletes all data for this app.</strong>
+        <span>
+          <span class="choice-title">Complete removal (everything)</span>
+          <span class="choice-desc">One click selects every removal option below: named volumes (and every
+          per-volume approval), images exclusive to this app, bind-mounted data, the project
+          repository/directory, and app-specific networks (no backup by default).
+          <strong>This permanently deletes all data for this app.</strong></span>
+        </span>
       </label>
     </div>
 
-    <label><input type="checkbox" name="remove_named_volumes" id="remove-named-volumes"> Remove named volumes</label>
-    <div class="indent" id="volume-approvals">
-      {% for v in volumes %}
-      <label><input type="checkbox" name="approved_volume" class="approved-volume-checkbox" value="{{ v.get('key') }}"> {{ v.get('display') or v.get('key') }}</label>
-      {% else %}
-      <p class="muted">No named volumes discovered for this app.</p>
-      {% endfor %}
-    </div>
+    <fieldset class="builder-group">
+      <legend>Data and files</legend>
+      <label class="choice"><input type="checkbox" name="remove_named_volumes" id="remove-named-volumes">
+        <span><span class="choice-title">Remove named volumes</span>
+        <span class="choice-desc">Deletes the volumes you tick below, plus any already approved on the app page — their data is lost. Every other volume is preserved.</span></span></label>
+      <div class="indent" id="volume-approvals">
+        {% for v in volumes %}
+        <label class="choice choice-sm"><input type="checkbox" name="approved_volume" class="approved-volume-checkbox" value="{{ v.get('key') }}"> <span class="mono">{{ v.get('display') or v.get('key') }}</span></label>
+        {% else %}
+        <p class="muted text-sm">No named volumes discovered for this app.</p>
+        {% endfor %}
+      </div>
+      <label class="choice"><input type="checkbox" name="remove_bind_data" id="remove-bind-data">
+        <span><span class="choice-title">Remove bind-mounted data directories</span>
+        <span class="choice-desc">Host directories mounted into this app's containers.</span></span></label>
+      <label class="choice"><input type="checkbox" name="remove_repo" id="remove-repo">
+        <span><span class="choice-title">Remove project repository / directory</span>
+        <span class="choice-desc">The app's own project directory on the host.</span></span></label>
+    </fieldset>
 
-    <label for="remove_images">Remove images</label>
-    <select name="remove_images" id="remove_images">
-      <option value="none">None</option>
-      <option value="exclusive">Exclusive to this app</option>
-    </select>
+    <fieldset class="builder-group">
+      <legend>Docker objects</legend>
+      <label for="remove_images">Remove images</label>
+      <select name="remove_images" id="remove_images">
+        <option value="none">None</option>
+        <option value="exclusive">Exclusive to this app</option>
+      </select>
+      <label class="choice"><input type="checkbox" name="remove_networks" id="remove-networks" checked>
+        <span><span class="choice-title">Remove app-specific networks</span>
+        <span class="choice-desc">Networks shared with another app, and Docker's default networks, stay.</span></span></label>
+    </fieldset>
 
-    <label><input type="checkbox" name="remove_bind_data" id="remove-bind-data"> Remove bind-mounted data directories</label>
-    <label><input type="checkbox" name="remove_repo" id="remove-repo"> Remove project repository / directory</label>
-    <label><input type="checkbox" name="remove_networks" id="remove-networks" checked> Remove app-specific networks</label>
-
-    <label for="backup">Backup mode</label>
-    <select name="backup" id="backup">
-      <option value="none" selected>None</option>
-      <option value="config">Config only</option>
-      <option value="full">Full (config + volumes)</option>
-    </select>
+    <fieldset class="builder-group">
+      <legend>Safety</legend>
+      <label for="backup">Backup mode</label>
+      <select name="backup" id="backup">
+        <option value="none" selected>None</option>
+        <option value="config">Config only</option>
+        <option value="full">Full (config + volumes)</option>
+      </select>
+      <p class="muted text-sm mb-0">You review every step on the next page and can dry-run before anything is deleted.</p>
+    </fieldset>
 
     <button type="submit" class="btn btn-primary">Build plan</button>
   </form>

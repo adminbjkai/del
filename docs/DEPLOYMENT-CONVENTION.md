@@ -1,6 +1,6 @@
 # Deployment Convention — bjkai-2tb-ubuntu
 
-The house standard for every app on this server (~192 apps and counting). Follow
+The house standard for every app on this server (250+ app directories under `/apps` as of September 2026). Follow
 this for anything new; use it as the reference when auditing anything old. It
 covers both Docker Compose stacks and non-Docker (systemd/cron) services — this
 server runs a lot of both, and they must be tracked the same way.
@@ -399,7 +399,7 @@ DEL preserves anything the app's manifest lists under `shared`, and it refuses
 outright to touch protected roots (`/`, `/etc`, `/apps` itself, `/apps/del`,
 etc.) or to remove a volume/network still referenced by another container. This
 is exactly why keeping the manifest (§8) accurate matters — it's what makes an
-automated decommission for a 192-app server safe instead of terrifying.
+automated decommission for a 250-app server safe instead of terrifying.
 
 ---
 

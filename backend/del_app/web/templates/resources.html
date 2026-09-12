@@ -5,33 +5,88 @@
 {# Per-row "Ask" links exist for the four docker types only (the assistant's
    `resource` scope); computed once so every row shares the decision. #}
 {% set ask_rows = res_type in ('container', 'image', 'volume', 'network') and assistant_enabled() %}
+{# Grouped nav: real type keys/labels/counts come from type_counts (queries.py);
+   these tuples only decide which group each key is shown under. #}
+{% set res_groups = [
+  ('Docker', ['container', 'image', 'volume', 'network', 'compose_project']),
+  ('Web & services', ['nginx_site', 'systemd_unit', 'systemd_timer', 'cron_entry', 'process', 'port', 'tmux_session']),
+  ('Files', ['directory', 'git_repo', 'env_file', 'bind_mount']),
+] %}
+{% set counts_by_type = {} %}
+{% for t in type_counts %}{% set _ = counts_by_type.update({t.type: t}) %}{% endfor %}
+{% set res_explain = {
+  'container': "State/health is Docker's own live status. Owner app(s) comes from name, path and label matching — not from anything the container declares about itself.",
+  'image': "Dangling means untagged and unused by any container. Owner app(s) can still be blank for an in-use image if nothing matched it to an app.",
+  'volume': "The Orphan column here means unused by any current container — a narrower, different check from the Orphans page, which also requires no probable owner.",
+  'network': "Shared marks a network with containers from more than one current app attached to it.",
+  'compose_project': "Services lists the service names declared in the compose file — not all of them may currently be running.",
+  'nginx_site': "Server names link to the live site. SSL only shows whether a certificate is configured, not whether it is currently valid.",
+  'systemd_unit': "Active reflects live systemd state; Owner app(s) is a path/name match, not a systemd property.",
+  'systemd_timer': "Active reflects live systemd state; Exec/target shows what the timer activates.",
+  'cron_entry': "Source shows which crontab or cron.d file this entry came from.",
+  'process': "PID and process name are only as fresh as the latest scan — processes that have since exited will not appear.",
+  'port': "Bind addr and proto describe the listening socket; PID links back to the process that opened it.",
+  'directory': "Dirty means uncommitted changes in a git working tree; a dash means it is not a git repo.",
+  'git_repo': "Dirty means uncommitted changes in the working tree; a dash means status could not be read.",
+  'env_file': "Variable count is the number of keys parsed from the file — values are never read or stored.",
+  'bind_mount': "Source and Destination are the host and container paths joined by this mount.",
+  'tmux_session': "Created is the raw timestamp tmux reports, shown as-is rather than reformatted.",
+} %}
 <div class="page-header">
   <h1>Resources</h1>
   <div class="page-actions">
-    <span class="muted text-sm">Export / ask</span>
     <button type="button" class="btn btn-sm btn-ghost" data-export-table="resources-table" title="Export the currently filtered rows as CSV">Export CSV</button>
     {% if ask_rows %}
     <a class="btn btn-sm btn-ghost" href="/assistant?scope=resource_type&amp;target={{ res_type }}" data-ask-scope="resource_type" data-ask-target="{{ res_type }}" title="Ask the read-only assistant about all {{ res_label | lower }}">Ask the assistant</a>
     {% endif %}
   </div>
 </div>
-<p class="page-lede">Name relatedness for each resource — shared, probable owner (≥60), possible (weak), unassigned (no association rows), or Orphans (no probable owner; review-only, no delete). The volume Orphan column is unused-by-containers, not the Orphans page.</p>
-<div class="legend-row" aria-label="How rows relate">
-  <span class="chip" title="More than one current application owns it">shared = 2+ current apps</span>
-  <span class="chip" title="Confidence ≥ 60 counts as an owner">probable = strong owner</span>
-  <span class="chip" title="Confidence 30–59; review, do not treat as owner">possible = weak</span>
-  <span class="chip" title="No probable (≥60) current owner; review-only, no delete. Unassigned chips are no association rows.">no probable owner → Orphans</span>
-</div>
+<p class="page-lede">Every resource found in the latest scan, matched to the application(s) that own it.</p>
 
-<nav class="tabbar">
-  {% for t in type_counts %}
-  <a href="/resources/{{ t.type }}"{% if t.type == res_type %} class="active"{% endif %}>
-    {{ t.label }}<span class="count-pill">{{ t.count }}</span>
-  </a>
+<nav class="subnav" aria-label="Resource types">
+  {% for group_label, keys in res_groups %}
+  <div class="subnav-group">
+    <span class="subnav-label">{{ group_label }}</span>
+    {% for k in keys %}
+      {% set t = counts_by_type.get(k) %}
+      {% if t %}
+        {% set cls = [] %}
+        {% if t.type == res_type %}{% set _ = cls.append('active') %}{% endif %}
+        {% if t.count == 0 %}{% set _ = cls.append('is-empty') %}{% endif %}
+        <a href="/resources/{{ t.type }}"{% if cls %} class="{{ cls | join(' ') }}"{% endif %}{% if t.type == res_type %} aria-current="page"{% endif %}>{{ t.label }}<span class="count-pill">{{ t.count }}</span></a>
+      {% endif %}
+    {% endfor %}
+  </div>
   {% endfor %}
 </nav>
 
 <h2>{{ res_label }} <span class="count-pill">{{ rows | length }}</span></h2>
+
+{% if active_filter %}
+<div class="callout callout-info" role="status">
+  <span class="callout-title">Filtered: {{ active_filter_label }}</span>
+  Showing {{ rows | length }} of {{ total_rows }} {{ res_label | lower }}. <a href="/resources/{{ res_type }}">Show all {{ res_label | lower }}</a>
+  {% if filter_counts %}
+  <div class="cluster mt-2" aria-label="Shared resources by type">
+    <span class="muted text-sm">Shared, by type:</span>
+    {% for t in filter_counts %}<a class="chip{% if t.type == res_type %} owner-chip{% endif %}" href="/resources/{{ t.type }}?filter=shared">{{ t.label }} · {{ t.count }}</a>{% endfor %}
+  </div>
+  {% endif %}
+</div>
+{% endif %}
+
+<details class="explain">
+  <summary>What do these columns mean?</summary>
+  <div class="explain-body">
+    <p>{{ res_explain.get(res_type, "Columns reflect whatever the scanner recorded for this resource type.") }}</p>
+    <div class="legend-row" aria-label="How rows relate">
+      <span class="chip" title="More than one current application owns it">shared = 2+ current apps</span>
+      <span class="chip" title="Confidence ≥ 60 counts as an owner">probable = strong owner</span>
+      <span class="chip" title="Confidence 30–59; review, do not treat as owner">possible = weak</span>
+      <span class="chip" title="No probable (≥60) current owner; review-only, no delete. Unassigned chips are no association rows.">no probable owner → Orphans</span>
+    </div>
+  </div>
+</details>
 
 {% set empty = "No resources of this type in the latest scan. Primary: run a scan, then return here." %}
 

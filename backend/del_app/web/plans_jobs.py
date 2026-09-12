@@ -217,6 +217,20 @@ def _load_plan_dict(plan_id: int) -> dict | None:
     return row
 
 
+def _plan_run_summary(plan_jobs: list[dict]) -> tuple[str, str, dict | None]:
+    """Derive a human label + badge status class for a plan's run history,
+    since plans.status is written once as 'draft' at build time and never
+    updated (planner.py) — the raw column would otherwise show 'draft' even
+    after a job has already run the plan live to success/failure."""
+    if not plan_jobs:
+        return "not run yet", "status-draft", None
+    live_jobs = [j for j in plan_jobs if j.get("mode") == "live"]
+    if live_jobs:
+        latest_live = live_jobs[0]  # plan_jobs is ordered newest-first
+        return f"ran live · {latest_live.get('status')}", f"status-{latest_live.get('status')}", latest_live
+    return "dry-run only", "status-draft", None
+
+
 @router.get("/plans/{plan_id}", response_class=HTMLResponse)
 def plan_view(
     plan_id: int, request: Request, response: Response, user: User = Depends(auth.require_user)
@@ -227,10 +241,29 @@ def plan_view(
     conn = get_db()
     try:
         app_rows = _rows(q(conn, "SELECT * FROM applications WHERE slug = ?", (plan_row["app_slug"],)))
+        plan_jobs = _rows(
+            q(
+                conn,
+                "SELECT id, mode, status, started, finished FROM jobs WHERE plan_id = ? ORDER BY id DESC",
+                (plan_id,),
+            )
+        )
     finally:
         conn.close()
     app = app_rows[0] if app_rows else {"slug": plan_row["app_slug"], "name": plan_row["app_slug"]}
-    return _render("plan.html", request, response, app=app, volumes=[], plan=plan_row)
+    run_label, run_class, latest_live_job = _plan_run_summary(plan_jobs)
+    return _render(
+        "plan.html",
+        request,
+        response,
+        app=app,
+        volumes=[],
+        plan=plan_row,
+        plan_jobs=plan_jobs,
+        plan_run_label=run_label,
+        plan_run_class=run_class,
+        latest_live_job=latest_live_job,
+    )
 
 
 @router.post("/plans/{plan_id}/execute")

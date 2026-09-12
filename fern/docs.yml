@@ -49,6 +49,8 @@ navigation:
     contents:
       - page: Architecture
         path: ./pages/reference/architecture.mdx
+      - page: UI conventions
+        path: ./pages/reference/ui.mdx
       - page: Security Model
         path: ./pages/reference/security.mdx
       - page: Helper Operations
@@ -60,11 +62,11 @@ navigation:
 
 colors:
   accent-primary:
-    dark: "#5a8dff"
-    light: "#2a61d9"
+    dark: "#8db5c4"
+    light: "#2d5260"
   background:
-    dark: "#131416"
-    light: "#f3f1ed"
+    dark: "#1a1e23"
+    light: "#f3f2ee"
 
 layout:
   searchbar-placement: header

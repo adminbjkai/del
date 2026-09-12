@@ -20,7 +20,7 @@ touch. The example app throughout is a disposable demo called *DEL Demo*.
 
 If your goal is to wipe an application off the host **entirely** and you don't
 need a preview or a dry-run first, the app detail page has a single button for
-exactly this: **Remove app now (skips review)**, next to **Plan removal first…**
+exactly this: **Remove app now (skips review)**, next to **Plan removal**
 in the action bar. For `protected` apps, and for apps no longer present in the
 latest scan, the button is disabled with a note and the plan link is not shown.
 
@@ -185,11 +185,13 @@ manual-follow-up list for you to finish by hand.
       label under a different path, a warning names both apps and paths —
       `compose_down`'s teardown sweep is host-wide by that label, so the
       collision could remove the other app's containers too.
-    - **Steps**, grouped by the six stages (backup → quiesce → remove_runtime →
-      remove_host → remove_files → validate) — those are all the stages there are.
-      Each step shows its operation, a plain-English
-      description, a **Danger** badge (`safe` / `warning` / `data_loss`), and whether
-      it's **reversible**. Data-loss rows are tinted red.
+    - **Steps**, grouped into a collapsible section per stage (backup → quiesce →
+      remove_runtime → remove_host → remove_files → validate) — those are all the
+      stages there are. Each stage's summary line shows a danger count (e.g. "2
+      data_loss · 1 warning", or "no warnings"), and starts open. Each step shows
+      its operation, a plain-English description, a **Danger** badge (`safe` /
+      `warning` / `data_loss`), and whether it's **reversible**. Data-loss rows
+      are tinted red.
     - **Preserved (not removed)** — everything intentionally kept, such as `.env` and
       `.git`.
     - **Manual follow-up required** — anything you'll need to finish by hand.
@@ -202,9 +204,16 @@ manual-follow-up list for you to finish by hand.
 
   <Step title="Dry-run first — always">
     At the bottom of the preview is the **Execute** box. Leave the mode on **Dry run**
-    (the default) and click **Execute plan**. A dry-run walks every stage and records
-    each step *without changing anything on the host* — backups, quiesce, removes, and
-    validation all execute in simulation.
+    (the default) and click **Run dry run** — the button's label and its
+    primary/danger styling both track the selected mode. A dry-run walks every
+    stage and records each step *without changing anything on the host* —
+    backups, quiesce, removes, and validation all execute in simulation.
+
+    The plan page's **Status** is derived from the jobs that have run it, not
+    stored on the plan itself: **not run yet**, **dry-run only**, or
+    **ran live · &lt;job status&gt;**. A **Runs of this plan** list below the
+    Execute box shows every dry-run and live job for this plan, and a callout
+    appears here if the plan already ran live successfully.
 
     Open the resulting job and confirm **every step is `done` (green)** and the status
     is `success`. A dry-run is your last, zero-risk chance to catch a surprise.
@@ -221,10 +230,13 @@ manual-follow-up list for you to finish by hand.
   </Step>
 
   <Step title="Run it live with the typed confirmation">
-    Go back to the plan and, in the **Execute** box, select **Live (irreversible steps
-    will run)**. If the plan deletes any named volume, a red box appears demanding you
-    **type `y`** — this is a second, explicit confirmation on top of the plan option
-    and the per-volume checkbox. Type it, then click **Execute plan**.
+    Go back to the plan and, in the **Execute** box, select **Live**. The execute
+    button relabels itself to **Execute live — deletes for real**. If the plan
+    deletes any named volume, a red box appears demanding you **type `y`** —
+    this is a second, explicit confirmation on top of the plan option and the
+    per-volume checkbox. Type it, then click **Execute live — deletes for
+    real**; only a live run asks for a browser confirmation dialog before
+    submitting.
 
     <Frame caption="Step 6 — the live execute gate: selecting Live reveals the typed y confirmation.">
       <img src="../../assets/09-live-execute-gate.png" alt="Live execute typed-phrase gate" />

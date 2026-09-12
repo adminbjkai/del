@@ -6,69 +6,73 @@
 </div>
 <p class="page-lede">Read-only snapshot of this host’s DEL config. Scanning is on demand (button below). Ask is read-only — it cannot plan or delete.</p>
 
-<section class="panel">
-  <details class="sop-details" open>
-  <summary><h2>Configuration</h2></summary>
-  <dl class="kv">
-    <dt>Port</dt><dd>{{ settings.get('port') }}</dd>
-    <dt>DB path</dt><dd>{{ settings.get('db_path') }}</dd>
-    <dt>Manifests dir</dt><dd>{{ settings.get('manifests_dir') }}</dd>
-    <dt>Backups dir</dt><dd>{{ settings.get('backups_dir') }}</dd>
-    <dt>Scan roots</dt><dd>{{ settings.get('scan_roots', []) | join(', ') }}</dd>
-    <dt>Protected apps</dt><dd>{{ settings.get('protected_apps', []) | join(', ') }}</dd>
-    <dt>Session hours</dt><dd>{{ settings.get('session_hours') }}</dd>
-  </dl>
-  </details>
-</section>
-
-<section class="panel" id="assistant-settings">
-  <h2>Assistant</h2>
-  {% set ast = assistant_status or {} %}
-  <dl class="kv">
-    <dt>Enabled</dt><dd>{% if ast.get('enabled') %}<span class="badge badge-ok">yes</span>{% else %}<span class="badge badge-grey">no</span>{% endif %}</dd>
-    <dt>Configured</dt><dd>{% if ast.get('configured') %}<span class="badge badge-ok">yes</span>{% else %}<span class="badge badge-amber">no</span>{% if ast.get('reason') %} <span class="muted text-sm">{{ ast.get('reason') }}</span>{% endif %}{% endif %}</dd>
-    <dt>Model</dt><dd>{{ ast.get('model') or '—' }}</dd>
-    <dt>Key source</dt><dd>{{ ast.get('key_source') or '—' }}</dd>
-  </dl>
-  <div class="cluster mt-2">
-    <form method="post" action="/assistant/test" data-submit-guard="Testing…">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <button type="submit" class="btn btn-primary"{% if not (ast.get('enabled') and ast.get('configured')) %} disabled title="Configure an API key first"{% endif %}>Test connection</button>
-    </form>
-    <a class="btn" href="/assistant">Open full assistant</a>
+<details class="section" id="settings-config" data-remember open>
+  <summary><h2>Configuration</h2><span class="section-hint">Values loaded from this host’s DEL config file.</span></summary>
+  <div class="section-body">
+    <dl class="kv">
+      <dt>Port</dt><dd>{{ settings.get('port') }}</dd>
+      <dt>DB path</dt><dd>{{ settings.get('db_path') }}</dd>
+      <dt>Manifests dir</dt><dd>{{ settings.get('manifests_dir') }}</dd>
+      <dt>Backups dir</dt><dd>{{ settings.get('backups_dir') }}</dd>
+      <dt>Scan roots</dt><dd>{{ settings.get('scan_roots', []) | join(', ') }}</dd>
+      <dt>Protected apps</dt><dd>{{ settings.get('protected_apps', []) | join(', ') }}</dd>
+      <dt>Session hours</dt><dd>{{ settings.get('session_hours') }}</dd>
+    </dl>
   </div>
-  <p class="muted text-sm mt-2">
-    Read-only chat over the inventory (Ollama Cloud <code>glm-5.3-flash</code>). It now includes
-    per-resource owners and shared flags, and sits in the right-rail <strong>Ask</strong> tab on every page
-    (desktop) or the Ask button on small screens. Key file:
-    <code>/apps/del/config/ollama-api-key.txt</code> (mode 0600).
-  </p>
-</section>
+</details>
 
-<section class="panel" id="scan-now">
-  <h2>Scanning</h2>
-  <form method="post" action="/scan" data-submit-guard="Starting scan…">
-    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-    <button type="submit" class="btn btn-primary">Run scan now</button>
-  </form>
-  <p class="muted text-sm mt-2">
-    Inventory uses the latest <strong>done</strong> scan only. Rows stuck at
-    <span class="badge status-running">running</span> after a restart are
-    auto-marked <span class="badge status-failed">failed</span> on service start.
-  </p>
-  <table class="table" data-enhanced data-empty="No scans yet." data-page-size="25">
-    <caption class="sr-only">The most recent inventory scans and their outcome.</caption>
-    <thead><tr><th scope="col">ID</th><th scope="col">Started</th><th scope="col">Finished</th><th scope="col">Status</th></tr></thead>
-    <tbody>
-      {% for s in recent_scans %}
-      <tr>
-        <td>{{ s.get('id') }}</td>
-        <td data-sort-value="{{ iso_sort(s.get('started')) }}"><span class="dt">{{ format_dt(s.get('started')) }}</span></td>
-        <td data-sort-value="{{ iso_sort(s.get('finished')) }}"><span class="dt">{{ format_dt(s.get('finished')) }}</span></td>
-        <td data-filter-value="{{ s.get('status') }}"><span class="badge status-{{ s.get('status') }}">{{ s.get('status') }}</span></td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</section>
+<details class="section" id="assistant-settings" data-remember open>
+  <summary><h2>Assistant</h2><span class="section-hint">Read-only chat over the inventory; not a config editor.</span></summary>
+  <div class="section-body">
+    {% set ast = assistant_status or {} %}
+    <dl class="kv">
+      <dt>Enabled</dt><dd>{% if ast.get('enabled') %}<span class="badge badge-ok">yes</span>{% else %}<span class="badge badge-grey">no</span>{% endif %}</dd>
+      <dt>Configured</dt><dd>{% if ast.get('configured') %}<span class="badge badge-ok">yes</span>{% else %}<span class="badge badge-amber">no</span>{% if ast.get('reason') %} <span class="muted text-sm">{{ ast.get('reason') }}</span>{% endif %}{% endif %}</dd>
+      <dt>Model</dt><dd>{{ ast.get('model') or '—' }}</dd>
+      <dt>Key source</dt><dd>{{ ast.get('key_source') or '—' }}</dd>
+    </dl>
+    <div class="cluster mt-2">
+      <form method="post" action="/assistant/test" data-submit-guard="Testing…">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="btn btn-primary"{% if not (ast.get('enabled') and ast.get('configured')) %} disabled title="Configure an API key first"{% endif %}>Test connection</button>
+      </form>
+      <a class="btn" href="/assistant">Open full assistant</a>
+    </div>
+    <p class="muted text-sm mt-2">
+      Read-only chat over the inventory (Ollama Cloud <code>glm-5.3-flash</code>). It now includes
+      per-resource owners and shared flags, and sits in the right-rail <strong>Ask</strong> tab on every page
+      (desktop) or the Ask button on small screens. Key file:
+      <code>/apps/del/config/ollama-api-key.txt</code> (mode 0600).
+    </p>
+  </div>
+</details>
+
+<details class="section" id="scan-now" data-remember open>
+  <summary><h2>Scanning</h2><span class="section-hint">Re-inventory this host; the dashboard uses the latest completed scan.</span></summary>
+  <div class="section-body">
+    <form method="post" action="/scan" data-submit-guard="Starting scan…">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="btn btn-primary">Run scan now</button>
+    </form>
+    <p class="muted text-sm mt-2">
+      Inventory uses the latest <strong>done</strong> scan only. Rows stuck at
+      <span class="badge status-running">running</span> after a restart are
+      auto-marked <span class="badge status-failed">failed</span> on service start.
+    </p>
+    <table class="table" data-enhanced data-empty="No scans yet." data-page-size="25">
+      <caption class="sr-only">The most recent inventory scans and their outcome.</caption>
+      <thead><tr><th scope="col">ID</th><th scope="col">Started</th><th scope="col">Finished</th><th scope="col">Status</th></tr></thead>
+      <tbody>
+        {% for s in recent_scans %}
+        <tr>
+          <td>{{ s.get('id') }}</td>
+          <td data-sort-value="{{ iso_sort(s.get('started')) }}"><span class="dt">{{ format_dt(s.get('started')) }}</span></td>
+          <td data-sort-value="{{ iso_sort(s.get('finished')) }}"><span class="dt">{{ format_dt(s.get('finished')) }}</span></td>
+          <td data-filter-value="{{ s.get('status') }}"><span class="badge status-{{ s.get('status') }}">{{ s.get('status') }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</details>
 {% endblock %}

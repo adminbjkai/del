@@ -755,7 +755,7 @@
   // Persist column chrome only (order/width/sort/filter/page size). Never row data.
   function tableStateKey(table) {
     var id = (table && table.id) ? String(table.id).trim() : "";
-    if (id) return "del.ag.colstate." + id;
+    if (id) return "del.ag2.colstate." + id;
     var path = "";
     try { path = (location.pathname || ""); } catch (e) { path = ""; }
     var cap = "";
@@ -763,7 +763,7 @@
     var capEl = block && block.querySelector ? block.querySelector("caption, h1, h2, h3, legend") : null;
     if (table && table.caption) cap = (table.caption.textContent || "").trim();
     else if (capEl) cap = (capEl.textContent || "").trim();
-    return "del.ag.colstate." + path + "|" + cap;
+    return "del.ag2.colstate." + path + "|" + cap;
   }
 
   function loadTableColState(table) {
@@ -887,27 +887,70 @@
     wrap.appendChild(host);
 
     var NUM_RE = /^-?\d+(\.\d+)?$/;
+    // Cells holding block content (meters, disclosures, forms, several chips)
+    // cannot live in a fixed 36px row: those columns wrap and grow the row.
+    var RICH_SEL = "details, ul, ol, form, .confidence, .cluster, div, pre, br";
+    var rows = Array.prototype.slice.call(tbody.rows);
+    var sample = rows.slice(0, 200);
     var columnDefs = [];
     var rowData = [];
     Array.prototype.forEach.call(headRow.cells, function (th, idx) {
       var header = (th.textContent || "").replace(/[\u25be\u21e9]/g, "").trim();
       var nosort = th.hasAttribute("data-nosort");
       var numeric = false;
-      Array.prototype.forEach.call(tbody.rows, function (tr) {
+      var rich = false;
+      var pills = false;
+      var lens = [];
+      sample.forEach(function (tr) {
         var cell = tr.cells[idx];
-        var sv = cell && cell.getAttribute("data-sort-value");
+        if (!cell) return;
+        var sv = cell.getAttribute("data-sort-value");
         if (sv && NUM_RE.test(sv)) numeric = true;
+        if (!rich && cell.querySelector(RICH_SEL)) rich = true;
+        if (!pills && cell.querySelector(".badge, .chip")) pills = true;
+        // Measure what is visible: text inside a <details> body is collapsed.
+        var len = (cell.textContent || "").replace(/\s+/g, " ").trim().length;
+        cell.querySelectorAll("details > :not(summary)").forEach(function (el) {
+          len -= (el.textContent || "").replace(/\s+/g, " ").trim().length;
+        });
+        lens.push(Math.max(0, len));
       });
+      // Width from content: header must fit (uppercase ~7.4px/char + sort and
+      // filter icons), body gets the 80th-percentile text length.
+      lens.sort(function (a, b) { return a - b; });
+      // 90th percentile: names have a long tail the median would wrap.
+      var p80 = lens.length ? lens[Math.min(lens.length - 1, Math.floor(lens.length * 0.9))] : 0;
+      var headerW = Math.round(header.length * 7.4 + (nosort ? 28 : 58));
+      // Badges/chips are bold + padded: ~8px per char plus the pill padding.
+      var bodyW = Math.round(Math.min(p80, 40) * (pills ? 8 : 7) + (pills ? 44 : 28));
+      // Minimum = header, or the body text up to ~24 characters (rich cells
+      // wrap, so they need less); the rest of the width is shared by flex.
+      var minW = Math.max(72, Math.min(headerW, 240), Math.min(bodyW, rich ? 180 : 196));
+      var idealW = Math.max(minW, bodyW);
       columnDefs.push({
         colId: "c" + idx,
         field: "c" + idx,
         headerName: header || ("Col " + (idx + 1)),
+        headerTooltip: th.getAttribute("title") || header,
         sortable: !nosort,
         filter: nosort ? false : (numeric ? "agNumberColumnFilter" : "agTextColumnFilter"),
-        menuTabs: nosort ? ["generalMenuTab"] : ["filterMenuTab", "generalMenuTab", "columnsMenuTab"],
+        suppressHeaderMenuButton: true,
+        suppressHeaderFilterButton: nosort,
         suppressMovable: nosort,
-        pinned: nosort ? "right" : null,
+        pinned: nosort && idx === headRow.cells.length - 1 ? "right" : null,
         lockPinned: nosort,
+        // Action columns (data-nosort) keep a fixed width; data columns flex.
+        minWidth: minW,
+        width: nosort ? idealW : undefined,
+        // The first column names the row; give it a larger share of spare width.
+        flex: nosort ? null : Math.max(1, Math.round((idx === 0 ? idealW * 1.5 : idealW) / 90)),
+        wrapText: rich,
+        autoHeight: rich,
+        cellClass: rich ? "ag-cell-rich" : null,
+        tooltipValueGetter: rich ? null : function (params) {
+          var v = params.data ? params.data["t" + idx] : "";
+          return v && v.length > 18 ? v : null;
+        },
         filterParams: numeric ? {
           filterOptions: ["equals", "notEqual", "lessThan", "greaterThan", "inRange", "blank", "notBlank"],
           defaultOption: "equals",
@@ -951,6 +994,7 @@
         // data-filter-value / data-priority intact; snapshot them on the row
         // so export and comparators never depend on AG Grid dropping attrs.
         row["c" + idx] = (sortRaw && NUM_RE.test(sortRaw)) ? parseFloat(sortRaw) : filterVal;
+        row["t" + idx] = cell ? (cell.getAttribute("title") || cell.textContent || "").replace(/\s+/g, " ").trim() : "";
         row["s" + idx] = sortVal;
         row["h" + idx] = cell ? cell.innerHTML : "";
         row["ds" + idx] = cell ? cell.getAttribute("data-sort-value") : null;
@@ -960,8 +1004,45 @@
       rowData.push(row);
     });
 
+    // Fit before scrolling: if the minimum widths overflow the available
+    // width, shrink the flexible columns proportionally (headers keep a
+    // tooltip). A grid inside a collapsed <details> measures 0, so use the
+    // nearest visible ancestor, minus a section's padding.
+    var avail = wrap.clientWidth;
+    if (!avail) {
+      var anc = wrap.parentElement;
+      while (anc && !anc.clientWidth) anc = anc.parentElement;
+      avail = anc ? anc.clientWidth - 48 : 0;
+    }
+    if (avail > 240) {
+      // Short columns (badges, counts, dates) keep their width; only wide
+      // text columns (> 130px) give some up, never below 110px.
+      var fixedW = 0, wideMin = 0;
+      columnDefs.forEach(function (c) {
+        if (c.width || c.minWidth <= 130) fixedW += (c.width || c.minWidth);
+        else wideMin += c.minWidth;
+      });
+      var room = avail - fixedW - 4;
+      if (wideMin > 0 && room > 0 && wideMin > room) {
+        var f = room / wideMin;
+        columnDefs.forEach(function (c) {
+          if (!c.width && c.minWidth > 130) c.minWidth = Math.max(110, Math.floor(c.minWidth * f));
+        });
+      }
+    }
+
     var pageSize = parseInt(table.getAttribute("data-page-size") || "50", 10);
     if (!pageSize || pageSize < 1) pageSize = 50;
+    if (!pageSel.querySelector('option[value="' + pageSize + '"]')) {
+      var extra = document.createElement("option");
+      extra.value = String(pageSize);
+      extra.textContent = String(pageSize);
+      pageSel.insertBefore(extra, pageSel.firstChild);
+    }
+    pageSel.value = String(pageSize);
+    // Short tables get no search / pager chrome — just the rows.
+    var minimal = rowData.length <= 10 && !table.hasAttribute("data-toolbar");
+    if (minimal) toolbar.classList.add("is-minimal");
     var compact = table.getAttribute("data-density") === "compact" ||
       document.documentElement.getAttribute("data-density") === "compact";
     var api;
@@ -973,17 +1054,20 @@
         defaultColDef: {
           sortable: true,
           filter: true,
-          floatingFilter: true,
+          floatingFilter: false,
+          // Long headers wrap to a second line instead of truncating.
+          wrapHeaderText: true,
+          autoHeaderHeight: true,
           resizable: true,
           minWidth: 72,
           flex: 1,
-          wrapText: false,
-          autoHeight: false,
-          suppressHeaderMenuButton: false,
           suppressMovable: false,
           lockPinned: false,
         },
-        columnMenu: "legacy",
+        // Page height, not a fixed box: no empty band under short tables and
+        // no scroll-inside-scroll. Pagination bounds the height of long ones.
+        domLayout: "autoHeight",
+        columnMenu: "new",
         suppressMenuHide: true,
         suppressMovableColumns: false,
         animateRows: false,
@@ -994,11 +1078,12 @@
         suppressCellFocus: false,
         enableCellTextSelection: true,
         ensureDomOrder: true,
+        tooltipShowDelay: 500,
+        tooltipInteraction: true,
         enterNavigatesVertically: true,
         enterNavigatesVerticallyAfterEdit: true,
-        headerHeight: compact ? 28 : 36,
-        floatingFiltersHeight: compact ? 28 : 36,
-        rowHeight: compact ? 28 : 36,
+        headerHeight: compact ? 30 : 38,
+        rowHeight: compact ? 30 : 38,
         overlayNoRowsTemplate: "<div class=\"empty-state-msg\">" +
           (table.getAttribute("data-empty") || "No rows match the current filter.") + "</div>",
         onFilterChanged: function () { updateStatus(); persist(); },
@@ -1051,6 +1136,13 @@
       prevBtn.disabled = page <= 0;
       nextBtn.disabled = page + 1 >= pageCount;
       pager.hidden = afterFilter <= pageSz && page === 0;
+      var filtering = !!search.value;
+      try { filtering = filtering || api.isAnyFilterPresent(); } catch (e5) {}
+      clearBtn.hidden = !filtering;
+      // AG Grid keeps a 150px floor for its "no rows" overlay; only keep it
+      // when there is nothing to show.
+      host.classList.toggle("is-empty", afterFilter === 0);
+      pageSel.hidden = total <= 25;
     }
     function themeSync() {
       applyAgThemeClass(host);
@@ -1101,7 +1193,7 @@
 
   function enhanceTable(table) {
     if (!table || table.getAttribute("data-enhanced-ready")) return;
-    if (table.classList.contains("job-steps")) return;
+    if (table.classList.contains("job-steps") || table.classList.contains("table-plain")) return;
     if (!table.tHead || !table.tBodies.length) return;
     table.setAttribute("data-enhanced-ready", "1");
     if (enhanceTableAgGrid(table)) return;
@@ -1110,7 +1202,6 @@
 
   document.querySelectorAll("table[data-enhanced]").forEach(enhanceTable);
   document.querySelectorAll("table.table").forEach(function (table) {
-    if (table.classList.contains("job-steps")) return;
     enhanceTable(table);
   });
 
@@ -1319,6 +1410,12 @@
     } else {
       executeBtn.disabled = false;
     }
+    // Calm by default: a dry run is the primary action; only a live run
+    // turns the button into a destructive one and says so.
+    executeBtn.classList.toggle("btn-primary", !isLive);
+    executeBtn.classList.toggle("btn-danger", !!isLive);
+    var label = executeBtn.getAttribute(isLive ? "data-label-live" : "data-label-dry");
+    if (label) executeBtn.textContent = label;
   }
 
   if (executeForm) {
@@ -1333,7 +1430,8 @@
         window.alert('Type "' + REQUIRED_PHRASE + '" to confirm live volume deletion.');
         return;
       }
-      if (!window.confirm("Execute this removal plan now? This cannot be undone for irreversible steps.")) {
+      // A dry run changes nothing, so only a live run asks for confirmation.
+      if (isLive && !window.confirm("Run this removal plan LIVE now? Irreversible steps cannot be undone.")) {
         evt.preventDefault();
       }
     });
@@ -1689,9 +1787,9 @@
     layout.classList.toggle("sidebar-collapsed", !!collapsed);
     try { localStorage.setItem(SIDEBAR_KEY, collapsed ? "1" : "0"); } catch (e) {}
     if (sidebarCollapse) {
+      // The chevron icon is rotated by CSS (.sidebar-collapsed); only labels change.
       sidebarCollapse.setAttribute("aria-label", collapsed ? "Expand sidebar" : "Collapse sidebar");
       sidebarCollapse.title = collapsed ? "Expand sidebar" : "Collapse sidebar";
-      sidebarCollapse.textContent = collapsed ? "›" : "‹";
     }
   }
 
@@ -1785,27 +1883,36 @@
   // =========================================================================
   var GLOSSARY_COLLAPSE_KEY = "del.glossaryCollapsed";
   var glossaryCollapseBtn = document.getElementById("glossary-collapse");
-  function setGlossaryCollapsed(collapsed) {
+  function setGlossaryCollapsed(collapsed, remember) {
     if (!layout) return;
     if (window.matchMedia && window.matchMedia("(max-width: 1279px)").matches) {
       layout.classList.remove("glossary-collapsed");
       return;
     }
     layout.classList.toggle("glossary-collapsed", !!collapsed);
-    try { localStorage.setItem(GLOSSARY_COLLAPSE_KEY, collapsed ? "1" : "0"); } catch (e) {}
+    if (remember !== false) {
+      try { localStorage.setItem(GLOSSARY_COLLAPSE_KEY, collapsed ? "1" : "0"); } catch (e) {}
+    }
     if (glossaryCollapseBtn) {
-      glossaryCollapseBtn.setAttribute("aria-label", collapsed ? "Expand glossary" : "Collapse glossary");
-      glossaryCollapseBtn.title = collapsed ? "Expand glossary" : "Collapse glossary";
+      glossaryCollapseBtn.setAttribute("aria-label", collapsed ? "Show help panel" : "Hide help panel");
+      glossaryCollapseBtn.title = collapsed ? "Show help panel" : "Hide help panel";
     }
   }
+  // No saved choice yet: keep the rail open only on wide screens (>= 1600px)
+  // so tables get the width on a typical laptop; the choice is not stored.
   try {
-    setGlossaryCollapsed(localStorage.getItem(GLOSSARY_COLLAPSE_KEY) === "1");
+    var savedRail = localStorage.getItem(GLOSSARY_COLLAPSE_KEY);
+    if (savedRail === null) setGlossaryCollapsed(window.innerWidth < 1600, false);
+    else setGlossaryCollapsed(savedRail === "1", false);
   } catch (e) {}
   if (glossaryCollapseBtn) {
     glossaryCollapseBtn.addEventListener("click", function () {
       setGlossaryCollapsed(!(layout && layout.classList.contains("glossary-collapsed")));
     });
   }
+  document.querySelectorAll("[data-rail-expand]").forEach(function (btn) {
+    btn.addEventListener("click", function () { setGlossaryCollapsed(false); });
+  });
 
   var RAIL_TAB_KEY = "del.rightRailTab";
   function setRailTab(tab) {
@@ -1934,7 +2041,7 @@
   // Initial paint + keep in sync when resource tab links are activated
   applyGlossaryContext(document.body.getAttribute("data-glossary") || glossaryCtxFromPath());
 
-  document.querySelectorAll(".tabbar a[href*='/resources/']").forEach(function (a) {
+  document.querySelectorAll(".subnav a[href*='/resources/'], .tabbar a[href*='/resources/']").forEach(function (a) {
     a.addEventListener("click", function () {
       try {
         var u = new URL(a.href, window.location.origin);
@@ -2059,7 +2166,8 @@
       if (!data) return;
       if (statusEl && data.status) {
         statusEl.textContent = data.status;
-        statusEl.className = "badge status-" + data.status;
+        statusEl.className = "badge status-" + data.status +
+          (TERMINAL_STATES.indexOf(data.status) === -1 ? " is-live" : "");
       }
       (data.steps || []).forEach(function (step) {
         var row = outputBox.querySelector('tr[data-step-seq="' + step.seq + '"]');
@@ -2068,7 +2176,8 @@
         var stateCell = row.querySelector(".step-state");
         if (stateCell) {
           stateCell.innerHTML =
-            '<span class="badge status-' + escapeHtml(step.state) + '">' + escapeHtml(step.state) + "</span>";
+            '<span class="badge status-' + escapeHtml(step.state) +
+            (step.state === "running" ? " is-live" : "") + '">' + escapeHtml(step.state) + "</span>";
         }
         var exitCell = row.querySelector(".step-exit");
         if (exitCell) {
@@ -2262,13 +2371,17 @@
       });
     });
 
-    var initial = tabs[0];
-    if (window.location.hash) {
+    function tabForHash() {
+      if (!window.location.hash) return null;
       var hashId = window.location.hash.slice(1);
-      var match = tabs.filter(function (t) { return t.id === hashId; })[0];
-      if (match) initial = match;
+      return tabs.filter(function (t) { return t.id === hashId; })[0] || null;
     }
-    select(initial, false);
+    select(tabForHash() || tabs[0], false);
+    // In-page links like <a href="#tab-docker"> switch tabs too.
+    window.addEventListener("hashchange", function () {
+      var match = tabForHash();
+      if (match) select(match, false);
+    });
   }
 
   window.DEL.tabs = { init: initTabs };
@@ -2412,5 +2525,42 @@
   document.addEventListener("click", function (e) {
     var el = e.target && e.target.closest && e.target.closest("[data-stop-propagation]");
     if (el) e.stopPropagation();
+  });
+
+  // =========================================================================
+  // Collapsible sections: remember open/closed per page, expand/collapse all
+  // =========================================================================
+  // <details class="section" id="…" data-remember> keeps its state per path in
+  // localStorage. A button with data-expand-all="open|close" (optionally
+  // data-scope="#container") opens or closes every details.section in scope.
+  // Opening via a #hash link to a section id also opens it.
+  var SECTION_KEY = "del.sections." + location.pathname;
+  var sectionState = {};
+  try { sectionState = JSON.parse(localStorage.getItem(SECTION_KEY) || "{}") || {}; } catch (e) { sectionState = {}; }
+  document.querySelectorAll("details.section[data-remember][id]").forEach(function (d) {
+    if (Object.prototype.hasOwnProperty.call(sectionState, d.id)) d.open = !!sectionState[d.id];
+    d.addEventListener("toggle", function () {
+      sectionState[d.id] = d.open;
+      try { localStorage.setItem(SECTION_KEY, JSON.stringify(sectionState)); } catch (e) {}
+    });
+  });
+  function openHashTarget() {
+    if (!location.hash || location.hash.length < 2) return;
+    var target = null;
+    try { target = document.querySelector(location.hash); } catch (e) { return; }
+    var d = target && (target.matches("details") ? target : target.closest("details"));
+    if (d && !d.open) d.open = true;
+    if (target && target.scrollIntoView) target.scrollIntoView({ block: "start" });
+  }
+  openHashTarget();
+  window.addEventListener("hashchange", openHashTarget);
+  document.addEventListener("click", function (e) {
+    var btn = e.target && e.target.closest && e.target.closest("[data-expand-all]");
+    if (!btn) return;
+    var scopeSel = btn.getAttribute("data-scope");
+    var scope = scopeSel ? document.querySelector(scopeSel) : document;
+    if (!scope) return;
+    var open = btn.getAttribute("data-expand-all") !== "close";
+    scope.querySelectorAll("details.section").forEach(function (d) { d.open = open; });
   });
 })();

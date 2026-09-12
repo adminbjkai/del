@@ -10,7 +10,7 @@ served at https://del.bjk.ai behind Nginx, bound only to localhost.
 |---|---|---|
 | Language | Python 3.10 (system python3, venv) | Already on host; excellent for sysadmin tooling; typed with dataclasses/pydantic |
 | Web framework | FastAPI + Uvicorn | Typed request/response models, async, small footprint |
-| Templates/UI | Jinja2 server-rendered + vanilla JS + `app.css` plus assistant and vendored AG Grid styles | No Node toolchain; fully self-contained (CSP `script-src 'self'`, no CDN); dark theme by default with a light-theme toggle (`data-theme`, persisted in `localStorage`) |
+| Templates/UI | Jinja2 server-rendered + vanilla JS + `app.css` plus assistant and vendored AG Grid styles | No Node toolchain; fully self-contained (CSP `script-src 'self'`, no CDN); theme follows `localStorage`, else OS `prefers-color-scheme`, else dark, with a header toggle (`data-theme`, persisted in `localStorage`) |
 | Database | SQLite (WAL mode) via sqlite3 + migration runner | Single admin user; zero-ops; file lives in /apps/del/database/del.db |
 | Privileged layer | del-helper: separate root daemon on a unix socket | Strict allowlist; web app never runs shell as root |
 | Deployment | Host systemd units (del-web.service, del-helper.service, del-docs.service) | See below |
@@ -294,8 +294,10 @@ All human-facing datetimes in the web UI are rendered in **America/New_York**
 (Eastern) as compact `MM-DD-YY H:MM AM/PM` (e.g. `05-13-26 7:31 AM`) — no
 timezone suffix. Storage remains UTC (sqlite `datetime('now')`, Docker
 `Created` with `Z`, filesystem ISO-Z). Naive timestamps read from SQLite are
-treated as UTC. Calendar day follows Eastern. Helpers: `format_dt`,
-`relative_dt`, `iso_sort` in `backend/del_app/web/routes.py`.
+treated as UTC. Calendar day follows Eastern. Helpers: `_format_dt`,
+`_relative_dt`, `_iso_sort_key` in `backend/del_app/web/formatting.py`,
+exposed to templates as the globals `format_dt`, `relative_dt` and
+`iso_sort` (`backend/del_app/web/render.py`).
 
 One exception, outside the UI: `del-admin backup-db` names its snapshot with
 `datetime.now()` — host local time, not UTC.
@@ -335,12 +337,13 @@ top of a page the operator was already authenticated to.
 
 - `GET /favicon.ico` — 301 to `/static/favicon.svg`. Browsers request it
   unprompted; it used to 404 on every page load.
-- `/static/*` — the four assets (`app.css`, `app.js`, `theme-init.js`,
-  `favicon.svg`) are served with `Cache-Control: public, max-age=300,
+- `/static/*` — `app.css`, `app.js`, `assistant.css`, `assistant.js`,
+  `theme-init.js`, `favicon.svg` and the vendored AG Grid files under
+  `/static/vendor/` are served with `Cache-Control: public, max-age=300,
   must-revalidate`. They previously carried etag and last-modified but no cache
   directive, costing a revalidation round trip per asset per page load.
 - Unauthenticated routes are exactly `/login`, `/healthz`, `/favicon.ico` and
-  those four `/static/*` paths. Everything else, `/app-icon/{domain}` and
+  those `/static/*` paths. Everything else, `/app-icon/{domain}` and
   `GET /palette.json` included, depends on `auth.require_user`.
 - `POST /scan` starts the scan on a background thread and redirects
   immediately with `flash=Scan+started` (it no longer blocks the request on
