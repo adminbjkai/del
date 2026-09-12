@@ -1,6 +1,7 @@
 # Runtime dependencies for del-web. Keep exact pins so recovery and CI use the
 # same stack as production; update deliberately and run the full suite.
 argon2-cffi==25.1.0
+anyio==4.14.2
 fastapi==0.139.2
 itsdangerous==2.2.0
 Jinja2==3.1.6
