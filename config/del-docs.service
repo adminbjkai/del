@@ -8,6 +8,10 @@ User=bjkai
 WorkingDirectory=/apps/del
 Environment=PATH=/usr/local/bin:/usr/bin:/bin
 ExecStart=/usr/local/bin/npx --yes fern-api docs dev --port 8072 --backend-port 8073
+# Fern's interactive preview CLI handles Ctrl-C but does not reliably exit on
+# systemd's default SIGTERM. Use its supported signal and keep deploys bounded.
+KillSignal=SIGINT
+TimeoutStopSec=20s
 Restart=on-failure
 RestartSec=10
 NoNewPrivileges=true

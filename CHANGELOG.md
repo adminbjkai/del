@@ -6,7 +6,8 @@ Workspace polish: desktop navigation and Help/Ask panels now have persistent,
 keyboard-accessible resize dividers with double-click reset. The dark theme uses
 a softer natural slate/sage palette, table rows have quieter tonal separation,
 and table toolbars form a clearer control surface. Responsive collapse and mobile
-sheet behavior are unchanged.
+sheet behavior are unchanged. The Fern docs unit now uses the preview CLI's
+supported shutdown signal, avoiding dirty 90-second restart timeouts.
 
 Repository polish follow-up: added pinned runtime/development dependency
 manifests and GitHub Actions checks for warnings-as-errors tests, pyflakes, and
