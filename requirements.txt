@@ -1,0 +1,11 @@
+# Runtime dependencies for del-web. Keep exact pins so recovery and CI use the
+# same stack as production; update deliberately and run the full suite.
+argon2-cffi==25.1.0
+fastapi==0.139.2
+itsdangerous==2.2.0
+Jinja2==3.1.6
+pydantic==2.13.4
+python-multipart==0.0.32
+PyYAML==6.0.3
+tomli==2.4.1
+uvicorn==0.51.0

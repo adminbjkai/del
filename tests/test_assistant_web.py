@@ -229,7 +229,10 @@ def test_page_enabled_renders_composer_and_preselects(authed_client, fake_on):
     assert 'id="assistant-form"' in html
     assert '<meta name="csrf-token"' in html
     assert '<link rel="stylesheet" href="/static/assistant.css">' in html
+    assert html.count('<link rel="stylesheet" href="/static/assistant.css">') == 1
     assert '<script src="/static/assistant.js"></script>' in html
+    assert 'id="assistant-fab"' not in html
+    assert 'id="rail-tab-ask"' not in html
     assert 'data-scope="general" aria-pressed="false"' in html
     assert 'data-scope="app" aria-pressed="true"' in html
     assert "app.explain" in html  # prompts for the preselected scope
@@ -536,7 +539,8 @@ def test_nav_and_palette(authed_client, fake_on):
 
 def test_base_blocks_present():
     src = (assistant_web.__file__.rsplit("/", 1)[0] + "/templates/base.html")
-    text = open(src).read()
+    with open(src) as fh:
+        text = fh.read()
     assert "{% block head %}{% endblock %}" in text
     assert "{% block scripts %}{% endblock %}" in text
     assert text.index("{% block head %}") < text.index("</head>")
@@ -565,6 +569,7 @@ def test_no_inline_scripts_or_handlers(authed_client, fake_on):
         assert not _ON_HANDLER.search(html), path
     templates_dir = assistant_web.__file__.rsplit("/", 1)[0] + "/templates/"
     for name in ("assistant.html", "settings.html", "base.html"):
-        text = open(templates_dir + name).read()
+        with open(templates_dir + name) as fh:
+            text = fh.read()
         assert not _INLINE_SCRIPT.search(text), name
         assert not _ON_HANDLER.search(text), name

@@ -69,6 +69,47 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat()
 
 
+def abandon_interrupted_jobs(
+    reason: str = "abandoned: process restart or crash during execution",
+) -> int:
+    """Fail jobs that cannot still have a worker after this process starts.
+
+    Job workers are in-process daemon threads, so any pending/running row found
+    at startup is interrupted state, not active work. Leaving it active blocks
+    future live runs and misleads the operator.
+    """
+    conn = get_db()
+    try:
+        rows = q(
+            conn,
+            "SELECT id, user_id FROM jobs WHERE status IN ('pending', 'running')",
+        )
+        if not rows:
+            return 0
+        now = _now()
+        ids = [row["id"] for row in rows]
+        placeholders = ",".join("?" for _ in ids)
+        conn.execute(
+            f"UPDATE jobs SET status = 'failed', finished = ? WHERE id IN ({placeholders})",
+            (now, *ids),
+        )
+        conn.execute(
+            f"UPDATE job_steps SET state = 'failed', finished = ?, "
+            f"output_sanitized = ? WHERE job_id IN ({placeholders}) AND state = 'running'",
+            (now, reason, *ids),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    for row in rows:
+        auditlog.audit(
+            row["user_id"], "job_abandoned", f"job:{row['id']}", {"reason": reason}
+        )
+    logger.warning("startup: abandoned %s interrupted job(s)", len(rows))
+    return len(rows)
+
+
 def _foreign_step_reason(conn, app_slug: str, operation: str, args: dict) -> str | None:
     """Return a skip message if this step targets another app's unit/process."""
     if operation not in _FOREIGN_GUARD_OPS:

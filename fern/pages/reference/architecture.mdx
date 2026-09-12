@@ -447,6 +447,10 @@ job executes plan steps in stage order; each step is recorded before execution
 (state=running) and after (done/failed). Any failure halts the job before downstream
 deletions. Steps carry reversible=true/false.
 
+Workers are in-process daemon threads. At process startup, any job still marked
+`pending` or `running` is failed and audited as `job_abandoned`, because its
+worker cannot have survived the restart.
+
 **`planner.STAGE_ORDER` is exactly six values** — `backup`, `quiesce`,
 `remove_runtime`, `remove_host`, `remove_files`, `validate` — and those are the only
 strings that ever appear in `job_steps.stage`. Analysis and preview happen at
@@ -522,9 +526,9 @@ operator-facing walkthrough.
   5-per-60s in-memory sliding window per IP, no backoff.
 - Argon2id password hashing (`argon2.PasswordHasher`, the only hasher — no bcrypt
   fallback); admin account created via CLI, no defaults.
-- CSP is sent by Nginx: `default-src 'self'` with `style-src` also allowing
-  `'unsafe-inline'` (remaining inline `style=""` attributes) and `img-src` also
-  allowing `data:`. HSTS carries `includeSubDomains`. No external asset origins.
+- CSP is sent by Nginx: `default-src 'self'`; scripts and styles are self-only,
+  while `img-src` also allows `data:` for vendored AG Grid sprites. HSTS carries
+  `includeSubDomains`. No external asset origins.
 - Secrets never logged; env values stripped at the discovery source layer; the DB
   and backups directory are not world-readable.
 - Helper socket 0660 root:bjkai; 22 allowlisted operations; args validated twice;

@@ -57,12 +57,19 @@ it instead of being matched to `audit_log` by timestamp. Secrets and environment
 variable values are never written to either log (see
 [Security Model](/reference/security)).
 
-## Update procedure (no git in this deployment)
+## Update procedure
 
-There is no git checkout to pull; changes are applied by editing files in place
-under `/apps/del/backend/del_app` (or `helper/del_helper.py`, or `config/`).
+`/apps/del` is the production checkout of the GitHub repository. Keep local
+runtime files out of Git, review incoming commits, and never overwrite a dirty
+worktree.
 
-1. Make the code/config change.
+1. Check and update the source:
+   ```bash
+   cd /apps/del
+   git status --short --branch
+   git pull --ff-only
+   ./.venv/bin/python -m pip install -r requirements-dev.txt
+   ```
 2. **Run tests before restarting anything:**
    ```bash
    cd /apps/del/backend && ../.venv/bin/python -m pytest ../tests/ -q

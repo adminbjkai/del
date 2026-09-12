@@ -33,6 +33,9 @@
     },
     set: function (theme) {
       document.documentElement.setAttribute("data-theme", theme);
+      document.querySelectorAll("meta[data-theme-color]").forEach(function (meta) {
+        meta.content = theme === "light" ? "#f3f2ee" : "#1a1e23";
+      });
       try { localStorage.setItem(THEME_KEY, theme); } catch (e) {}
       var btn = document.getElementById("theme-toggle");
       if (btn) {

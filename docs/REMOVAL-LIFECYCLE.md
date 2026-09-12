@@ -5,6 +5,10 @@ ordered stages. Each stage's steps are recorded in `job_steps` (state
 `pending`→`running`→`done`/`failed`) before and after execution; **any step failure
 halts the job before any downstream deletion runs.**
 
+Job workers are in-process daemon threads. On service startup, any job left
+`pending` or `running` is marked failed and audited as `job_abandoned`; a worker
+cannot survive the process restart, so such rows must not remain falsely active.
+
 Two things bracket those six but are not stages: **analysis and preview** happen
 at plan-build time, and the **report** is the job's terminal status plus its
 audit-log records. Neither produces a `job_steps` row.

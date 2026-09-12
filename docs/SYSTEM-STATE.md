@@ -1,9 +1,9 @@
 # System State — bjkai-2tb-ubuntu (as of 2026-07-20)
 
-Authoritative, consolidated reference for the current state of this server, built from
-the 8-lane audit run 2026-07-20 (raw findings: `/apps/del/data/audit/2026-07-20/`) plus
-`/apps/del/docs/PORT-REGISTRY.md`. Read this before starting any new audit — most
-questions about "what's running, what's shared, what's broken" are answered here.
+Historical snapshot from the 8-lane audit run on 2026-07-20 (raw findings:
+`/apps/del/data/audit/2026-07-20/`) plus the port registry produced at that time.
+Use it for audit history and rationale, not as proof of current host state. Run a
+fresh DEL scan and regenerate `docs/PORT-REGISTRY.md` before operational decisions.
 
 ---
 

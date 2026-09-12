@@ -889,7 +889,8 @@ def test_ask_end_to_end(settings_env, fake_provider):
     assert "safe to delete" not in rows[0]["details_json"]
     assert "owners." not in rows[0]["details_json"]
     audit_log = os.path.join(settings_env.logs_dir, "audit.log")
-    assert "env-key-123" not in open(audit_log).read()
+    with open(audit_log) as fh:
+        assert "env-key-123" not in fh.read()
 
     # the semaphore was released
     assert service._INFLIGHT.acquire(blocking=False)
@@ -1010,7 +1011,8 @@ def test_assistant_package_does_not_import_action_modules():
     forbidden = {"del_app.helper_client", "del_app.planner", "del_app.jobs"}
     for name in ("context", "service", "provider", "store", "prompts", "errors"):
         mod = importlib.import_module(f"del_app.assistant.{name}")
-        tree = ast.parse(open(mod.__file__).read())
+        with open(mod.__file__) as fh:
+            tree = ast.parse(fh.read())
         imported: set[str] = set()
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):

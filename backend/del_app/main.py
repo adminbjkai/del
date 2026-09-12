@@ -25,6 +25,12 @@ async def _lifespan(app: FastAPI):
             logger.warning("startup: abandoned %s stale running scan(s)", n)
     except Exception:
         logger.exception("startup: abandon_stale_scans failed")
+    try:
+        from del_app.jobs import abandon_interrupted_jobs
+
+        abandon_interrupted_jobs()
+    except Exception:
+        logger.exception("startup: abandon_interrupted_jobs failed")
     yield
 
 

@@ -151,9 +151,12 @@ def manifest_edit_submit(
         except Exception as exc:  # pydantic ValidationError or similar
             errors.append(str(exc))
         else:
-            manifests.save(manifest)
-            auditlog.audit(user.id, "manifest.save", slug, {})
-            return RedirectResponse(url=f"/apps/{slug}?flash=Manifest+saved", status_code=303)
+            if manifest.id != slug:
+                errors.append(f"Manifest id must match the application slug ({slug!r})")
+            else:
+                manifests.save(manifest)
+                auditlog.audit(user.id, "manifest.save", slug, {})
+                return RedirectResponse(url=f"/apps/{slug}?flash=Manifest+saved", status_code=303)
     elif data is not None and manifests is None:  # pragma: no cover
         errors.append("Manifests module unavailable")
 

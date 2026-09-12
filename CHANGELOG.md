@@ -2,6 +2,17 @@
 
 ## 2026.9.12
 
+Repository polish follow-up: added pinned runtime/development dependency
+manifests and GitHub Actions checks for warnings-as-errors tests, pyflakes, and
+Fern links. The test stack now uses `httpx2`, eliminating the Starlette
+deprecation warning. Manifest IDs are filename-safe and must match the edited
+application slug, closing path traversal and cross-app overwrite paths. Startup
+now marks interrupted background jobs failed instead of leaving them permanently
+active. UI fixes cover the Assistant page's empty mobile Ask panel, complete rail
+tab semantics, command-palette keyboard focus, selected-theme browser chrome,
+and shared danger-color tokens. The CSP no longer permits inline styles, and the
+security/operations/system-state docs now match the repository and deployment.
+
 Calm palette in both themes (warm paper neutrals in light, soft slate in
 dark; never pure black or white), theme following `localStorage`, else OS
 `prefers-color-scheme`, else dark. Sidebar regrouped into Inventory / Removal

@@ -236,15 +236,13 @@ house standard:
   and a real `Content-Security-Policy`:
 
   ```
-  default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline';
+  default-src 'self'; script-src 'self'; style-src 'self';
   img-src 'self' data:; font-src 'self'; connect-src 'self'; form-action 'self';
   frame-ancestors 'none'; base-uri 'self'; object-src 'none'
   ```
 
-  Two deliberate relaxations: `style-src 'unsafe-inline'`, because a handful of
-  templates still carry inline `style=""` attributes (tightening it means moving
-  those to classes first); and `img-src data:`, for the inline SVG data URI used in
-  some views. Everything else is `'self'` — the client-side tables are a vanilla
+  The one deliberate relaxation is `img-src data:`, for inline SVG sprites in
+  the vendored AG Grid stylesheet. Everything else is `'self'` — the client-side tables are a vanilla
   JS/CSS table engine (AG Grid Community 32.3.3 vendored at `/static/vendor/`,
   vanilla fallback, no CDN), there are no CDN scripts or web fonts, and app icons are proxied through
   `/app-icon/` rather than loaded from a third-party origin, so no external

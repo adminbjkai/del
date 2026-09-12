@@ -17,6 +17,11 @@ docs/INTERFACES.md
 docs/PORT-REGISTRY.md
 miscwork/
 .claude/
+.openclaw-cli-images/
+memory/
+# One-off host inventory exports are runtime audit artifacts, not app source.
+reports/host-apps-inventory-*.xlsx
+reports/build_host_apps_xlsx.py
 # OpenClaw gateway auto-creates these workspace files here; not part of DEL.
 AGENTS.md
 SOUL.md

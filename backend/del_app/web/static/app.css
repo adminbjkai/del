@@ -38,6 +38,7 @@
   --on-accent: #f4f7f9;
   --danger: #e0968f;
   --danger-solid: #96473f;
+  --on-danger: #ffffff;
   --danger-bg: #3a2928;
   --warning: #d6b27a;
   --warning-bg: #383126;
@@ -96,6 +97,7 @@
   --on-accent: #ffffff;
   --danger: #97463f;
   --danger-solid: #a14f48;
+  --on-danger: #ffffff;
   --danger-bg: #f5e4e1;
   --warning: #7d5c22;
   --warning-bg: #f3ead6;
@@ -820,8 +822,8 @@ a.stat-card:hover { border-color: var(--border); background: color-mix(in srgb, 
 .btn-sm { min-height: 1.85rem; padding: 0.22rem 0.6rem; font-size: 0.8rem; }
 .btn-primary { background: var(--accent-bg); border-color: var(--accent-bg); color: var(--on-accent); }
 .btn-primary:hover { background: color-mix(in srgb, var(--accent-bg) 88%, var(--text)); border-color: transparent; color: var(--on-accent); }
-.btn-danger { background: var(--danger-solid); border-color: var(--danger-solid); color: #fff; }
-.btn-danger:hover { background: color-mix(in srgb, var(--danger-solid) 88%, #000); border-color: transparent; color: #fff; }
+.btn-danger { background: var(--danger-solid); border-color: var(--danger-solid); color: var(--on-danger); }
+.btn-danger:hover { background: color-mix(in srgb, var(--danger-solid) 88%, #000); border-color: transparent; color: var(--on-danger); }
 /* Quiet danger: outlined, for destructive shortcuts next to a safer primary */
 .btn-danger-quiet { background: transparent; border-color: color-mix(in srgb, var(--danger) 45%, var(--border)); color: var(--danger); }
 .btn-danger-quiet:hover { background: var(--danger-bg); border-color: var(--danger); color: var(--danger); }
@@ -1255,6 +1257,7 @@ pre.output {
 .cmdk-box { display: flex; flex-direction: column; max-height: min(70vh, 480px); overflow: hidden; border-radius: 14px; }
 .cmdk-input { border: 0; border-bottom: 1px solid var(--border-subtle); background: transparent; color: var(--text); padding: 0.9rem 1rem; font: inherit; font-size: 1rem; }
 .cmdk-input:focus { outline: none; }
+.cmdk-input:focus-visible { box-shadow: inset 0 0 0 2px var(--accent); }
 .cmdk-results { overflow-y: auto; padding: 0.4rem; }
 .cmdk-group-label { padding: 0.35rem 0.6rem; font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.07em; color: var(--text-faint); }
 .cmdk-item { display: flex; align-items: center; gap: 0.5rem; width: 100%; padding: 0.5rem 0.6rem; border-radius: var(--radius-sm); border: 0; background: none; color: var(--text); font: inherit; text-align: left; cursor: pointer; }

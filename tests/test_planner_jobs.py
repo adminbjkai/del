@@ -404,6 +404,38 @@ def _patch_audit(monkeypatch):
     return calls
 
 
+def test_abandon_interrupted_jobs_marks_active_rows_failed(settings_env, monkeypatch):
+    steps = [
+        PlanStep(seq=1, stage="quiesce", operation="container_stop",
+                 args={"container_id": "c1"}, description="stop",
+                 reversible=True, danger="safe"),
+    ]
+    plan_id = _persist_manual_plan("interrupted", steps)
+    pending_id = jobs.create_job(plan_id, "dry_run", user_id=1)
+    running_id = jobs.create_job(plan_id, "dry_run", user_id=1)
+    conn = get_db()
+    x(conn, "UPDATE jobs SET status = 'running' WHERE id = ?", (running_id,))
+    x(conn, "UPDATE job_steps SET state = 'running' WHERE job_id = ?", (running_id,))
+    conn.close()
+    calls = _patch_audit(monkeypatch)
+
+    assert jobs.abandon_interrupted_jobs("test restart") == 2
+
+    conn = get_db()
+    try:
+        rows = q(conn, "SELECT id, status, finished FROM jobs ORDER BY id")
+        step = q(conn, "SELECT state, output_sanitized FROM job_steps WHERE job_id = ?", (running_id,))[0]
+    finally:
+        conn.close()
+    assert [(row["id"], row["status"]) for row in rows] == [
+        (pending_id, "failed"), (running_id, "failed")
+    ]
+    assert all(row["finished"] for row in rows)
+    assert step["state"] == "failed" and step["output_sanitized"] == "test restart"
+    assert len(calls) == 2
+    assert jobs.abandon_interrupted_jobs("again") == 0
+
+
 def test_dry_run_job_executes_all_steps_with_dry_run_true(settings_env, monkeypatch):
     _patch_audit(monkeypatch)
     fake = _FakeHelper()

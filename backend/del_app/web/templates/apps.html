@@ -7,10 +7,10 @@
   <h1>Applications <span class="count-pill">{{ apps | length }}</span></h1>
   <div class="page-actions">
     {% if show_removed %}
-      <a class="filter-chip" href="/apps{% if search %}?search={{ search }}{% endif %}" aria-pressed="true">Show removed too</a>
+      <a class="filter-chip" href="/apps{% if search %}?search={{ search }}{% endif %}">Show removed too</a>
       <span class="badge badge-amber">including removed</span>
     {% else %}
-      <a class="filter-chip" href="/apps?show=removed{% if search %}&amp;search={{ search }}{% endif %}" aria-pressed="false">Show removed too</a>
+      <a class="filter-chip" href="/apps?show=removed{% if search %}&amp;search={{ search }}{% endif %}">Show removed too</a>
     {% endif %}
     <button type="button" class="btn btn-sm btn-ghost" data-export-table="apps-table" title="Export the currently filtered rows as CSV">Export CSV</button>
   </div>

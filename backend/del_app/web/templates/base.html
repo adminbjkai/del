@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="description" content="DEL — application inventory and safe uninstall for this host: discover apps, map their resources, and remove them with an auditable plan.">
-  <meta name="theme-color" content="#1a1e23" media="(prefers-color-scheme: dark)">
-  <meta name="theme-color" content="#f3f2ee" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#1a1e23" media="(prefers-color-scheme: dark)" data-theme-color>
+  <meta name="theme-color" content="#f3f2ee" media="(prefers-color-scheme: light)" data-theme-color>
   <title>{% block title %}DEL{% endblock %} · DEL</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="/static/app.css">
@@ -110,16 +110,18 @@
       <aside class="glossary-rail" id="glossary-rail" aria-label="Help and assistant">
         <button type="button" id="glossary-collapse" class="icon-btn glossary-collapse-btn"
                 aria-label="Hide help panel" title="Hide help panel">{{ i.icon('chevron-right') }}</button>
-        <button type="button" class="rail-collapsed-label" data-rail-expand title="Show the Help / Ask panel">Help · Ask</button>
+        <button type="button" class="rail-collapsed-label" data-rail-expand title="Show the help panel">Help{% if not path.startswith('/assistant') %} · Ask{% endif %}</button>
         <div class="rail-tabs" role="tablist" aria-label="Right panel">
-          <button type="button" class="rail-tab is-active" id="rail-tab-help" data-rail-tab="help" role="tab" aria-selected="true">{{ i.icon('help') }}Help</button>
-          <button type="button" class="rail-tab" id="rail-tab-ask" data-rail-tab="ask" role="tab" aria-selected="false">{{ i.icon('chat') }}Ask</button>
+          <button type="button" class="rail-tab is-active" id="rail-tab-help" data-rail-tab="help" role="tab" aria-selected="true" aria-controls="rail-panel-help">{{ i.icon('help') }}Help</button>
+          {% if not path.startswith('/assistant') %}
+          <button type="button" class="rail-tab" id="rail-tab-ask" data-rail-tab="ask" role="tab" aria-selected="false" aria-controls="rail-panel-ask">{{ i.icon('chat') }}Ask</button>
+          {% endif %}
         </div>
-        <div class="rail-panel" id="rail-panel-help" data-rail-panel="help">
+        <div class="rail-panel" id="rail-panel-help" data-rail-panel="help" role="tabpanel" aria-labelledby="rail-tab-help">
           {% include "_glossary.html" %}
         </div>
         {% if not path.startswith('/assistant') %}
-        <div class="rail-panel" id="rail-panel-ask" data-rail-panel="ask" hidden>
+        <div class="rail-panel" id="rail-panel-ask" data-rail-panel="ask" role="tabpanel" aria-labelledby="rail-tab-ask" hidden>
           {% include "_assistant_dock.html" %}
         </div>
         {% endif %}
@@ -131,9 +133,11 @@
   <button type="button" class="glossary-fab" id="glossary-fab" aria-controls="glossary-sheet" aria-expanded="false">
     {{ i.icon('help') }}Help
   </button>
+  {% if not path.startswith('/assistant') %}
   <button type="button" class="glossary-fab assistant-fab" id="assistant-fab" aria-controls="glossary-rail" title="Ask about this screen — suggestions fill the box; Enter sends">
     {{ i.icon('chat') }}Ask
   </button>
+  {% endif %}
   <div class="glossary-sheet" id="glossary-sheet" hidden>
     <div class="glossary-sheet-backdrop" id="glossary-sheet-backdrop"></div>
     <div class="glossary-sheet-panel" role="dialog" aria-modal="true" aria-labelledby="glossary-sheet-title">

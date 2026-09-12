@@ -148,7 +148,7 @@ If `/apps/del/.venv` is corrupted or missing:
 ```bash
 cd /apps/del
 python3.10 -m venv .venv
-./.venv/bin/pip install fastapi uvicorn jinja2 pydantic argon2-cffi pyyaml python-multipart itsdangerous tomli pytest
+./.venv/bin/python -m pip install -r requirements-dev.txt
 cd backend && ../.venv/bin/python -m pytest ../tests/ -q   # confirm before restarting the unit
 sudo systemctl restart del-web.service
 ```

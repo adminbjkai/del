@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import logging
 import os
+import re
 
 import pydantic
 import yaml
@@ -14,9 +15,18 @@ from del_app.config import get_settings
 
 logger = logging.getLogger("del_app.manifests")
 
+_SLUG_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]*$")
+
+
+def _valid_slug(value: str) -> str:
+    """Accept a filename-safe application identifier, never a path."""
+    if not _SLUG_RE.fullmatch(value) or value in {".", ".."}:
+        raise ValueError("id must contain only letters, numbers, dots, dashes, or underscores")
+    return value
+
 
 class Manifest(pydantic.BaseModel):
-    id: str
+    id: str = pydantic.Field(min_length=1, max_length=128)
     name: str | None = None
     status: str | None = None
     domains: list[str] = pydantic.Field(default_factory=list)
@@ -30,13 +40,23 @@ class Manifest(pydantic.BaseModel):
     shared: list[str] = pydantic.Field(default_factory=list)
     excluded: list[str] = pydantic.Field(default_factory=list)
 
+    @pydantic.field_validator("id")
+    @classmethod
+    def validate_id(cls, value: str) -> str:
+        return _valid_slug(value)
+
 
 def _manifests_dir() -> str:
     return get_settings().manifests_dir
 
 
 def _path_for(slug: str) -> str:
-    return os.path.join(_manifests_dir(), f"{slug}.yaml")
+    slug = _valid_slug(slug)
+    root = os.path.realpath(_manifests_dir())
+    path = os.path.realpath(os.path.join(root, f"{slug}.yaml"))
+    if os.path.commonpath((root, path)) != root:  # defensive if validation changes
+        raise ValueError("manifest path escapes manifests_dir")
+    return path
 
 
 def load_all() -> dict[str, Manifest]:
@@ -72,5 +92,4 @@ def save(m: Manifest) -> None:
     path = _path_for(m.id)
     with open(path, "w") as f:
         yaml.safe_dump(m.model_dump(exclude_none=True), f, sort_keys=False)
-
 

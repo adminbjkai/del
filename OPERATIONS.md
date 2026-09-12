@@ -52,17 +52,25 @@ a root-level action can be traced to the DEL job, plan step and user that asked 
 it instead of being matched to `audit_log` by timestamp. Secrets and environment
 variable values are never written to either log (see SECURITY.md).
 
-## Update procedure (no git in this deployment)
+## Update procedure
 
-There is no git checkout to pull; changes are applied by editing files in place
-under `/apps/del/backend/del_app` (or `helper/del_helper.py`, or `config/`).
+`/apps/del` is the production checkout of the GitHub repository. Keep local
+runtime files out of Git, review the incoming commits, and never overwrite a
+dirty worktree.
 
-1. Make the code/config change.
+1. Check and update the source:
+   ```bash
+   cd /apps/del
+   git status --short --branch
+   git pull --ff-only
+   ./.venv/bin/python -m pip install -r requirements-dev.txt
+   ```
 2. **Run tests before restarting anything:**
    ```bash
    cd /apps/del/backend && ../.venv/bin/python -m pytest ../tests/ -q
    ```
-3. If a migration was added, apply it: `./scripts/del-admin migrate`.
+3. If a migration was added, apply it from the project root:
+   `./scripts/del-admin migrate`.
 4. **If you changed `helper/` or `config/helper-policy.json`, redeploy them before
    restarting.** `del-helper.service` runs the root-owned copy at
    `/usr/local/lib/del-helper/` with policy at `/etc/del/helper-policy.json`, not

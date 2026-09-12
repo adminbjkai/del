@@ -6,7 +6,10 @@ planner/jobs sibling-lane modules with simple fakes.
 """
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
+import yaml
 from fastapi import FastAPI, Request
 from fastapi.responses import RedirectResponse
 from fastapi.testclient import TestClient
@@ -474,6 +477,8 @@ def test_shell_has_glossary_sidebar_and_collapse_controls(authed_client):
     assert 'id="nav-toggle"' in resp.text
     assert "Help" in resp.text
     assert 'id="rail-tab-ask"' in resp.text
+    assert 'aria-controls="rail-panel-ask"' in resp.text
+    assert 'role="tabpanel" aria-labelledby="rail-tab-ask"' in resp.text
     # Apps-context glossary terms
     assert "Warnings" in resp.text
     assert "Protected" in resp.text
@@ -1649,6 +1654,28 @@ def test_manifest_edit_submit_validation_error(authed_client, settings_env):
     )
     assert resp.status_code == 200
     assert "validation" in resp.text.lower() or "id" in resp.text.lower()
+
+
+def test_manifest_edit_rejects_cross_app_id(authed_client, settings_env):
+    csrf = _with_csrf(authed_client)
+    resp = authed_client.post(
+        "/manifests/someapp",
+        data={"csrf_token": csrf, "yaml_text": "id: otherapp\nname: Other App\n"},
+    )
+    assert resp.status_code == 200
+    assert "must match the application slug" in resp.text
+    assert not (Path(settings_env.manifests_dir) / "otherapp.yaml").exists()
+
+
+@pytest.mark.parametrize("bad_id", ["../outside", "/tmp/outside", "a/b", ".."])
+def test_manifest_edit_rejects_path_ids(authed_client, settings_env, bad_id):
+    csrf = _with_csrf(authed_client)
+    yaml_text = yaml.safe_dump({"id": bad_id, "name": "Bad"})
+    resp = authed_client.post(
+        "/manifests/someapp", data={"csrf_token": csrf, "yaml_text": yaml_text}
+    )
+    assert resp.status_code == 200
+    assert "id" in resp.text.lower()
 
 
 # ---------------------------------------------------------------------------
