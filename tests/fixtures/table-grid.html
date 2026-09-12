@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="utf-8">
+  <link rel="stylesheet" href="/backend/del_app/web/static/vendor/ag-grid.css">
+  <link rel="stylesheet" href="/backend/del_app/web/static/vendor/ag-theme-quartz.css">
+  <link rel="stylesheet" href="/backend/del_app/web/static/app.css">
+</head>
+<body>
+<table id="apps-table" class="table" data-enhanced data-page-size="25" data-search-placeholder="Filter apps…">
+  <thead>
+    <tr>
+      <th>Name</th>
+      <th>Status</th>
+      <th>Kind</th>
+      <th>Installed</th>
+      <th data-nosort>Ask</th>
+    </tr>
+  </thead>
+  <tbody id="rows"></tbody>
+</table>
+<script>
+  var body = document.getElementById("rows");
+  for (var i = 0; i < 40; i++) {
+    var tr = document.createElement("tr");
+    tr.innerHTML =
+      "<td><a href=\"#\">App " + i + "</a><div class=\"muted mono text-xs\">slug-" + i + "</div></td>" +
+      "<td data-filter-value=\"running\"><span class=\"badge status-running\">running</span></td>" +
+      "<td>compose</td>" +
+      "<td data-sort-value=\"" + (2000000000 - i) + "\">08-16-26 9:36 PM</td>" +
+      "<td><a class=\"chip assistant-ask-link\">Ask</a></td>";
+    body.appendChild(tr);
+  }
+</script>
+<script src="/backend/del_app/web/static/vendor/ag-grid-community.min.js"></script>
+<script src="/backend/del_app/web/static/app.js"></script>
+<script>
+window.addEventListener("load", function () {
+  setTimeout(function () {
+    var hdr = document.querySelector(".ag-header-cell-label");
+    if (hdr) { hdr.click(); hdr.click(); hdr.click(); }
+    var rows = document.querySelectorAll(".ag-center-cols-container .ag-row");
+    var tops = Array.prototype.map.call(rows, function (r) { return r.getBoundingClientRect().top; }).sort(function (a, b) { return a - b; });
+    var gaps = [];
+    for (var i = 1; i < tops.length; i++) gaps.push(tops[i] - tops[i - 1]);
+    var host = document.querySelector(".del-ag-grid");
+    var cs = host ? getComputedStyle(host) : null;
+    var header = document.querySelector(".ag-header");
+    document.body.setAttribute("data-row-count", String(rows.length));
+    document.body.setAttribute("data-gap-max", gaps.length ? String(Math.max.apply(null, gaps)) : "0");
+    document.body.setAttribute("data-host-h", host ? host.style.height : "");
+    document.body.setAttribute("data-bg", cs ? cs.getPropertyValue("--ag-background-color").trim() : "");
+    document.body.setAttribute("data-header-bg", header ? getComputedStyle(header).backgroundColor : "");
+    document.body.setAttribute("data-ready", "1");
+  }, 600);
+});
+</script>
+</body>
+</html>

@@ -1070,23 +1070,25 @@ a.assistant-ask-link.chip:hover { color: var(--accent); background: var(--accent
 .table-empty { color: var(--text-muted); padding: 0.85rem; text-align: center; }
 .table-resize-hint { font-size: var(--text-xs); margin-left: 0.25rem; }
 
-/* AG Grid theme bridge: quartz variables mapped onto DEL tokens */
-.del-ag-grid {
+/* AG Grid theme bridge: quartz variables mapped onto DEL tokens.
+   Selectors include the vendor theme class so they win after ag-theme-quartz.css. */
+.del-ag-grid.ag-theme-quartz,
+.del-ag-grid.ag-theme-quartz-dark {
   width: 100%;
   font-family: var(--font);
   --ag-background-color: var(--bg);
   --ag-foreground-color: var(--text);
   --ag-data-color: var(--text);
   --ag-chrome-background-color: var(--bg);
-  --ag-header-background-color: color-mix(in srgb, var(--bg-alt) 55%, var(--bg));
+  --ag-header-background-color: var(--bg-alt);
   --ag-header-foreground-color: var(--text-muted);
   --ag-secondary-foreground-color: var(--text-muted);
-  --ag-subheader-background-color: color-mix(in srgb, var(--bg-alt) 55%, var(--bg));
-  --ag-odd-row-background-color: color-mix(in srgb, var(--bg-alt) 28%, var(--bg));
-  --ag-row-hover-color: color-mix(in srgb, var(--accent-soft) 42%, var(--bg));
-  --ag-selected-row-background-color: color-mix(in srgb, var(--accent-soft) 55%, var(--bg));
+  --ag-subheader-background-color: var(--bg-alt);
+  --ag-odd-row-background-color: var(--bg-alt);
+  --ag-row-hover-color: var(--accent-soft);
+  --ag-selected-row-background-color: var(--accent-soft);
   --ag-border-color: var(--border-subtle);
-  --ag-row-border-color: color-mix(in srgb, var(--border-subtle) 70%, var(--bg));
+  --ag-row-border-color: var(--border-subtle);
   --ag-header-column-separator-display: none;
   --ag-header-column-resize-handle-display: block;
   --ag-header-column-resize-handle-color: var(--border);
@@ -1112,8 +1114,25 @@ a.assistant-ask-link.chip:hover { color: var(--accent); background: var(--accent
   --ag-icon-size: 14px;
   --ag-tooltip-background-color: var(--bg-card);
 }
-.del-ag-grid .ag-root-wrapper { border: 1px solid var(--border-subtle); border-radius: var(--radius); background: var(--bg); box-shadow: none; font-family: var(--font); }
+.del-ag-grid .ag-root-wrapper,
+.del-ag-grid .ag-root-wrapper-body,
+.del-ag-grid .ag-body-viewport,
+.del-ag-grid .ag-center-cols-viewport,
+.del-ag-grid .ag-center-cols-container {
+  background: var(--bg);
+}
+.del-ag-grid .ag-root-wrapper { border: 1px solid var(--border-subtle); border-radius: var(--radius); box-shadow: none; font-family: var(--font); }
+.del-ag-grid .ag-header,
+.del-ag-grid .ag-header-viewport,
+.del-ag-grid .ag-header-row,
+.del-ag-grid .ag-header-cell {
+  background: var(--bg-alt);
+  color: var(--text-muted);
+}
 .del-ag-grid .ag-header { border-bottom: 1px solid var(--border-subtle); }
+.del-ag-grid .ag-row { background: var(--bg); }
+.del-ag-grid .ag-row-odd { background: var(--bg-alt); }
+.del-ag-grid .ag-row-hover { background: var(--accent-soft); }
 /* Resize handles only appear while hovering the header row. */
 .del-ag-grid .ag-header-cell-resize { opacity: 0; transition: opacity var(--ease); }
 .del-ag-grid .ag-header:hover .ag-header-cell-resize { opacity: 1; }
@@ -1124,9 +1143,6 @@ a.assistant-ask-link.chip:hover { color: var(--accent); background: var(--accent
 .del-ag-grid .ag-header-cell-filter-button .ag-icon { color: var(--text-faint); }
 .del-ag-grid .ag-header-cell:hover .ag-header-cell-filter-button .ag-icon { color: var(--text-muted); }
 .del-ag-grid .ag-row { font-size: 13px; }
-.del-ag-grid .ag-center-cols-container,
-.del-ag-grid .ag-pinned-left-cols-container,
-.del-ag-grid .ag-pinned-right-cols-container { min-height: 0; }
 .del-ag-grid .ag-cell { display: flex; align-items: center; line-height: 1.4; }
 .del-ag-grid .ag-cell-wrapper { width: 100%; min-width: 0; }
 .del-ag-grid .ag-cell-inner { display: block; min-width: 0; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1140,11 +1156,11 @@ a.assistant-ask-link.chip:hover { color: var(--accent); background: var(--accent
 .del-ag-grid .ag-cell-rich .cluster { row-gap: 0.25rem; }
 .del-ag-grid .ag-cell-rich details { margin: 0.15rem 0 0; }
 .del-ag-grid .ag-cell-rich ul { margin: 0.25rem 0 0; padding-left: 1rem; }
-.del-ag-grid .ag-pinned-right-header,
-.del-ag-grid .ag-pinned-right-cols-container { border-left: 1px solid var(--border-subtle) !important; }
-.del-ag-grid:not(.is-empty) .ag-layout-auto-height .ag-center-cols-viewport,
-.del-ag-grid:not(.is-empty) .ag-layout-auto-height .ag-center-cols-container,
-.del-ag-grid:not(.is-empty) .ag-layout-auto-height .ag-center-cols-clipper { min-height: 0 !important; }
+.del-ag-grid .ag-cell-stack { align-items: flex-start; padding-top: 8px; padding-bottom: 8px; }
+.del-ag-grid .ag-cell-stack .ag-cell-inner {
+  white-space: normal; overflow: hidden; display: -webkit-box;
+  -webkit-line-clamp: 2; -webkit-box-orient: vertical;
+}
 .del-ag-grid .ag-overlay-no-rows-wrapper { padding: 1.5rem; color: var(--text-muted); }
 .del-ag-grid .ag-picker-field-wrapper,
 .del-ag-grid .ag-text-field-input,

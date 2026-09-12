@@ -338,18 +338,25 @@ def test_apps_list_shows_installed_column_and_container_date(authed_client, sett
     assert "Show removed too" in resp.text
 
 
-def test_table_engine_avoids_sort_row_gaps():
-    """Header-click sorting must not leave autoHeight/virtualisation gaps."""
-    from pathlib import Path
-
-    js = (Path(__file__).resolve().parents[1] / "backend/del_app/web/static/app.js").read_text()
-    css = (Path(__file__).resolve().parents[1] / "backend/del_app/web/static/app.css").read_text()
+def test_table_engine_uses_fixed_row_layout():
+    """Inventory grids must keep a real body height and DEL colors after sort."""
+    root = Path(__file__).resolve().parents[1]
+    js = (root / "backend/del_app/web/static/app.js").read_text()
+    css = (root / "backend/del_app/web/static/app.css").read_text()
+    base = (root / "backend/del_app/web/templates/base.html").read_text()
     assert 'var RICH_SEL = "details, ul, ol, form, .confidence, .cluster, pre";' in js
     assert ".cluster, div, pre, br" not in js
-    assert "suppressRowVirtualisation: true" in js
-    assert "resetRowHeights" in js
+    assert 'domLayout: "normal"' in js
+    assert "autoHeight: false" in js
+    assert "pinned: null" in js
+    assert "host.style.height" in js
+    assert "min-height: 0 !important" not in css
+    assert ".ag-center-cols-container { min-height: 0; }" not in css
     assert "--ag-background-color: var(--bg);" in css
-    assert "a.assistant-ask-link.chip" in css
+    assert ".del-ag-grid.ag-theme-quartz-dark" in css
+    quartz = base.find('href="/static/vendor/ag-theme-quartz.css"')
+    app_css = base.find('href="/static/app.css"')
+    assert quartz != -1 and app_css != -1 and quartz < app_css
 
 
 def test_apps_list_show_removed_toggle(authed_client, settings_env):

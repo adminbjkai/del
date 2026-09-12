@@ -941,16 +941,16 @@
         suppressHeaderMenuButton: true,
         suppressHeaderFilterButton: nosort,
         suppressMovable: nosort,
-        pinned: nosort && idx === headRow.cells.length - 1 ? "right" : null,
-        lockPinned: nosort,
+        pinned: null,
+        lockPinned: true,
         // Action columns (data-nosort) keep a fixed width; data columns flex.
         minWidth: minW,
         width: nosort ? idealW : undefined,
         // The first column names the row; give it a larger share of spare width.
         flex: nosort ? null : Math.max(1, Math.round((idx === 0 ? idealW * 1.5 : idealW) / 90)),
-        wrapText: rich,
-        autoHeight: rich,
-        cellClass: rich ? "ag-cell-rich" : null,
+        wrapText: false,
+        autoHeight: false,
+        cellClass: rich ? "ag-cell-rich" : (idx === 0 ? "ag-cell-stack" : null),
         tooltipValueGetter: rich ? null : function (params) {
           var v = params.data ? params.data["t" + idx] : "";
           return v && v.length > 18 ? v : null;
@@ -1049,13 +1049,10 @@
     if (minimal) toolbar.classList.add("is-minimal");
     var compact = table.getAttribute("data-density") === "compact" ||
       document.documentElement.getAttribute("data-density") === "compact";
+    var rowH = compact ? 40 : 52;
+    var headH = compact ? 32 : 40;
     var api;
     var persist = function () {};
-    var anyAutoHeight = columnDefs.some(function (c) { return c.autoHeight; });
-    function relayoutRows() {
-      if (!api || !anyAutoHeight) return;
-      try { api.resetRowHeights(); } catch (e) {}
-    }
     try {
       api = ag.createGrid(host, {
         columnDefs: columnDefs,
@@ -1073,13 +1070,9 @@
           suppressMovable: false,
           lockPinned: false,
         },
-        // Page height, not a fixed box: no empty band under short tables and
-        // no scroll-inside-scroll. Pagination bounds the height of long ones.
-        domLayout: "autoHeight",
-        // autoHeight + virtualisation desyncs row transforms after sort
-        // (pinned Ask column vs body). Pagination already bounds the DOM.
-        suppressRowVirtualisation: true,
-        suppressColumnVirtualisation: true,
+        // Normal grid height from the page of rows. Rows are fixed-height and
+        // not absolutely stacked into a collapsed autoHeight body.
+        domLayout: "normal",
         columnMenu: "new",
         suppressMenuHide: true,
         suppressMovableColumns: false,
@@ -1087,7 +1080,7 @@
         pagination: true,
         paginationPageSize: pageSize,
         suppressPaginationPanel: true,
-        rowBuffer: 10,
+        rowBuffer: 20,
         suppressCellFocus: false,
         enableCellTextSelection: true,
         ensureDomOrder: true,
@@ -1095,13 +1088,13 @@
         tooltipInteraction: true,
         enterNavigatesVertically: true,
         enterNavigatesVerticallyAfterEdit: true,
-        headerHeight: compact ? 32 : 40,
-        rowHeight: compact ? 36 : 48,
+        headerHeight: headH,
+        rowHeight: rowH,
         overlayNoRowsTemplate: "<div class=\"empty-state-msg\">" +
           (table.getAttribute("data-empty") || "No rows match the current filter.") + "</div>",
-        onFilterChanged: function () { relayoutRows(); updateStatus(); persist(); },
-        onSortChanged: function () { relayoutRows(); updateStatus(); persist(); },
-        onPaginationChanged: function () { relayoutRows(); updateStatus(); },
+        onFilterChanged: function () { updateStatus(); persist(); },
+        onSortChanged: function () { updateStatus(); persist(); },
+        onPaginationChanged: function () { updateStatus(); },
         onColumnMoved: function (ev) { if (!ev || ev.finished !== false) persist(); },
         onColumnResized: function (ev) { if (!ev || ev.finished !== false) persist(); },
         onColumnPinned: function () { persist(); },
@@ -1156,6 +1149,8 @@
       // when there is nothing to show.
       host.classList.toggle("is-empty", afterFilter === 0);
       pageSel.hidden = total <= 25;
+      var shown = afterFilter === 0 ? 4 : Math.max(1, end - start + 1);
+      host.style.height = (shown * rowH + headH + 4) + "px";
     }
     function themeSync() {
       applyAgThemeClass(host);

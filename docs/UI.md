@@ -32,9 +32,10 @@ The rail starts hidden below 1600px wide until the user opens it; the choice
 is remembered (`del.glossaryCollapsed`). Below 1280px Help and Ask are
 floating buttons that open bottom sheets.
 
-Inventory tables share the page background. Column-header sorting is stable:
-rows keep even height after repeated sort clicks (paginated AG Grid, no row
-virtualisation, autoHeight only on truly wrapping cells).
+Inventory tables share the page background (DEL tokens override Quartz; `app.css`
+loads after the vendor theme). The grid uses fixed row height and `domLayout:
+normal` sized to the current page, so header-click sorting keeps every row on
+the page visible and evenly spaced.
 
 On desktop, the slim divider beside each panel is a resize handle. Drag it,
 focus it and use Left/Right (Shift for larger steps), or double-click to reset.
