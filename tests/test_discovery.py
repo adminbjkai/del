@@ -1,3 +1,4 @@
+import os
 import shutil
 
 import pytest
@@ -598,7 +599,10 @@ def test_system_unit_not_under_scan_root_does_not_seed_an_app():
     assert apps == []
 
 
-@pytest.mark.skipif(shutil.which("docker") is None, reason="docker not available on this host")
+@pytest.mark.skipif(
+    os.environ.get("DEL_HOST_INTEGRATION") != "1" or shutil.which("docker") is None,
+    reason="set DEL_HOST_INTEGRATION=1 on the DEL host to run live Docker assertions",
+)
 def test_docker_src_collect_returns_many_resources_on_this_host():
     resources = docker_src.collect()
     assert len(resources) > 100

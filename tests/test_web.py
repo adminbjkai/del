@@ -1241,7 +1241,9 @@ def test_stale_probes_are_served_immediately_and_refreshed_in_background(monkeyp
     # Force both entries stale.
     with routes._APP_PROBE_LOCK:
         for entry in routes._APP_PROBE_CACHE.values():
-            entry["cached_at"] = 0.0
+            # Zero is not stale on a freshly booted CI runner whose monotonic
+            # clock is still below the TTL. Express age relative to now.
+            entry["cached_at"] = _time.monotonic() - gallery._APP_PROBE_TTL - 1
     calls.clear()
 
     started = _time.perf_counter()
