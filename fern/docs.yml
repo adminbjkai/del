@@ -65,7 +65,7 @@ colors:
     dark: "#8db5c4"
     light: "#2d5260"
   background:
-    dark: "#1a1e23"
+    dark: "#1b2021"
     light: "#f3f2ee"
 
 layout:

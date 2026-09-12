@@ -474,6 +474,10 @@ def test_shell_has_glossary_sidebar_and_collapse_controls(authed_client):
     assert 'id="glossary-rail"' in resp.text
     assert 'id="glossary-fab"' in resp.text
     assert 'id="sidebar-collapse"' in resp.text
+    assert 'id="sidebar-resizer"' in resp.text
+    assert 'aria-label="Resize navigation panel"' in resp.text
+    assert 'id="rail-resizer"' in resp.text
+    assert 'aria-label="Resize Help and Ask panel"' in resp.text
     assert 'id="nav-toggle"' in resp.text
     assert "Help" in resp.text
     assert 'id="rail-tab-ask"' in resp.text

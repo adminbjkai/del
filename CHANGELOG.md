@@ -2,6 +2,12 @@
 
 ## 2026.9.12
 
+Workspace polish: desktop navigation and Help/Ask panels now have persistent,
+keyboard-accessible resize dividers with double-click reset. The dark theme uses
+a softer natural slate/sage palette, table rows have quieter tonal separation,
+and table toolbars form a clearer control surface. Responsive collapse and mobile
+sheet behavior are unchanged.
+
 Repository polish follow-up: added pinned runtime/development dependency
 manifests and GitHub Actions checks for warnings-as-errors tests, pyflakes, and
 Fern links. The test stack now uses `httpx2`, eliminating the Starlette

@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="description" content="DEL — application inventory and safe uninstall for this host: discover apps, map their resources, and remove them with an auditable plan.">
-  <meta name="theme-color" content="#1a1e23" media="(prefers-color-scheme: dark)" data-theme-color>
+  <meta name="theme-color" content="#1b2021" media="(prefers-color-scheme: dark)" data-theme-color>
   <meta name="theme-color" content="#f3f2ee" media="(prefers-color-scheme: light)" data-theme-color>
   <title>{% block title %}DEL{% endblock %} · DEL</title>
   <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
@@ -96,6 +96,10 @@
         </div>
       </div>
     </nav>
+    <div class="panel-resizer sidebar-resizer" id="sidebar-resizer" role="separator"
+         aria-label="Resize navigation panel" aria-orientation="vertical"
+         aria-valuemin="184" aria-valuemax="320" aria-valuenow="212" tabindex="0"
+         title="Drag or use arrow keys to resize; double-click to reset"></div>
 
     <div class="main-wrap">
       <main class="content" id="main-content">
@@ -107,6 +111,10 @@
         </div>
       </main>
 
+      <div class="panel-resizer rail-resizer" id="rail-resizer" role="separator"
+           aria-label="Resize Help and Ask panel" aria-orientation="vertical"
+           aria-valuemin="280" aria-valuemax="520" aria-valuenow="300" tabindex="0"
+           title="Drag or use arrow keys to resize; double-click to reset"></div>
       <aside class="glossary-rail" id="glossary-rail" aria-label="Help and assistant">
         <button type="button" id="glossary-collapse" class="icon-btn glossary-collapse-btn"
                 aria-label="Hide help panel" title="Hide help panel">{{ i.icon('chevron-right') }}</button>

@@ -6,7 +6,7 @@
     }
     document.documentElement.setAttribute("data-theme", t);
     document.querySelectorAll("meta[data-theme-color]").forEach(function (meta) {
-      meta.content = t === "light" ? "#f3f2ee" : "#1a1e23";
+      meta.content = t === "light" ? "#f3f2ee" : "#1b2021";
     });
     var d = localStorage.getItem("del-density");
     if (d === "compact" || d === "comfortable") {

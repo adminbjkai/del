@@ -34,7 +34,7 @@
     set: function (theme) {
       document.documentElement.setAttribute("data-theme", theme);
       document.querySelectorAll("meta[data-theme-color]").forEach(function (meta) {
-        meta.content = theme === "light" ? "#f3f2ee" : "#1a1e23";
+        meta.content = theme === "light" ? "#f3f2ee" : "#1b2021";
       });
       try { localStorage.setItem(THEME_KEY, theme); } catch (e) {}
       var btn = document.getElementById("theme-toggle");
@@ -1767,9 +1767,76 @@
   var sidebar = document.getElementById("sidebar");
   var navToggle = document.getElementById("nav-toggle");
   var sidebarCollapse = document.getElementById("sidebar-collapse");
+  var sidebarResizer = document.getElementById("sidebar-resizer");
   var navBackdrop = document.getElementById("nav-backdrop");
   var navDrawer = document.getElementById("nav-drawer");
   var SIDEBAR_KEY = "del.sidebarCollapsed";
+  var SIDEBAR_WIDTH_KEY = "del.sidebarWidth";
+
+  function clampPanelWidth(value, min, max) {
+    return Math.max(min, Math.min(max, Math.round(value)));
+  }
+
+  function makePanelResizable(handle, panel, cssVariable, storageKey, min, max, initial, direction) {
+    if (!handle || !panel || !layout) return;
+
+    function apply(value, remember) {
+      var width = clampPanelWidth(value, min, max);
+      layout.style.setProperty(cssVariable, width + "px");
+      handle.setAttribute("aria-valuenow", String(width));
+      if (remember !== false) {
+        try { localStorage.setItem(storageKey, String(width)); } catch (e) {}
+      }
+      return width;
+    }
+
+    try {
+      var stored = parseInt(localStorage.getItem(storageKey), 10);
+      apply(Number.isFinite(stored) ? stored : initial, false);
+    } catch (e) { apply(initial, false); }
+
+    handle.addEventListener("pointerdown", function (event) {
+      if (event.button !== 0) return;
+      event.preventDefault();
+      var startX = event.clientX;
+      var startWidth = panel.getBoundingClientRect().width;
+      handle.classList.add("is-dragging");
+      document.body.classList.add("is-panel-resizing");
+      handle.setPointerCapture(event.pointerId);
+
+      function move(moveEvent) {
+        apply(startWidth + ((moveEvent.clientX - startX) * direction));
+      }
+      function finish() {
+        handle.classList.remove("is-dragging");
+        document.body.classList.remove("is-panel-resizing");
+        handle.removeEventListener("pointermove", move);
+        handle.removeEventListener("pointerup", finish);
+        handle.removeEventListener("pointercancel", finish);
+      }
+      handle.addEventListener("pointermove", move);
+      handle.addEventListener("pointerup", finish);
+      handle.addEventListener("pointercancel", finish);
+    });
+
+    handle.addEventListener("keydown", function (event) {
+      if (event.key !== "ArrowLeft" && event.key !== "ArrowRight") return;
+      event.preventDefault();
+      var current = panel.getBoundingClientRect().width;
+      var step = event.shiftKey ? 32 : 12;
+      var physicalDelta = event.key === "ArrowRight" ? step : -step;
+      apply(current + (physicalDelta * direction));
+    });
+
+    handle.addEventListener("dblclick", function () {
+      apply(initial);
+    });
+  }
+
+  makePanelResizable(
+    sidebarResizer, sidebar, "--sidebar-width", SIDEBAR_WIDTH_KEY,
+    184, 320, 212, 1
+  );
 
   function isMobileNav() {
     return matchesMobile();
@@ -1886,6 +1953,12 @@
   // =========================================================================
   var GLOSSARY_COLLAPSE_KEY = "del.glossaryCollapsed";
   var glossaryCollapseBtn = document.getElementById("glossary-collapse");
+  var glossaryRail = document.getElementById("glossary-rail");
+  var railResizer = document.getElementById("rail-resizer");
+  makePanelResizable(
+    railResizer, glossaryRail, "--rail-width", "del.rightRailWidth",
+    280, 520, 300, -1
+  );
   function setGlossaryCollapsed(collapsed, remember) {
     if (!layout) return;
     if (window.matchMedia && window.matchMedia("(max-width: 1279px)").matches) {

@@ -22,7 +22,9 @@ behind HTTP basic auth cannot pop a credential prompt over the gallery.
 The admin UI's theme follows `localStorage["del.theme"]` if set, else the OS
 `prefers-color-scheme`, else dark, with a header toggle for light/dark
 (persisted in browser local storage) and a `Ctrl`/`Cmd`+`K` command palette for
-jumping to any sidebar page or application.
+jumping to any sidebar page or application. On desktop, the navigation and
+Help/Ask panels can be resized by dragging their dividers or using arrow keys;
+each width is remembered locally and can be reset with a double-click.
 
 The **Assistant** is a read-only Q&A over the latest inventory (Ollama Cloud
 `glm-5.3-flash`): a dedicated page at `/assistant` plus an **Ask** tab in the

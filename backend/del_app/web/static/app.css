@@ -22,19 +22,19 @@
 :root,
 [data-theme="dark"] {
   color-scheme: dark;
-  --bg: #1a1e23;
-  --bg-alt: #1f242a;
-  --bg-card: #23292f;
-  --bg-sunken: #171a1f;
-  --border: #343b44;
-  --border-subtle: #2c3239;
-  --text: #d7dce1;
-  --text-muted: #99a2ab;
-  --text-faint: #7b848d;
-  --accent: #8db5c4;
-  --accent-hover: #a9c9d5;
-  --accent-bg: #3d6878;
-  --accent-soft: #26343b;
+  --bg: #1b2021;
+  --bg-alt: #202728;
+  --bg-card: #252c2d;
+  --bg-sunken: #171c1d;
+  --border: #3a4444;
+  --border-subtle: #30393a;
+  --text: #e0e5e2;
+  --text-muted: #a3adaa;
+  --text-faint: #818c89;
+  --accent: #8abaae;
+  --accent-hover: #a5cbbf;
+  --accent-bg: #47766d;
+  --accent-soft: #293b38;
   --on-accent: #f4f7f9;
   --danger: #e0968f;
   --danger-solid: #96473f;
@@ -211,11 +211,16 @@ hr { border: 0; border-top: 1px solid var(--border-subtle); margin: var(--space-
 /* =========================================================================
    3  Shell: sidebar | content | right rail (Help / Ask)
    ========================================================================= */
-.layout { display: flex; min-height: 100vh; min-height: 100dvh; }
+.layout {
+  --sidebar-width: 212px;
+  --rail-width: 300px;
+  display: flex;
+  min-height: 100vh;
+  min-height: 100dvh;
+}
 
 .sidebar {
-  --sidebar-w: 212px;
-  width: var(--sidebar-w);
+  width: var(--sidebar-width);
   flex-shrink: 0;
   position: sticky;
   top: 0;
@@ -320,7 +325,7 @@ hr { border: 0; border-top: 1px solid var(--border-subtle); margin: var(--space-
 .sidebar-foot .logout-btn .ico { width: 1.15rem; }
 
 /* Desktop collapsed sidebar: icons + tooltips only */
-.layout.sidebar-collapsed .sidebar { --sidebar-w: 60px; padding-left: 0.45rem; padding-right: 0.45rem; }
+.layout.sidebar-collapsed .sidebar { width: 60px; padding-left: 0.45rem; padding-right: 0.45rem; }
 .layout.sidebar-collapsed .sidebar-top { flex-direction: column; gap: 0.4rem; }
 .layout.sidebar-collapsed .brand { padding-left: 0; justify-content: center; }
 .layout.sidebar-collapsed .brand-text,
@@ -335,7 +340,7 @@ hr { border: 0; border-top: 1px solid var(--border-subtle); margin: var(--space-
 .layout.sidebar-collapsed .logout-btn { justify-content: center; padding-left: 0; padding-right: 0; gap: 0; }
 .layout.sidebar-collapsed .sidebar-collapse-btn .ico { transform: rotate(180deg); }
 
-.main-wrap { flex: 1; display: flex; min-width: 0; align-items: flex-start; max-width: 100%; overflow-x: clip; }
+.main-wrap { flex: 1; display: flex; min-width: 0; min-height: 100vh; min-height: 100dvh; align-items: flex-start; max-width: 100%; overflow-x: clip; }
 .content {
   flex: 1 1 auto;
   width: 100%;
@@ -348,11 +353,10 @@ hr { border: 0; border-top: 1px solid var(--border-subtle); margin: var(--space-
 
 /* Right rail (desktop >= 1280px): Help glossary + Ask dock */
 .glossary-rail {
-  --rail-w: 300px;
   display: none;
   position: sticky;
   top: 0;
-  width: var(--rail-w);
+  width: var(--rail-width);
   height: 100vh;
   height: 100dvh;
   flex-shrink: 0;
@@ -392,7 +396,7 @@ hr { border: 0; border-top: 1px solid var(--border-subtle); margin: var(--space-
 .rail-panel[hidden] { display: none !important; }
 #rail-panel-ask:not([hidden]) { display: flex; flex-direction: column; }
 
-.layout.glossary-collapsed .glossary-rail { --rail-w: 44px; }
+.layout.glossary-collapsed .glossary-rail { width: 44px; }
 .layout.glossary-collapsed .rail-tabs,
 .layout.glossary-collapsed .rail-panel { display: none; }
 .layout.glossary-collapsed .glossary-collapse-btn { position: static; margin: 0.6rem auto 0; }
@@ -410,6 +414,42 @@ hr { border: 0; border-top: 1px solid var(--border-subtle); margin: var(--space-
   border: 0; background: none; font-family: inherit;
 }
 .layout.glossary-collapsed .rail-collapsed-label:hover { color: var(--accent); }
+
+/* Desktop shell dividers double as persistent, keyboard-accessible resizers. */
+.panel-resizer {
+  display: none;
+  position: sticky;
+  top: 0;
+  z-index: 42;
+  width: 7px;
+  height: 100vh;
+  height: 100dvh;
+  flex: 0 0 7px;
+  cursor: col-resize;
+  touch-action: none;
+}
+.panel-resizer::after {
+  content: "";
+  position: absolute;
+  inset: 0 3px;
+  background: var(--border-subtle);
+  transition: background var(--ease), box-shadow var(--ease);
+}
+.panel-resizer:hover::after,
+.panel-resizer:focus-visible::after,
+.panel-resizer.is-dragging::after {
+  background: var(--accent);
+  box-shadow: 0 0 0 2px var(--accent-soft);
+}
+body.is-panel-resizing { cursor: col-resize; user-select: none; }
+@media (min-width: 900px) {
+  .sidebar-resizer { display: block; }
+  .layout.sidebar-collapsed .sidebar-resizer { display: none; }
+}
+@media (min-width: 1280px) {
+  .rail-resizer { display: block; }
+  .layout.glossary-collapsed .rail-resizer { display: none; }
+}
 
 /* Glossary cards inside the rail / sheet */
 .glossary-inner { font-size: 0.84rem; line-height: 1.5; padding: 0.85rem 0.85rem 1.5rem; scrollbar-gutter: stable; }
@@ -996,7 +1036,12 @@ a.assistant-ask-link.chip { font-weight: 600; color: var(--accent); }
    ========================================================================= */
 .table-block { width: 100%; max-width: 100%; min-width: 0; margin: 0 0 var(--space-2); }
 .panel > .table-block:last-child, .section-body > .table-block:last-child { margin-bottom: 0; }
-.table-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; margin-bottom: 0.55rem; max-width: 100%; }
+.table-toolbar {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 0.45rem;
+  margin-bottom: 0.55rem; max-width: 100%; padding: 0.45rem;
+  border: 1px solid var(--border-subtle); border-radius: var(--radius);
+  background: color-mix(in srgb, var(--bg-card) 72%, var(--bg));
+}
 .table-toolbar.is-minimal .table-filter,
 .table-toolbar.is-minimal .table-pagesize,
 .table-toolbar.is-minimal .table-pager,
@@ -1033,7 +1078,7 @@ a.assistant-ask-link.chip { font-weight: 600; color: var(--accent); }
   --ag-header-foreground-color: var(--text-muted);
   --ag-secondary-foreground-color: var(--text-muted);
   --ag-subheader-background-color: var(--bg-alt);
-  --ag-odd-row-background-color: var(--bg-card);
+  --ag-odd-row-background-color: color-mix(in srgb, var(--bg-alt) 35%, var(--bg-card));
   --ag-row-hover-color: color-mix(in srgb, var(--accent-soft) 60%, var(--bg-card));
   --ag-selected-row-background-color: var(--accent-soft);
   --ag-border-color: var(--border-subtle);
@@ -1063,7 +1108,7 @@ a.assistant-ask-link.chip { font-weight: 600; color: var(--accent); }
   --ag-icon-size: 14px;
   --ag-tooltip-background-color: var(--bg-card);
 }
-.del-ag-grid .ag-root-wrapper { border: 1px solid var(--border-subtle); border-radius: var(--radius-sm); background: var(--bg-card); font-family: var(--font); }
+.del-ag-grid .ag-root-wrapper { border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-card); box-shadow: var(--shadow-sm); font-family: var(--font); }
 .del-ag-grid .ag-header { border-bottom: 1px solid var(--border-subtle); }
 /* Resize handles only appear while hovering the header row. */
 .del-ag-grid .ag-header-cell-resize { opacity: 0; transition: opacity var(--ease); }
@@ -1484,7 +1529,8 @@ pre.output {
   .layout { flex-direction: column; }
 
   /* Collapse is desktop-only: undo it completely on small screens */
-  .layout.sidebar-collapsed .sidebar { --sidebar-w: 100%; padding: 0.5rem 0.85rem; }
+  .layout.sidebar-collapsed .sidebar { width: 100%; padding: 0.5rem 0.85rem; }
+  .panel-resizer { display: none !important; }
   .layout.sidebar-collapsed .sidebar-top { flex-direction: row; }
   .layout.sidebar-collapsed .sidebar-controls { flex-direction: row; }
   .layout.sidebar-collapsed .brand-text,
@@ -1597,7 +1643,7 @@ pre.output {
 }
 
 @media print {
-  .sidebar, .glossary-rail, .glossary-fab, .glossary-sheet, .nav-backdrop,
+  .sidebar, .panel-resizer, .glossary-rail, .glossary-fab, .glossary-sheet, .nav-backdrop,
   .table-toolbar, .table-pager, .page-actions, .action-bar, .skip-link { display: none !important; }
   html, body { background: #fff !important; color: #000 !important; font-size: 11pt; }
   .content { padding: 0 !important; }
