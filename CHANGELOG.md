@@ -3,12 +3,12 @@
 ## 2026.9.12
 
 Applications table: live header-click captures showed every row stacked at
-`top: 0` (`position: absolute` without `translateY`) after repeated sorts —
-`ensureDomOrder` was fighting AG Grid's row positioning. Rows now keep
-translateY, the grid is sized before create, virtualisation is off for the
-page of rows, and stale pinned column state is ignored. Quartz theme CSS
-loads before DEL's stylesheet so the table uses the same slate/sage tokens
-as the rest of the shell. Ask is a normal last column.
+`top: 0` (`position: absolute` without `translateY`) after repeated sorts.
+Every enhanced table now keeps the current page of rows in the DOM and lays
+them out in document order, so sorting reorders real rows instead of relying
+on transforms. Stale pinned column state is ignored. Quartz theme CSS loads
+before DEL's stylesheet so tables use the same slate/sage tokens as the rest
+of the shell.
 
 Workspace polish: desktop navigation and Help/Ask panels now have persistent,
 keyboard-accessible resize dividers with double-click reset. The dark theme uses

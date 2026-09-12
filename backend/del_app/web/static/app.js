@@ -1076,14 +1076,11 @@
           suppressMovable: false,
           lockPinned: true,
         },
-        // Fixed-height rows, positioned by AG Grid (translateY). ensureDomOrder
-        // plus position:absolute left every row at top:0 after header clicks.
+        // Paginated lists keep every page row in the DOM. Rows are laid out
+        // in document order (see CSS) so header-click sorting cannot stack
+        // absolutely positioned rows on top of each other.
         domLayout: "normal",
         suppressRowVirtualisation: true,
-        getRowId: function (params) {
-          var tr = params.data && params.data._tr;
-          return tr ? String(tr.sectionRowIndex) : String(params.rowIndex);
-        },
         columnMenu: "new",
         suppressMenuHide: true,
         suppressMovableColumns: false,
@@ -1094,7 +1091,7 @@
         rowBuffer: 20,
         suppressCellFocus: false,
         enableCellTextSelection: true,
-        ensureDomOrder: false,
+        ensureDomOrder: true,
         tooltipShowDelay: 500,
         tooltipInteraction: true,
         enterNavigatesVertically: true,

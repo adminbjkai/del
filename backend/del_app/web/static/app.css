@@ -1133,6 +1133,22 @@ a.assistant-ask-link.chip:hover { color: var(--accent); background: var(--accent
 .del-ag-grid .ag-row { background: var(--bg); }
 .del-ag-grid .ag-row-odd { background: var(--bg-alt); }
 .del-ag-grid .ag-row-hover { background: var(--accent-soft); }
+/* Paginated grids render a full page of rows. AG Grid still emits
+   position:absolute without translateY on large sorts; flow them instead. */
+.del-ag-grid .ag-center-cols-container .ag-row,
+.del-ag-grid .ag-pinned-left-cols-container .ag-row,
+.del-ag-grid .ag-pinned-right-cols-container .ag-row {
+  position: relative !important;
+  transform: none !important;
+  top: auto !important;
+  left: auto !important;
+  width: 100%;
+}
+.del-ag-grid .ag-center-cols-container,
+.del-ag-grid .ag-pinned-left-cols-container,
+.del-ag-grid .ag-pinned-right-cols-container {
+  height: auto !important;
+}
 /* Resize handles only appear while hovering the header row. */
 .del-ag-grid .ag-header-cell-resize { opacity: 0; transition: opacity var(--ease); }
 .del-ag-grid .ag-header:hover .ag-header-cell-resize { opacity: 1; }
