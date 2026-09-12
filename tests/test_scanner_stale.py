@@ -10,6 +10,8 @@ from del_app import scanner
 from del_app.config import get_settings
 from del_app.db import get_db, q, run_migrations, x
 
+pytestmark = pytest.mark.real_scanner
+
 
 @pytest.fixture()
 def settings_env(tmp_path, monkeypatch):
