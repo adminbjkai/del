@@ -939,7 +939,11 @@ a.chip:hover { border-color: var(--accent); color: var(--accent); text-decoratio
 .owner-cluster { gap: 0.3rem; }
 .owner-chip { color: var(--accent); border-color: color-mix(in srgb, var(--accent) 30%, var(--border)); }
 .owner-chip-unassigned { background: var(--tone-neutral-bg); border-color: transparent; color: var(--tone-neutral-fg); }
-a.assistant-ask-link.chip { font-weight: 600; color: var(--accent); }
+a.assistant-ask-link.chip {
+  font-weight: 500; color: var(--text-muted);
+  background: transparent; border-color: var(--border-subtle);
+}
+a.assistant-ask-link.chip:hover { color: var(--accent); background: var(--accent-soft); }
 
 /* Badges: tone pairs only */
 .badge {
@@ -1038,9 +1042,9 @@ a.assistant-ask-link.chip { font-weight: 600; color: var(--accent); }
 .panel > .table-block:last-child, .section-body > .table-block:last-child { margin-bottom: 0; }
 .table-toolbar {
   display: flex; flex-wrap: wrap; align-items: center; gap: 0.45rem;
-  margin-bottom: 0.55rem; max-width: 100%; padding: 0.45rem;
-  border: 1px solid var(--border-subtle); border-radius: var(--radius);
-  background: color-mix(in srgb, var(--bg-card) 72%, var(--bg));
+  margin-bottom: 0.55rem; max-width: 100%; padding: 0.35rem 0.15rem;
+  border: 0; border-radius: 0;
+  background: transparent;
 }
 .table-toolbar.is-minimal .table-filter,
 .table-toolbar.is-minimal .table-pagesize,
@@ -1070,19 +1074,19 @@ a.assistant-ask-link.chip { font-weight: 600; color: var(--accent); }
 .del-ag-grid {
   width: 100%;
   font-family: var(--font);
-  --ag-background-color: var(--bg-card);
+  --ag-background-color: var(--bg);
   --ag-foreground-color: var(--text);
   --ag-data-color: var(--text);
-  --ag-chrome-background-color: var(--bg-card);
-  --ag-header-background-color: var(--bg-alt);
+  --ag-chrome-background-color: var(--bg);
+  --ag-header-background-color: color-mix(in srgb, var(--bg-alt) 55%, var(--bg));
   --ag-header-foreground-color: var(--text-muted);
   --ag-secondary-foreground-color: var(--text-muted);
-  --ag-subheader-background-color: var(--bg-alt);
-  --ag-odd-row-background-color: color-mix(in srgb, var(--bg-alt) 35%, var(--bg-card));
-  --ag-row-hover-color: color-mix(in srgb, var(--accent-soft) 60%, var(--bg-card));
-  --ag-selected-row-background-color: var(--accent-soft);
+  --ag-subheader-background-color: color-mix(in srgb, var(--bg-alt) 55%, var(--bg));
+  --ag-odd-row-background-color: color-mix(in srgb, var(--bg-alt) 28%, var(--bg));
+  --ag-row-hover-color: color-mix(in srgb, var(--accent-soft) 42%, var(--bg));
+  --ag-selected-row-background-color: color-mix(in srgb, var(--accent-soft) 55%, var(--bg));
   --ag-border-color: var(--border-subtle);
-  --ag-row-border-color: var(--border-subtle);
+  --ag-row-border-color: color-mix(in srgb, var(--border-subtle) 70%, var(--bg));
   --ag-header-column-separator-display: none;
   --ag-header-column-resize-handle-display: block;
   --ag-header-column-resize-handle-color: var(--border);
@@ -1108,7 +1112,7 @@ a.assistant-ask-link.chip { font-weight: 600; color: var(--accent); }
   --ag-icon-size: 14px;
   --ag-tooltip-background-color: var(--bg-card);
 }
-.del-ag-grid .ag-root-wrapper { border: 1px solid var(--border); border-radius: var(--radius); background: var(--bg-card); box-shadow: var(--shadow-sm); font-family: var(--font); }
+.del-ag-grid .ag-root-wrapper { border: 1px solid var(--border-subtle); border-radius: var(--radius); background: var(--bg); box-shadow: none; font-family: var(--font); }
 .del-ag-grid .ag-header { border-bottom: 1px solid var(--border-subtle); }
 /* Resize handles only appear while hovering the header row. */
 .del-ag-grid .ag-header-cell-resize { opacity: 0; transition: opacity var(--ease); }
@@ -1120,6 +1124,9 @@ a.assistant-ask-link.chip { font-weight: 600; color: var(--accent); }
 .del-ag-grid .ag-header-cell-filter-button .ag-icon { color: var(--text-faint); }
 .del-ag-grid .ag-header-cell:hover .ag-header-cell-filter-button .ag-icon { color: var(--text-muted); }
 .del-ag-grid .ag-row { font-size: 13px; }
+.del-ag-grid .ag-center-cols-container,
+.del-ag-grid .ag-pinned-left-cols-container,
+.del-ag-grid .ag-pinned-right-cols-container { min-height: 0; }
 .del-ag-grid .ag-cell { display: flex; align-items: center; line-height: 1.4; }
 .del-ag-grid .ag-cell-wrapper { width: 100%; min-width: 0; }
 .del-ag-grid .ag-cell-inner { display: block; min-width: 0; width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }

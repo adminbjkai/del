@@ -338,6 +338,20 @@ def test_apps_list_shows_installed_column_and_container_date(authed_client, sett
     assert "Show removed too" in resp.text
 
 
+def test_table_engine_avoids_sort_row_gaps():
+    """Header-click sorting must not leave autoHeight/virtualisation gaps."""
+    from pathlib import Path
+
+    js = (Path(__file__).resolve().parents[1] / "backend/del_app/web/static/app.js").read_text()
+    css = (Path(__file__).resolve().parents[1] / "backend/del_app/web/static/app.css").read_text()
+    assert 'var RICH_SEL = "details, ul, ol, form, .confidence, .cluster, pre";' in js
+    assert ".cluster, div, pre, br" not in js
+    assert "suppressRowVirtualisation: true" in js
+    assert "resetRowHeights" in js
+    assert "--ag-background-color: var(--bg);" in css
+    assert "a.assistant-ask-link.chip" in css
+
+
 def test_apps_list_show_removed_toggle(authed_client, settings_env):
     """Default list hides apps not in the latest completed scan; ?show=removed keeps them."""
     from del_app.db import get_db, x

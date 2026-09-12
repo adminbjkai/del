@@ -2,6 +2,12 @@
 
 ## 2026.9.12
 
+Applications table: sorting by column headers no longer leaves large empty
+row gaps. Name/slug cells no longer force AG Grid autoHeight, row virtualisation
+is off under paginated auto-layout, and row heights reset after sort/filter.
+The inventory table now uses the same page background as the rest of the shell
+instead of a darker boxed contrast, with quieter Ask chips and toolbars.
+
 Workspace polish: desktop navigation and Help/Ask panels now have persistent,
 keyboard-accessible resize dividers with double-click reset. The dark theme uses
 a softer natural slate/sage palette, table rows have quieter tonal separation,

@@ -890,9 +890,10 @@
     wrap.appendChild(host);
 
     var NUM_RE = /^-?\d+(\.\d+)?$/;
-    // Cells holding block content (meters, disclosures, forms, several chips)
-    // cannot live in a fixed 36px row: those columns wrap and grow the row.
-    var RICH_SEL = "details, ul, ol, form, .confidence, .cluster, div, pre, br";
+    // Only genuinely wrapping blocks grow the row. A generic `div` is too
+    // broad (name + slug on Applications) and, with autoHeight + virtualisation,
+    // leaves huge gaps after the user clicks column headers to re-sort.
+    var RICH_SEL = "details, ul, ol, form, .confidence, .cluster, pre";
     var rows = Array.prototype.slice.call(tbody.rows);
     var sample = rows.slice(0, 200);
     var columnDefs = [];
@@ -1050,6 +1051,11 @@
       document.documentElement.getAttribute("data-density") === "compact";
     var api;
     var persist = function () {};
+    var anyAutoHeight = columnDefs.some(function (c) { return c.autoHeight; });
+    function relayoutRows() {
+      if (!api || !anyAutoHeight) return;
+      try { api.resetRowHeights(); } catch (e) {}
+    }
     try {
       api = ag.createGrid(host, {
         columnDefs: columnDefs,
@@ -1070,6 +1076,10 @@
         // Page height, not a fixed box: no empty band under short tables and
         // no scroll-inside-scroll. Pagination bounds the height of long ones.
         domLayout: "autoHeight",
+        // autoHeight + virtualisation desyncs row transforms after sort
+        // (pinned Ask column vs body). Pagination already bounds the DOM.
+        suppressRowVirtualisation: true,
+        suppressColumnVirtualisation: true,
         columnMenu: "new",
         suppressMenuHide: true,
         suppressMovableColumns: false,
@@ -1085,13 +1095,13 @@
         tooltipInteraction: true,
         enterNavigatesVertically: true,
         enterNavigatesVerticallyAfterEdit: true,
-        headerHeight: compact ? 30 : 38,
-        rowHeight: compact ? 30 : 38,
+        headerHeight: compact ? 32 : 40,
+        rowHeight: compact ? 36 : 48,
         overlayNoRowsTemplate: "<div class=\"empty-state-msg\">" +
           (table.getAttribute("data-empty") || "No rows match the current filter.") + "</div>",
-        onFilterChanged: function () { updateStatus(); persist(); },
-        onSortChanged: function () { updateStatus(); persist(); },
-        onPaginationChanged: function () { updateStatus(); },
+        onFilterChanged: function () { relayoutRows(); updateStatus(); persist(); },
+        onSortChanged: function () { relayoutRows(); updateStatus(); persist(); },
+        onPaginationChanged: function () { relayoutRows(); updateStatus(); },
         onColumnMoved: function (ev) { if (!ev || ev.finished !== false) persist(); },
         onColumnResized: function (ev) { if (!ev || ev.finished !== false) persist(); },
         onColumnPinned: function () { persist(); },
