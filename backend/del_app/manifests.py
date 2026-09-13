@@ -31,6 +31,7 @@ class Manifest(pydantic.BaseModel):
     status: str | None = None
     domains: list[str] = pydantic.Field(default_factory=list)
     compose: list[str] = pydantic.Field(default_factory=list)
+    volumes: list[str] = pydantic.Field(default_factory=list)
     repositories: list[str] = pydantic.Field(default_factory=list)
     host_paths: list[str] = pydantic.Field(default_factory=list)
     systemd_units: list[str] = pydantic.Field(default_factory=list)

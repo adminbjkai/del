@@ -1,0 +1,13 @@
+id: expenseowl-source
+name: ExpenseOwl upstream source clone
+status: stopped
+host_paths:
+  - /apps/ExpenseOwl
+  - /apps/ExpenseOwl/.git
+excluded:
+  - /apps/ExpenseOwl
+  - /apps/ExpenseOwl/.git
+notes: |
+  Separate upstream Go source clone. The live deployment is the lowercase
+  /apps/expenseowl Compose project. Reviewed on 2026-09-13; keep this source
+  checkout distinct and blocked from automatic removal.

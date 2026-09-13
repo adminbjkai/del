@@ -1,0 +1,13 @@
+id: flashflix-tvos
+name: Flashflix tvOS client source
+status: stopped
+host_paths:
+  - /apps/flashflix-tvos
+  - /apps/flashflix-tvos/.git
+excluded:
+  - /apps/flashflix-tvos
+  - /apps/flashflix-tvos/.git
+notes: |
+  Valid Apple tvOS client source for the live flashflix backend. Reviewed on
+  2026-09-13. No runtime resources; keep as source, never treat as orphaned
+  deployment data or remove automatically with the server.

@@ -955,7 +955,7 @@ def build_apps(
 
         by_key = {r.key: r for r in resources}
         for key_list in (
-            manifest.compose, manifest.host_paths, manifest.systemd_units,
+            manifest.compose, manifest.volumes, manifest.host_paths, manifest.systemd_units,
             manifest.nginx, manifest.cron, manifest.repositories,
         ):
             for key in key_list:

@@ -1,0 +1,7 @@
+id: beinv
+name: beinv
+volumes:
+  - beinv_beinv_data
+notes: |
+  Historical empty dangling Docker volume. Current beinv deployment is
+  stateless and has no volume mount. Reviewed on 2026-09-13.

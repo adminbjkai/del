@@ -1,0 +1,13 @@
+id: sharex
+name: ShareX Windows source clone
+status: stopped
+host_paths:
+  - /apps/ShareX
+  - /apps/ShareX/.git
+excluded:
+  - /apps/ShareX
+  - /apps/ShareX/.git
+notes: |
+  Upstream ShareX Windows desktop source clone. No Linux runtime, Docker,
+  systemd, Nginx, or port evidence. Reviewed on 2026-09-13; root-owned and
+  blocked from automatic removal.

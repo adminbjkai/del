@@ -1,0 +1,13 @@
+id: notes
+name: Notes desktop source clone
+status: stopped
+host_paths:
+  - /apps/notes
+  - /apps/notes/.git
+excluded:
+  - /apps/notes
+  - /apps/notes/.git
+notes: |
+  Upstream nuttyartist/notes C++/Qt desktop source clone. Unrelated to the
+  running itsnotes and notex services despite the shared word "notes".
+  Reviewed on 2026-09-13; keep as a blocked source checkout.

@@ -1,0 +1,10 @@
+id: docmost
+name: docmost
+volumes:
+  - docmost_postgres_data
+excluded:
+  - docmost_postgres_data
+notes: |
+  Legacy PostgreSQL data volume retained as rollback protection. Current live
+  database uses docmost_postgres_data_v18. Keep blocked until rollback safety
+  is explicitly confirmed. Reviewed on 2026-09-13.

@@ -1,0 +1,13 @@
+id: myspeed-source
+name: MySpeed upstream source clone
+status: stopped
+host_paths:
+  - /apps/MySpeed
+  - /apps/MySpeed/.git
+excluded:
+  - /apps/MySpeed
+  - /apps/MySpeed/.git
+notes: |
+  Separate upstream source clone. The live deployment is the lowercase
+  /apps/myspeed Compose project. Reviewed on 2026-09-13; keep this source
+  checkout distinct and blocked from automatic removal.

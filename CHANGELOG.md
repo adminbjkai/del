@@ -2,6 +2,13 @@
 
 ## 2026.9.13
 
+Orphan clarification pass: validated source clones (`flashflix-tvos`,
+`ultraflix-apk`, `ExpenseOwl`, `MySpeed`, `notes`, and `ShareX`) now have
+explicit blocked manifests instead of misleading weak app matches. Historical
+Docker volumes are attributed to their owning apps; the large code-server
+volume and Docmost rollback volume remain explicitly blocked for review.
+Manifests now support a dedicated `volumes` field.
+
 Reviewed weak filesystem matches are now cleaner: bare directories with no
 Compose, `.env`, or Git signal are not attached to apps by name similarity alone.
 The standalone `cap42` and `cap4l` local projects now have explicit manifests,

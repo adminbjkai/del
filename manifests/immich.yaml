@@ -1,0 +1,7 @@
+id: immich
+name: immich
+volumes:
+  - immich_immich_redis_data
+notes: |
+  Historical dangling Redis data volume. Current immich Redis/Valkey container
+  has no named volume and uses ephemeral cache storage. Reviewed on 2026-09-13.

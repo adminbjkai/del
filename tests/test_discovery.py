@@ -6,6 +6,7 @@ import pytest
 from del_app.correlate import build_apps
 from del_app.discovery import docker_src, fs_src, nginx_src, proc_src, systemd_src
 from del_app.models import Resource
+from del_app.manifests import Manifest
 
 
 # --------------------------------------------------------------------------
@@ -28,6 +29,18 @@ def _container(name, compose_project=None, compose_working_dir=None, published_p
             "state": "running",
         },
     )
+
+
+def test_manifest_can_claim_and_block_historical_docker_volume():
+    volume = Resource(type="volume", key="legacy_data", display="legacy_data", path=None, state="dangling", data={})
+    manifest = Manifest(id="demo", volumes=["legacy_data"], excluded=["legacy_data"])
+    apps = build_apps([volume], {"demo": manifest})
+    record, assocs = next(item for item in apps if item[0].slug == "demo")
+    assoc = next(a for a in assocs if a.resource_key == "legacy_data")
+    assert assoc.confidence == 100
+    assert assoc.level == "manual"
+    assert assoc.excluded is True
+    assert assoc.removal_eligible == "blocked"
 
 
 def test_compose_label_groups_containers_into_one_app():

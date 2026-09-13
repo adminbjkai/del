@@ -181,7 +181,11 @@ def build_apps(resources: list[Resource], manifests: dict[str, Manifest]) -> lis
   keeps ordinary folders such as notes/docs and system directories such as
   `/opt/containerd` visible for manual review without inventing an app owner.
   Reviewed standalone projects may use manifests for explicit 100-confidence
-  ownership, as with `cap42` and `cap4l`.
+  ownership, as with `cap42`, `cap4l`, `flashflix-tvos`, and `ultraflix-apk`.
+  Source clones and historical Docker volumes can likewise be declared without
+  merging them into a live deployment; `volumes:` is the manifest field for
+  named Docker volumes, while `excluded:` keeps rollback or review-required
+  data blocked.
 - **Host-network containers correlate via listener ownership** — a container run
   with `--network host` publishes no distinct container port, so `proc_src.py`
   traces a listening port's pid back to its owning container by matching the
@@ -304,9 +308,10 @@ notes: |
 ```
 
 Additional fields supported by the schema (per `models.Manifest`): `compose`
-(compose file paths), `cron`, `shared: []` (resource keys explicitly marked
-shared), `excluded: []` (resource keys explicitly excluded from this app's
-associations regardless of what correlation finds).
+(compose file paths), `volumes` (Docker volume names), `cron`, `shared: []`
+(resource keys explicitly marked shared), `excluded: []` (resource keys
+explicitly excluded from this app's associations regardless of what correlation
+finds).
 
 A manifest entry is the only way to make a `probable` or `possible` association
 removable — correlation never promotes them on its own, and neither does the

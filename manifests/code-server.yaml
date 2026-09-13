@@ -1,0 +1,11 @@
+id: code-server
+name: code-server
+volumes:
+  - code-server_code-server-data
+  - code-server_code-server-project
+excluded:
+  - code-server_code-server-data
+notes: |
+  Historical named volumes from code-server. Current deployment uses bind
+  mounts instead. The project volume is empty; data volume is about 1.1 GB and
+  requires an explicit backup/review before any removal. Reviewed 2026-09-13.
