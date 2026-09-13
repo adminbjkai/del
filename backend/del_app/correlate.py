@@ -487,12 +487,26 @@ def build_apps(
             if c in container_slug:
                 target_slugs.add(container_slug[c])
         for slug in target_slugs:
+            attached = bool(vol.data.get("containers_using"))
+            label_only = bool(label_project) and not attached
+            # A Compose label survives after a volume is detached and removed
+            # from the current compose file. Keep the historical association
+            # visible, but do not treat the label alone as current ownership:
+            # the orphan view should surface it for review and the planner
+            # must not make it an automatic removal step.
+            confidence = 40 if label_only else 95
+            ownership = "possible" if label_only else ("shared" if len(target_slugs) > 1 else "exclusive")
+            statement = (
+                "historical Compose project label only; volume is not attached to a current container"
+                if label_only
+                else "volume labeled/attached to this app's container(s)"
+            )
             apps[slug].add(
                 vol,
-                confidence=95,
-                ownership="shared" if len(target_slugs) > 1 else "exclusive",
+                confidence=confidence,
+                ownership=ownership,
                 data_loss_risk="data",
-                evidence=[Evidence(source="docker", statement="volume labeled/attached to this app's container(s)", weight=95)],
+                evidence=[Evidence(source="docker", statement=statement, weight=confidence)],
             )
 
     # --- Step 5: bind mounts (attached to a specific container) -------------
@@ -833,7 +847,10 @@ def build_apps(
             # the stronger confidence, upgrading a prior weak (e.g. 60) claim.
             if enabled:
                 conf = 85
-                stmt = f"enabled site server_name {sn} exactly matches app slug (no live upstream — app stopped)"
+                if app.status == "running":
+                    stmt = f"enabled site server_name {sn} exactly matches running app slug"
+                else:
+                    stmt = f"enabled site server_name {sn} exactly matches app slug; runtime state not confirmed"
             else:
                 conf = 80
                 stmt = f"nginx config (not enabled) with server_name {sn} exactly matching app slug — config debris to remove with the app"

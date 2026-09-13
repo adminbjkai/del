@@ -190,7 +190,16 @@ def build_apps(resources: list[Resource], manifests: dict[str, Manifest]) -> lis
   guessing) rather than being skipped because an association already exists —
   this closes the gap where an app's own stale `sites-available` copy used to
   survive removal as leftover debris; it is now always removal-eligible along
-  with the rest of the app.
+  with the rest of the app. For an enabled site, the evidence text distinguishes
+  a confirmed running app from an app whose runtime state is not confirmed; it
+  never infers "stopped" from the Nginx file alone.
+- **Detached Compose-labeled volumes are historical evidence, not current
+  ownership**: a named volume with a project label but no current container
+  attachment is retained as a `possible`/sub-60 association so it remains
+  visible in orphan review and cannot become an automatic removal step. A
+  currently attached volume remains strongly associated with its app. This
+  prevents an old Compose label from hiding a data-bearing volume that the
+  current compose file no longer declares.
 - **Manifest override**: entries in `/apps/del/manifests/*.yaml` override or augment
   automatic correlation at confidence 100. They display as `confirmed` (see
   "Manifest entries display as `confirmed`" above).

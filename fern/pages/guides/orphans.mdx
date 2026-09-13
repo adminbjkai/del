@@ -74,10 +74,13 @@ An unused image is also checked against every discovered compose file: if a
 uses, its reason reads *"unused, but referenced by compose project &lt;name&gt;
 (not currently running)"* rather than the generic *"not used by any container"* —
 a hint that starting that compose project would bring it back into use, rather
-than it being pure debris. Nginx sites-available copies that aren't linked into
-sites-enabled (stale/backup files) read *"config file not enabled (stale
-copy/backup)"*; enabled sites DEL still couldn't attribute to any app read
-*"enabled site not attributed to any app"*.
+than it being pure debris. A detached named volume with only an old Compose
+project label is retained as a low-confidence historical association, so it
+remains visible here for review instead of being mistaken for current app-owned
+data. Nginx sites-available copies that aren't linked into sites-enabled
+(stale/backup files) read *"config file not enabled (stale copy/backup)"*;
+enabled sites DEL attributes through the live published port when possible and
+reports whether the application runtime is confirmed running.
 
 ## Acting on an orphan
 

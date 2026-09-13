@@ -2,6 +2,12 @@
 
 ## 2026.9.12
 
+Correlation accuracy: enabled Nginx evidence now describes a running app as
+running instead of claiming it is stopped. Detached Docker volumes that retain
+only a historical Compose project label are kept as low-confidence possible
+associations, so they remain visible for orphan review and cannot become
+automatic removal steps. Current container attachment remains authoritative.
+
 Applications table: live header-click captures showed every row stacked at
 `top: 0` (`position: absolute` without `translateY`) after repeated sorts.
 Every enhanced table now keeps the current page of rows in the DOM and lays

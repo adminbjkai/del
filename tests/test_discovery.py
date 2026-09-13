@@ -118,6 +118,24 @@ def test_nginx_port_match_creates_high_confidence_association():
     assert nginx_assoc.level == "high"
     assert 80 <= nginx_assoc.confidence <= 94
     assert "myapp.bjk.ai" in record.domains
+    assert all("app stopped" not in e.statement for e in nginx_assoc.evidence)
+
+
+def test_unattached_labeled_volume_is_historical_and_reviewable():
+    container = _container("beinv", compose_project="beinv", compose_working_dir="/apps/beinv")
+    volume = Resource(
+        type="volume", key="beinv_beinv_data", display="beinv_beinv_data", path="/var/lib/docker/volumes/beinv_beinv_data/_data",
+        state="orphan", data={"compose_project": "beinv", "containers_using": [], "projects_using": []},
+    )
+    apps = build_apps([container, volume], {})
+    record, assocs = apps[0]
+    volume_assoc = next(a for a in assocs if a.resource_type == "volume")
+    assert record.slug == "beinv"
+    assert volume_assoc.confidence == 40
+    assert volume_assoc.level == "possible"
+    assert volume_assoc.ownership == "possible"
+    assert volume_assoc.removal_eligible == "blocked"
+    assert "historical Compose project label" in volume_assoc.evidence[0].statement
 
 
 def test_shared_resource_across_two_apps_is_flagged_and_blocked():
