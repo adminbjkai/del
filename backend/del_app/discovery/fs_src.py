@@ -73,6 +73,18 @@ def _git_info(path: str) -> dict | None:
         return None
     info: dict = {"present": True}
     try:
+        common = subprocess.run(
+            ["git", "-C", path, "rev-parse", "--git-common-dir"],
+            capture_output=True, text=True, timeout=GIT_TIMEOUT, check=False,
+        )
+        if common.returncode == 0 and common.stdout.strip():
+            raw = common.stdout.strip()
+            info["git_common_dir"] = os.path.realpath(
+                raw if os.path.isabs(raw) else os.path.join(path, raw)
+            )
+    except Exception:
+        pass
+    try:
         branch = subprocess.run(
             ["git", "-C", path, "rev-parse", "--abbrev-ref", "HEAD"],
             capture_output=True, text=True, timeout=GIT_TIMEOUT, check=False,
@@ -95,7 +107,14 @@ def _git_info(path: str) -> dict | None:
 
 def _top_level_dirs(root: str) -> list[str]:
     try:
-        return sorted(d for d in os.listdir(root) if os.path.isdir(os.path.join(root, d)))
+        # Symlink aliases are not independent project directories. Discovering
+        # one separately creates duplicate weak name matches (for example
+        # /opt/del -> /apps/del) and can confuse ownership review.
+        return sorted(
+            d for d in os.listdir(root)
+            if os.path.isdir(os.path.join(root, d))
+            and not os.path.islink(os.path.join(root, d))
+        )
     except Exception:
         logger.exception("fs_src: failed to list %s", root)
         return []
@@ -115,11 +134,15 @@ def collect() -> list[Resource]:
         return resources
 
     seen_paths: set[str] = set()
+    artifact_dir_names = {"__MACOSX"}
 
     for root in scan_roots:
         if not os.path.isdir(root):
             continue
         for name in _top_level_dirs(root):
+            if name in artifact_dir_names:
+                logger.info("fs_src: skipping archive metadata directory %s/%s", root, name)
+                continue
             path = os.path.join(root, name)
             if path in seen_paths:
                 continue

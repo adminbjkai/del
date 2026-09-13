@@ -158,6 +158,40 @@ def test_shared_resource_across_two_apps_is_flagged_and_blocked():
     assert b_net.removal_eligible == "blocked"
 
 
+def test_git_worktree_is_attributed_to_the_common_repository_app():
+    container = _container("del-web", compose_project="del", compose_working_dir="/apps/del")
+    repo = Resource(
+        type="git_repo", key="/apps/del/.git", display="del", path="/apps/del", state="clean",
+        data={"present": True, "git_common_dir": "/apps/del/.git"},
+    )
+    worktree = Resource(
+        type="git_repo", key="/apps/del-2/.git", display="del-2", path="/apps/del-2", state="clean",
+        data={"present": True, "git_common_dir": "/apps/del/.git"},
+    )
+    apps = build_apps([container, repo, worktree], {})
+    record, assocs = next(item for item in apps if item[0].slug == "del")
+    wt = next(a for a in assocs if a.resource_key == "/apps/del-2/.git")
+    assert wt.confidence == 95
+    assert wt.level == "confirmed"
+    assert "shares repository" in wt.evidence[0].statement
+
+
+def test_symlink_alias_is_not_treated_as_a_second_project(tmp_path):
+    root = tmp_path / "root"
+    root.mkdir()
+    canonical = root / "canonical"
+    canonical.mkdir()
+    (root / "alias").symlink_to(canonical, target_is_directory=True)
+    assert fs_src._top_level_dirs(str(root)) == ["canonical"]
+
+
+def test_archive_metadata_directory_does_not_get_name_similarity_owner():
+    container = _container("macro-web", compose_project="macro", compose_working_dir="/apps/macro")
+    artifact = Resource(type="directory", key="/apps/__MACOSX", display="__MACOSX", path="/apps/__MACOSX", state="found", data={})
+    apps = build_apps([container, artifact], {})
+    assert all(a.resource_key != "/apps/__MACOSX" for _, assocs in apps for a in assocs)
+
+
 def test_name_similarity_only_reaches_possible_level_capped_at_50():
     container = _container("myapp_web", compose_project="myapp", compose_working_dir="/apps/myapp")
     unrelated_dir = Resource(

@@ -1,5 +1,13 @@
 # Changelog
 
+## 2026.9.13
+
+Correlation accuracy: Git worktrees now inherit ownership from their common
+repository, symlink aliases are not inventoried as duplicate project directories,
+and macOS `__MACOSX` archive metadata is excluded from project-name matching.
+This removes false weak matches such as `/opt/del` → `del` and
+`/__MACOSX` → `macro` while making `/apps/del-2` a confirmed DEL worktree.
+
 ## 2026.9.12
 
 Correlation accuracy: enabled Nginx evidence now describes a running app as

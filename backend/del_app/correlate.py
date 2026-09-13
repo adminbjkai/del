@@ -14,6 +14,7 @@ from __future__ import annotations
 
 import difflib
 import logging
+import os
 import re
 
 from del_app.config import get_settings
@@ -681,6 +682,7 @@ def build_apps(
         for r in pool:
             rp = (r.path or r.key).rstrip("/")
             for slug, app in apps.items():
+                matched = False
                 for dp in app.dir_paths:
                     d = dp.rstrip("/")
                     if rp == d or rp.startswith(d + "/"):
@@ -691,7 +693,23 @@ def build_apps(
                             data_loss_risk="config" if r.type == "env_file" else "data",
                             evidence=[Evidence(source="correlate", statement=f"located inside app directory {dp}", weight=95)],
                         )
+                        matched = True
                         break
+                # A Git worktree's .git file points at the common repository,
+                # so its checkout path is owned by the same app even when it
+                # sits beside—not below—the canonical project directory.
+                common = r.data.get("git_common_dir") if r.type == "git_repo" else None
+                if not matched and common:
+                    for dp in app.dir_paths:
+                        if common == os.path.realpath(dp.rstrip("/") + "/.git"):
+                            app.add(
+                                r,
+                                confidence=95,
+                                ownership="exclusive",
+                                data_loss_risk="data",
+                                evidence=[Evidence(source="git", statement=f"Git worktree shares repository {common}", weight=95)],
+                            )
+                            break
 
     # --- Step 7c: systemd units by WorkingDirectory/ExecStart under app dir --
     # MUST run before the nginx steps below: those match a vhost to an app by
@@ -884,6 +902,8 @@ def build_apps(
     # --- Step 11: name-similarity fallback for anything unmatched so far ----
     for pool in (directories, git_repos, env_files):
         for r in pool:
+            if r.type == "directory" and r.display == "__MACOSX":
+                continue
             base = r.display
             for slug, app in apps.items():
                 if (r.type, r.key) in app.assocs:

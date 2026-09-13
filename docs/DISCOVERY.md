@@ -165,6 +165,12 @@ def build_apps(resources: list[Resource], manifests: dict[str, Manifest]) -> lis
   not just ids, so the mapping survives container recreation). A network attached
   to containers from more than one application is `shared=True` and preserved
   unless explicitly approved for a given app's removal.
+- **Git worktrees inherit common-repository ownership** — a checkout whose `.git`
+  metadata points to an app's common repository is attached to that app at
+  confirmed confidence, even when the worktree lives beside the canonical project
+  directory. Symlink aliases to an already-discovered project are skipped as
+  duplicate filesystem inventory, and macOS `__MACOSX` archive metadata is not
+  treated as a project directory for name matching.
 - **Host-network containers correlate via listener ownership** — a container run
   with `--network host` publishes no distinct container port, so `proc_src.py`
   traces a listening port's pid back to its owning container by matching the
