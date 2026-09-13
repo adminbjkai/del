@@ -6,6 +6,7 @@ planner/jobs sibling-lane modules with simple fakes.
 """
 from __future__ import annotations
 
+import json
 from pathlib import Path
 
 import pytest
@@ -838,6 +839,77 @@ def test_git_metadata_row_is_expected_when_directory_row_matches(authed_client, 
     all_view = authed_client.get("/orphans", params={"show": "all"})
     assert all_view.status_code == 200
     assert "Git metadata inside the same candidate directory" in all_view.text
+
+
+def _port_row(addr: str, port: int, pid: int | None, process: str = "streamer") -> dict:
+    return {
+        "type": "port",
+        "key": f"tcp:{addr}:{port}",
+        "display": f"{addr}:{port}",
+        "path": None,
+        "data_json": json.dumps(
+            {"proto": "tcp", "addr": addr, "port": port, "pid": pid, "process": process, "systemd_unit": None}
+        ),
+    }
+
+
+def test_dual_stack_listener_counts_once():
+    """0.0.0.0:P and [::]:P from one pid are one service; the IPv6 socket is Expected."""
+    from del_app.web.orphans import _classify_orphan_rows
+
+    classified, counts = _classify_orphan_rows(
+        [_port_row("0.0.0.0", 8050, 3582), _port_row("[::]", 8050, 3582)], {}
+    )
+    by_display = {r["display"]: r for r in classified}
+    assert by_display["0.0.0.0:8050"]["bucket"] == "actionable"
+    assert by_display["[::]:8050"]["bucket"] == "expected"
+    assert "same listener as 0.0.0.0:8050" in by_display["[::]:8050"]["reason"]
+    assert counts == {"actionable": 1, "system": 0, "expected": 1}
+
+
+def test_same_port_different_pid_or_no_pid_is_not_merged():
+    """A different process on the same port is a different service; pid-less
+    sockets cannot be proven identical, so neither is hidden."""
+    from del_app.web.orphans import _classify_orphan_rows
+
+    classified, counts = _classify_orphan_rows(
+        [
+            _port_row("0.0.0.0", 9000, 11, "svc-a"),
+            _port_row("[::]", 9000, 22, "svc-b"),
+            _port_row("127.0.0.1", 9100, None),
+            _port_row("[::1]", 9100, None),
+        ],
+        {},
+    )
+    assert all(r["bucket"] == "actionable" for r in classified)
+    assert counts["actionable"] == 4
+
+
+def test_dual_stack_listener_hidden_from_default_orphans_view(authed_client, settings_env):
+    from del_app.db import get_db, x
+
+    conn = get_db()
+    try:
+        scan_id = x(conn, "INSERT INTO scans (status) VALUES ('done')")
+        for row in (_port_row("127.0.0.1", 18789, 2072386, "node"), _port_row("[::1]", 18789, 2072386, "node")):
+            x(
+                conn,
+                "INSERT INTO resources (type, key, display, state, data_json, last_seen) VALUES (?,?,?,?,?,?)",
+                (row["type"], row["key"], row["display"], "found", row["data_json"], scan_id),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+    default = authed_client.get("/orphans")
+    assert default.status_code == 200
+    assert "127.0.0.1:18789" in default.text
+    assert "[::1]:18789" not in default.text
+
+    all_view = authed_client.get("/orphans", params={"show": "all"})
+    assert all_view.status_code == 200
+    assert "[::1]:18789" in all_view.text
+    assert "same listener as 127.0.0.1:18789" in all_view.text
 
 
 def test_orphan_image_referenced_by_compose_project_is_expected_not_default(authed_client, settings_env):

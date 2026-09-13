@@ -427,6 +427,19 @@ def _is_actionable_orphan(classification: dict) -> bool:
     return classification.get("bucket") == "actionable"
 
 
+def _listener_identity(data: dict) -> tuple | None:
+    """(proto, pid, port) for a port row, or None when the socket cannot be
+    tied to a process (no pid) or has no usable port number."""
+    pid = data.get("pid")
+    port = data.get("port")
+    if pid in (None, "", 0) or port in (None, ""):
+        return None
+    try:
+        return ((data.get("proto") or "tcp").lower(), int(pid), int(port))
+    except (TypeError, ValueError):
+        return None
+
+
 def _classify_orphan_rows(rows: list[dict], compose_images: dict[str, str] | None) -> tuple[list[dict], dict[str, int]]:
     """Classify rows consistently for the page and dashboard.
 
@@ -434,12 +447,21 @@ def _classify_orphan_rows(rows: list[dict], compose_images: dict[str, str] | Non
     same top-level project. The repository is metadata inside that cleanup
     target, not a second independent cleanup item, so show it as Expected when
     its containing directory is also in the candidate set.
+
+    Likewise a dual-stack service binds the same port once per address family
+    (``0.0.0.0:8050`` and ``[::]:8050``, or ``127.0.0.1:N`` and ``[::1]:N``)
+    from one process. The port scan emits a row per socket, but there is only
+    one listener to review, so the second socket of the same (proto, pid, port)
+    is Expected and points back at the row that stays actionable. Sockets with
+    no pid, or different pids, are never merged — a different process on the
+    same port is a different service.
     """
     directory_paths = {
         (r.get("path") or r.get("key") or "").rstrip("/")
         for r in rows
         if r.get("type") == "directory"
     }
+    seen_listeners: dict[tuple, str] = {}
     classified: list[dict] = []
     counts = {"actionable": 0, "system": 0, "expected": 0}
     for raw in rows:
@@ -460,6 +482,19 @@ def _classify_orphan_rows(rows: list[dict], compose_images: dict[str, str] | Non
                 "label": "Expected",
                 "reason": "Git metadata inside the same candidate directory — review the directory row, not a second cleanup target",
             }
+        elif r.get("type") == "port" and cls["bucket"] == "actionable":
+            listener = _listener_identity(data)
+            if listener is not None:
+                first = seen_listeners.setdefault(listener, r.get("display") or r.get("key") or "")
+                if first != (r.get("display") or r.get("key") or ""):
+                    cls = {
+                        "bucket": "expected",
+                        "label": "Expected",
+                        "reason": (
+                            f"same listener as {first} (pid {listener[1]}, port {listener[2]}) "
+                            "bound on a second address family — one service, not a second port to review"
+                        ),
+                    }
         counts[cls["bucket"]] = counts.get(cls["bucket"], 0) + 1
         r["data"] = data
         r["reason"] = cls["reason"]
