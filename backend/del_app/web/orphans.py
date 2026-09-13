@@ -427,6 +427,48 @@ def _is_actionable_orphan(classification: dict) -> bool:
     return classification.get("bucket") == "actionable"
 
 
+def _classify_orphan_rows(rows: list[dict], compose_images: dict[str, str] | None) -> tuple[list[dict], dict[str, int]]:
+    """Classify rows consistently for the page and dashboard.
+
+    A filesystem scan emits one directory row and one git_repo row for the
+    same top-level project. The repository is metadata inside that cleanup
+    target, not a second independent cleanup item, so show it as Expected when
+    its containing directory is also in the candidate set.
+    """
+    directory_paths = {
+        (r.get("path") or r.get("key") or "").rstrip("/")
+        for r in rows
+        if r.get("type") == "directory"
+    }
+    classified: list[dict] = []
+    counts = {"actionable": 0, "system": 0, "expected": 0}
+    for raw in rows:
+        data = _json_or(raw.get("data_json"), {})
+        cls = classify_orphan_candidate(
+            raw.get("type") or "",
+            raw.get("key") or "",
+            raw.get("display") or "",
+            raw.get("path"),
+            data,
+            compose_images,
+        )
+        r = dict(raw)
+        repo_path = (r.get("path") or r.get("key") or "").rstrip("/")
+        if r.get("type") == "git_repo" and repo_path in directory_paths:
+            cls = {
+                "bucket": "expected",
+                "label": "Expected",
+                "reason": "Git metadata inside the same candidate directory — review the directory row, not a second cleanup target",
+            }
+        counts[cls["bucket"]] = counts.get(cls["bucket"], 0) + 1
+        r["data"] = data
+        r["reason"] = cls["reason"]
+        r["bucket"] = cls["bucket"]
+        r["bucket_label"] = cls["label"]
+        classified.append(r)
+    return classified, counts
+
+
 def _actionable_orphan_count(conn, latest: int | None) -> int:
     with _ORPHAN_COUNT_LOCK:
         if _ORPHAN_COUNT_CACHE["scan"] == latest:
@@ -435,18 +477,8 @@ def _actionable_orphan_count(conn, latest: int | None) -> int:
     sql, params = _orphan_query(latest)
     rows = _rows(q(conn, sql, params))
     compose_images = _compose_declared_images(conn)
-    count = 0
-    for r in rows:
-        cls = classify_orphan_candidate(
-            r.get("type") or "",
-            r.get("key") or "",
-            r.get("display") or "",
-            r.get("path"),
-            _json_or(r.get("data_json"), {}),
-            compose_images,
-        )
-        if _is_actionable_orphan(cls):
-            count += 1
+    _classified, counts = _classify_orphan_rows(rows, compose_images)
+    count = counts["actionable"]
 
     with _ORPHAN_COUNT_LOCK:
         _ORPHAN_COUNT_CACHE["scan"] = latest
@@ -475,25 +507,10 @@ def orphans_view(
     finally:
         conn.close()
 
+    all_classified, counts = _classify_orphan_rows(rows, compose_images)
     classified: list[dict] = []
-    counts = {"actionable": 0, "system": 0, "expected": 0}
-    for r in rows:
-        data = _json_or(r.get("data_json"), {})
-        cls = classify_orphan_candidate(
-            r.get("type") or "",
-            r.get("key") or "",
-            r.get("display") or "",
-            r.get("path"),
-            data,
-            compose_images,
-        )
-        counts[cls["bucket"]] = counts.get(cls["bucket"], 0) + 1
-        r = dict(r)
-        r["data"] = data
-        r["reason"] = cls["reason"]
-        r["bucket"] = cls["bucket"]
-        r["bucket_label"] = cls["label"]
-        if show_all or cls["bucket"] == "actionable":
+    for r in all_classified:
+        if show_all or r["bucket"] == "actionable":
             classified.append(r)
 
     groups: dict[str, list] = {}

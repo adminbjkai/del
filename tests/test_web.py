@@ -810,6 +810,36 @@ def test_protected_app_weak_association_is_not_orphan(authed_client, settings_en
     assert "/apps/protected-tree/nested" not in resp.text
 
 
+def test_git_metadata_row_is_expected_when_directory_row_matches(authed_client, settings_env):
+    """A directory and its .git metadata are one cleanup target, not two."""
+    from del_app.db import get_db, x
+
+    conn = get_db()
+    try:
+        scan_id = x(conn, "INSERT INTO scans (status) VALUES ('done')")
+        for resource_type, key, display, path in (
+            ("directory", "/apps/old-project", "old-project", "/apps/old-project"),
+            ("git_repo", "/apps/old-project/.git", "old-project", "/apps/old-project"),
+        ):
+            x(
+                conn,
+                "INSERT INTO resources (type, key, display, state, data_json, path, last_seen) VALUES (?,?,?,?,?,?,?)",
+                (resource_type, key, display, "found", "{}", path, scan_id),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+    default = authed_client.get("/orphans")
+    assert default.status_code == 200
+    assert "old-project" in default.text
+    assert "Git metadata inside the same candidate directory" not in default.text
+
+    all_view = authed_client.get("/orphans", params={"show": "all"})
+    assert all_view.status_code == 200
+    assert "Git metadata inside the same candidate directory" in all_view.text
+
+
 def test_orphan_image_referenced_by_compose_project_is_expected_not_default(authed_client, settings_env):
     """Compose-declared unused image is Expected — hidden from default Actionable view,
     visible with ?show=all and a precise reason."""
