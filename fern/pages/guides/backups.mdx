@@ -36,6 +36,10 @@ Everything lives under **`/apps/del/backups/`**:
   `volume_backup`, `backup_tar`) at the top of the job. On a **live** job each
   completed backup step also writes a row to the `backups` table (`job_id`, `kind`,
   `src`, `dest`), and that row is what the automatic in-job rollback reads.
+- **Scans see these copies but never treat them as an app.** A backed-up
+  Compose directory looks like a real project, so anything inside `backups_dir`
+  is excluded from app ownership, is never a removal-plan step, and shows on the
+  Orphans page as **Expected**.
 - **Database snapshots** from `del-admin backup-db` are written as
   `/apps/del/backups/del-<timestamp>.db`. The timestamp is **host local time**, not
   UTC.

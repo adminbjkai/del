@@ -121,23 +121,33 @@
     <summary>Orphans page</summary>
     <dl class="glossary-dl">
       <dt>Unassociated</dt>
-      <dd>Resource has zero rows in the associations table for any app.</dd>
+      <dd>
+        In the latest completed scan, no app owns the resource: there is no
+        non-excluded association at confidence ≥60 (probable or stronger),
+        and no protected app claims it. It can still carry weak (&lt;60) or
+        excluded claims — those show as owner chips elsewhere but do not count here.
+      </dd>
       <dt>Actionable</dt>
       <dd>
         Default view. Real review candidates: custom systemd units, unused volumes,
-        dangling/unused images, enabled nginx with no app, project dirs/git/.env
+        dangling/unused images, enabled named Nginx sites with no app (proxied or
+        static/redirect-only), project dirs/git/.env
         with no owner, listeners tied to untracked app units.
       </dd>
       <dt>System</dt>
       <dd>
         OS/vendor noise — <em>not</em> abandoned apps. Examples: NetworkManager,
-        sshd:22, Samba, distro cron/timers, Docker built-in networks. Hidden unless
+        sshd:22, Samba, distro cron/timers, Docker built-in networks, catch-all Nginx
+        vhosts with no <code>server_name</code>, listeners of package-managed units. Hidden unless
         you choose “Show system &amp; expected too”.
       </dd>
       <dt>Expected</dt>
       <dd>
         Situations that look unassociated but are intentional: parked (disabled)
-        nginx configs; images still declared by a compose project that isn’t running.
+        nginx configs; images still declared by a compose project that isn’t running;
+        backup copies inside DEL’s backups directory (restore material, never planned
+        for removal); the second socket of a dual-stack listener; a Git repo inside a
+        directory row that is already listed.
       </dd>
       <dt>Why listed</dt>
       <dd>Per-row explanation of the classification. This page is review-only — it has no delete. Removal still goes through an app plan.</dd>

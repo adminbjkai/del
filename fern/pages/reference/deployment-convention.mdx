@@ -337,6 +337,8 @@ systemd_units:
 nginx:
   - /etc/nginx/sites-available/<name>.bjk.ai
   - /etc/nginx/sites-enabled/<name>.bjk.ai
+volumes:
+  - <name>_data                   # Docker named volume(s) this app owns
 cron:
   - /etc/cron.d/<name>             # if applicable
 notes: |

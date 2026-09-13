@@ -13,8 +13,13 @@ grouped by resource type.
 A resource is listed when **no** association on it satisfies all three of:
 
 1. the association is not excluded;
-2. its confidence is **at least 60** (`probable` or better); and
+2. its confidence is **at least 60** (`probable` or better), or the owning
+   application is protected (a protected app's weaker claim still counts as an
+   owner); and
 3. the owning application is itself present in the latest completed scan.
+
+So a listed resource can still show weak (under 60) or excluded owner chips on
+the Resources page; those claims just don't count as ownership here.
 
 Conditions 2 and 3 are not incidental — each closes a hole where a resource that
 genuinely needed attention was hidden:
@@ -87,7 +92,24 @@ When the same process binds a port on both IPv4 and IPv6, the second socket is
 directory is also **Expected**, because you review the directory instead. An
 enabled site with no owner stays **Actionable**, and its reason names each
 loopback proxy target and the unit that owns that listener, for example
-*"proxies to 127.0.0.1:18789 (openclaw-gateway.service)"*.
+*"proxies to 127.0.0.1:18789 (openclaw-gateway.service)"*. An enabled site with
+a real `server_name` but no `proxy_pass` serves static files or redirects; it is
+also **Actionable**, with a reason that names the site and says it has no
+upstream. Only a site with no `server_name` (or just `_`) is a **System**
+catch-all vhost.
+
+A port's reason always carries the process evidence the scan recorded: the
+owning unit when there is one, plus the process name and pid, or *"no owning
+process reported"* when the socket had no visible owner.
+
+Anything inside DEL's own backups directory (`backups_dir` in
+`config/del.toml`, where pre-removal copies are written) is **Expected**: it is
+restore material, not a live app. Correlation never attributes it to an app —
+not even to the app whose directory encloses `backups_dir` — and the planner
+refuses to put it in a removal plan even if a manifest names it.
+
+The dashboard count, this page and the assistant's *orphans* scope all use the
+same classification, so they always report the same buckets and counts.
 
 An unused image is also checked against every discovered compose file: if a
 `docker-compose.yml` still declares an image that no running container currently

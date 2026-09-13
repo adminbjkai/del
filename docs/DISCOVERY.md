@@ -223,6 +223,14 @@ def build_apps(resources: list[Resource], manifests: dict[str, Manifest]) -> lis
   currently attached volume remains strongly associated with its app. This
   prevents an old Compose label from hiding a data-bearing volume that the
   current compose file no longer declares.
+- **DEL's own backups are never app resources**: anything inside
+  `settings.backups_dir` (exact path boundary, also via its realpath) is restore
+  material. Compose copies there never seed or join an app, even when an app's
+  directory encloses `backups_dir` (on this host `/apps/del/backups` sits inside
+  DEL's tree). Any other association that still reaches such a resource — including
+  a manifest entry — is kept but set `excluded`, with evidence saying why. The
+  planner additionally refuses such rows as steps, and the Orphans page shows them
+  as **Expected**.
 - **Manifest override**: entries in `/apps/del/manifests/*.yaml` override or augment
   automatic correlation at confidence 100. They display as `confirmed` (see
   "Manifest entries display as `confirmed`" above).
@@ -257,8 +265,14 @@ the purge removed 1,171 rows and took stale-owner associations from 152 to 0.
 
 A resource is an orphan candidate when **no** association on it satisfies all of:
 the association is not excluded, its confidence is **at least 60** (`probable` or
-better), and the owning application is itself present in the latest completed
-scan.
+better) or the owning application is protected, and the owning application is
+itself present in the latest completed scan (`web/queries.py::_orphan_query`).
+
+Each candidate is then classified Actionable / System / Expected by
+`web/orphans.py::classify_orphans`, which applies the per-row rules plus the
+row-set rules (Git repo inside a candidate directory, second socket of a
+dual-stack listener, listener owned by a vendor unit). The Orphans page, the
+dashboard count and the assistant's `orphans` scope all call that one function.
 
 Both extra conditions were added deliberately:
 
@@ -305,11 +319,13 @@ systemd_units:
 nginx:
   - /etc/nginx/sites-available/del.bjk.ai
   - /etc/nginx/sites-enabled/del.bjk.ai
+volumes:
+  - del_example_data        # Docker named volume (resource key = volume name)
 notes: |
   Free-text notes. E.g. mark protected apps, note external DNS management, etc.
 ```
 
-Additional fields supported by the schema (per `models.Manifest`): `compose`
+Additional fields supported by the schema (per `manifests.Manifest`): `compose`
 (compose file paths), `volumes` (Docker volume names), `cron`, `shared: []`
 (resource keys explicitly marked shared), `excluded: []` (resource keys
 explicitly excluded from this app's associations regardless of what correlation

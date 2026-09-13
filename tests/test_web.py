@@ -2266,3 +2266,82 @@ def test_app_detail_hides_remove_button_when_app_is_stale(authed_client, setting
     assert resp.status_code == 200
     assert 'action="/apps/stalegone/remove"' not in resp.text
     assert "not present in the latest scan" in resp.text.lower() or "already gone" in resp.text.lower()
+
+
+def test_orphans_glossary_states_the_real_unassociated_rule(authed_client, settings_env):
+    """The Orphans rule is 'no non-excluded owner at >=60 in the latest scan',
+    not 'zero association rows' — the glossary must say what the query does."""
+    page = authed_client.get("/orphans")
+    assert page.status_code == 200
+    assert "zero rows in the associations table" not in page.text
+    assert "non-excluded association at confidence ≥60" in page.text
+    assert "no protected app claims it" in page.text
+
+
+def test_named_static_site_is_distinguished_from_a_catchall_vhost():
+    catchall = routes.classify_orphan_candidate(
+        "nginx_site", "00-default", "_", None,
+        {"enabled": True, "server_names": ["_"], "upstreams": []},
+    )
+    assert catchall["bucket"] == "system"
+    assert "no server_name" in catchall["reason"]
+
+    static = routes.classify_orphan_candidate(
+        "nginx_site", "/etc/nginx/sites-enabled/docs.example", "docs.example", None,
+        {"enabled": True, "server_names": ["docs.example"], "upstreams": []},
+    )
+    # A named site that serves files or redirects is a real site, not noise.
+    assert static["bucket"] == "actionable"
+    assert "docs.example" in static["reason"]
+    assert "no proxy_pass upstream" in static["reason"]
+    assert "catch-all" not in static["reason"]
+
+
+def test_port_reason_names_the_process_when_no_unit_is_known():
+    no_unit = routes.classify_orphan_candidate(
+        "port", "tcp:0.0.0.0:8123", "0.0.0.0:8123", None,
+        {"proto": "tcp", "addr": "0.0.0.0", "port": 8123, "pid": 4242, "process": "streamer", "systemd_unit": None},
+    )
+    assert no_unit["bucket"] == "actionable"
+    assert "process 'streamer', pid 4242" in no_unit["reason"]
+    assert "no systemd unit known" in no_unit["reason"]
+
+    no_proc = routes.classify_orphan_candidate(
+        "port", "tcp:0.0.0.0:8124", "0.0.0.0:8124", None,
+        {"proto": "tcp", "addr": "0.0.0.0", "port": 8124, "pid": None, "process": None, "systemd_unit": None},
+    )
+    assert "no owning process reported" in no_proc["reason"]
+
+    with_unit = routes.classify_orphan_candidate(
+        "port", "tcp:0.0.0.0:8125", "0.0.0.0:8125", None,
+        {"proto": "tcp", "addr": "0.0.0.0", "port": 8125, "pid": 77, "process": "streamer",
+         "systemd_unit": "streamer.service"},
+    )
+    assert "via unit streamer.service (process 'streamer', pid 77)" in with_unit["reason"]
+
+
+def test_backup_copy_under_backups_dir_is_expected_not_actionable(authed_client, settings_env):
+    from del_app.db import get_db, x
+
+    backup = f"{settings_env.backups_dir}/deck/compose_project"
+    result = routes.classify_orphan_candidate(
+        "compose_project", backup, "compose_project", backup, {"working_dir": backup},
+    )
+    assert result["bucket"] == "expected"
+    assert "backups_dir" in result["reason"]
+    # A sibling path that merely starts with the same characters is not inside it.
+    sibling = settings_env.backups_dir + "-old/deck"
+    assert routes.classify_orphan_candidate(
+        "compose_project", sibling, "deck", sibling, {"working_dir": sibling},
+    )["bucket"] == "actionable"
+
+    conn = get_db()
+    try:
+        scan_id = x(conn, "INSERT INTO scans (status) VALUES ('done')")
+        x(conn, "INSERT INTO resources (type, key, display, path, state, data_json, last_seen) VALUES (?,?,?,?,?,?,?)",
+          ("compose_project", backup, "compose_project", backup, "found", json.dumps({"working_dir": backup}), scan_id))
+        conn.commit()
+    finally:
+        conn.close()
+    assert backup not in authed_client.get("/orphans").text
+    assert backup in authed_client.get("/orphans", params={"show": "all"}).text

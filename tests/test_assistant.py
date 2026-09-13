@@ -1021,3 +1021,60 @@ def test_assistant_package_does_not_import_action_modules():
                 imported.add(node.module or "")
                 imported.update(f"{node.module}.{a.name}" for a in node.names)
         assert not (imported & forbidden), (name, imported & forbidden)
+
+
+def _seed_postprocessed_orphans() -> None:
+    """Rows whose bucket depends on the whole row set, not the row alone:
+    a directory + its git repo, a dual-stack listener, and a listener owned
+    by a vendor (package) unit."""
+    def port(addr, port_num, pid, process, unit=None):
+        return ("port", f"tcp:{addr}:{port_num}", f"{addr}:{port_num}", None,
+                {"proto": "tcp", "addr": addr, "port": port_num, "pid": pid,
+                 "process": process, "systemd_unit": unit})
+
+    rows = [
+        ("directory", "/apps/leftover", "leftover", "/apps/leftover", {}),
+        ("git_repo", "/apps/leftover", "leftover", "/apps/leftover", {}),
+        port("0.0.0.0", 8123, 4242, "streamer"),
+        port("[::]", 8123, 4242, "streamer"),
+        ("systemd_unit", "vendord.service", "vendord.service", "/lib/systemd/system/vendord.service",
+         {"fragment_path": "/lib/systemd/system/vendord.service", "is_custom": False}),
+        port("0.0.0.0", 9555, 900, "vendord", "vendord.service"),
+    ]
+    conn = get_db()
+    try:
+        scan = x(conn, "INSERT INTO scans (status, finished) VALUES ('done', '2026-09-13 10:00:00')")
+        for rtype, key, display, path, data in rows:
+            x(conn, "INSERT INTO resources (type, key, display, path, state, data_json, last_seen) "
+                    "VALUES (?,?,?,?,?,?,?)",
+              (rtype, key, display, path, "found", json.dumps(data), scan))
+        conn.commit()
+    finally:
+        conn.close()
+
+
+def test_orphans_context_counts_use_the_web_row_set_rules(settings_env):
+    """Regression: the assistant classified rows one at a time and reported
+    41 more actionable orphans than /orphans on scan 254."""
+    _seed_postprocessed_orphans()
+    b = _ctx("orphans")
+    assert b.facts["counts"] == {"actionable": 2, "system": 2, "expected": 2}
+    assert "by_bucket: actionable=2, expected=2, system=2" in b.text
+
+
+def test_orphans_context_matches_web_and_dashboard_row_for_row(settings_env):
+    from del_app.web import orphans as web_orphans
+
+    _seed_postprocessed_orphans()
+    conn = get_db()
+    try:
+        latest = context._latest_scan_id(conn)
+        web_rows, web_counts = web_orphans.classify_orphans(conn, latest)
+        assistant_rows = context._orphan_rows(conn, latest)
+        web_orphans._ORPHAN_COUNT_CACHE.update(scan=None, count=0)
+        dashboard_count = web_orphans._actionable_orphan_count(conn, latest)
+    finally:
+        conn.close()
+    as_pairs = lambda rows: sorted((r["type"], r["display"], r["bucket"], r["reason"]) for r in rows)  # noqa: E731
+    assert as_pairs(assistant_rows) == as_pairs(web_rows)
+    assert dashboard_count == web_counts["actionable"] == _ctx("orphans").facts["counts"]["actionable"]

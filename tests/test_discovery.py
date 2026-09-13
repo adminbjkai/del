@@ -1013,3 +1013,60 @@ def test_cgroup_owner_prefers_innermost_service(tmp_path, monkeypatch, cgroup, e
         lambda path, *a, **kw: real_open(cg if path == "/proc/4242/cgroup" else path, *a, **kw),
     )
     assert proc_src._cgroup_owner(4242, {}) == (None, expected)
+
+
+@pytest.fixture()
+def backups_under_app_tree(tmp_path, monkeypatch):
+    """backups_dir nested inside an app's own project tree, as on the live
+    host (/apps/del/backups)."""
+    from del_app.config import get_settings
+
+    config_path = tmp_path / "del.toml"
+    config_path.write_text(
+        f"""
+port = 8075
+db_path = "{tmp_path}/del.db"
+manifests_dir = "{tmp_path}/manifests"
+backups_dir = "/apps/hostapp/backups"
+logs_dir = "{tmp_path}/logs"
+scan_roots = ["/apps"]
+helper_socket = "{tmp_path}/helper.sock"
+protected_apps = ["del"]
+"""
+    )
+    monkeypatch.setenv("DEL_CONFIG_PATH", str(config_path))
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
+def test_backup_compose_copies_get_no_app_ownership(backups_under_app_tree):
+    """Regression (scan 254): /apps/del/backups/<app>/compose_project copies
+    were attached to DEL by directory nesting, one at 95/exclusive/safe."""
+    backups = [
+        _compose_project("compose_project", "/apps/hostapp/backups/deck/compose_project"),
+        _compose_project("compose_project", "/apps/hostapp/backups/llm/compose_project"),
+        _compose_project("deck", "/apps/hostapp/backups/deck"),
+    ]
+    apps = build_apps([_compose_project("hostapp", "/apps/hostapp"), *backups], {})
+    slugs = {record.slug for record, _ in apps}
+    assert slugs == {"hostapp"}, f"backup copies seeded apps: {slugs}"
+    owned = {a.resource_key for _, assocs in apps for a in assocs}
+    assert owned == {"/apps/hostapp"}
+
+
+def test_manifest_claim_on_a_backup_artifact_is_kept_but_excluded(backups_under_app_tree):
+    backup_dir = Resource(type="directory", key="/apps/hostapp/backups/deck", display="deck",
+                          path="/apps/hostapp/backups/deck", state="present", data={})
+    live_dir = Resource(type="directory", key="/apps/hostapp", display="hostapp",
+                        path="/apps/hostapp", state="present", data={})
+    manifest = Manifest(id="hostapp", host_paths=["/apps/hostapp", "/apps/hostapp/backups/deck"])
+    apps = build_apps([live_dir, backup_dir], {"hostapp": manifest})
+    _record, assocs = next(item for item in apps if item[0].slug == "hostapp")
+    by_key = {a.resource_key: a for a in assocs}
+    backup = by_key["/apps/hostapp/backups/deck"]
+    assert backup.excluded is True
+    assert backup.removal_eligible == "blocked"
+    assert any("backups_dir" in e.statement for e in backup.evidence)
+    live = by_key["/apps/hostapp"]
+    assert live.excluded is False and live.removal_eligible == "safe"

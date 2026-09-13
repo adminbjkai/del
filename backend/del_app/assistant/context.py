@@ -15,7 +15,7 @@ from typing import Any
 from del_app.assistant.errors import AssistantError
 from del_app.db import q
 from del_app.web.formatting import _level
-from del_app.web.orphans import classify_orphan_candidate
+from del_app.web.orphans import classify_orphans
 from del_app.web.queries import (
     RESOURCE_TYPE_LABELS,
     _compose_declared_images,
@@ -23,7 +23,6 @@ from del_app.web.queries import (
     _json_or,
     _latest_scan_id,
     _normalize_image_ref,
-    _orphan_query,
     _owner_map,
     _rows,
     _type_counts,
@@ -129,20 +128,11 @@ def _human_bytes(n: int | None) -> str:
 
 
 def _orphan_rows(conn, latest: int | None) -> list[dict]:
-    """The orphan candidate list exactly as /orphans computes it (all buckets),
-    each row carrying data/bucket/label/reason."""
-    sql, params = _orphan_query(latest)
-    rows = _rows(q(conn, sql, params))
-    compose_images = _compose_declared_images(conn)
-    for r in rows:
-        r["data"] = _json_or(r.get("data_json"), {})
-        cls = classify_orphan_candidate(
-            r.get("type") or "", r.get("key") or "", r.get("display") or "",
-            r.get("path"), r["data"], compose_images,
-        )
-        r["bucket"] = cls["bucket"]
-        r["bucket_label"] = cls["label"]
-        r["reason"] = cls["reason"]
+    """The orphan candidate list exactly as /orphans computes it (all buckets,
+    including the row-set post-processing: git-in-directory, vendor-unit
+    listeners, dual-stack sockets, Nginx proxy targets), each row carrying
+    data/bucket/bucket_label/reason."""
+    rows, _counts = classify_orphans(conn, latest)
     return rows
 
 

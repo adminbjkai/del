@@ -22,6 +22,7 @@ import sqlite3
 
 from del_app.auth import get_secret_key
 from del_app.config import get_settings
+from del_app.correlate import is_backup_artifact
 from del_app.db import get_db, latest_done_scan_id, q, x
 from del_app.models import Plan, PlanStep
 
@@ -264,6 +265,9 @@ def _classify(row: sqlite3.Row) -> tuple[str, bool, str | None]:
     approved = bool(row["approved_by_user"])
     excluded = bool(row["excluded"])
     removal_eligible = row["removal_eligible"]
+
+    if is_backup_artifact(row["resource_path"]):
+        return level, False, "DEL backup/restore artifact (inside backups_dir) — never removed by a plan; manual review"
 
     if excluded:
         return level, False, "excluded by user"

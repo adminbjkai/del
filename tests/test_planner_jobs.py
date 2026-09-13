@@ -898,3 +898,23 @@ def test_build_plan_refuses_an_app_with_no_associations_at_all(settings_env):
     conn.close()
     with pytest.raises(planner.PlanError, match="no resources in the latest completed scan"):
         planner.build_plan("empty-app", {})
+
+
+def test_backup_artifact_is_never_a_plan_step_even_when_confidently_owned(settings_env):
+    """A compose copy inside backups_dir must not become a removable resource
+    of the app whose tree encloses backups_dir, whatever the stored score."""
+    backup = f"{settings_env.backups_dir}/deck/compose_project"
+    conn = get_db()
+    app_id = _insert_app(conn, "hostapp")
+    res_id = _insert_resource(conn, "compose_project", backup, display="compose_project", path=backup,
+                              data={"working_dir": backup})
+    live_id = _insert_resource(conn, "container", "hostapp_web")
+    _insert_assoc(conn, app_id, res_id, confidence=95, removal_eligible="safe")
+    _insert_assoc(conn, app_id, live_id, confidence=95, removal_eligible="safe")
+    conn.close()
+
+    plan = planner.build_plan("hostapp", {"backup": "config"})
+    assert backup in plan.preserved
+    assert any(backup in w and "backup/restore artifact" in w for w in plan.warnings)
+    assert not any(backup in json.dumps(s.args) for s in plan.steps)
+    assert any(s.args.get("container_id") == "hostapp_web" for s in plan.steps)

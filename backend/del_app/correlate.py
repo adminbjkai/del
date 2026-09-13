@@ -26,7 +26,7 @@ logger = logging.getLogger("del_app.correlate")
 NAME_SIMILARITY_THRESHOLD = 0.72
 
 # Docker creates these on every host and they cannot be removed. Single source
-# of truth — the orphan classifier in web/routes.py imports this.
+# of truth — the orphan classifier in web/orphans.py imports this.
 _DOCKER_BUILTIN_NETWORKS = frozenset({"bridge", "host", "none"})
 
 # Directory basenames that describe a *layout role*, not an application. A
@@ -83,6 +83,35 @@ def _exec_refers_to_dir(exec_start: str, dp: str) -> bool:
     if len(d) < 2:
         return False
     return bool(re.search(r"(?:^|[\s=\"'])" + re.escape(d) + r"(?:/|[\s;\"']|$)", exec_start))
+
+
+def is_backup_artifact(path: str | None) -> bool:
+    """True when `path` is inside DEL's own backups_dir (settings.backups_dir).
+
+    The planner writes pre-removal copies there (`<backups_dir>/<app>/
+    compose_project/...`), so a scan finds real-looking compose files, dirs
+    and .env files under it. They are restore material, not a live app and
+    not part of whichever app's tree happens to enclose backups_dir. Exact
+    path-boundary match on the configured directory (and its realpath, since
+    /opt/del is a symlink to /apps/del) — no name heuristics.
+    """
+    if not path or not str(path).startswith("/"):
+        return False
+    try:
+        base = get_settings().backups_dir
+    except Exception:
+        return False
+    if not base:
+        return False
+    p = str(path).rstrip("/")
+    for root in {base.rstrip("/"), os.path.realpath(base).rstrip("/")}:
+        if root and root != "/" and (p == root or p.startswith(root + "/")):
+            return True
+    return False
+
+
+def _resource_path(r: Resource) -> str | None:
+    return r.path or r.data.get("working_dir") or (r.key if r.key.startswith("/") else None)
 
 
 def _project_dir_for(path: str) -> str | None:
@@ -362,6 +391,10 @@ def build_apps(
                        r.data.get("working_dir") or ""),
     ):
         working_dir = cp.data.get("working_dir")
+        if is_backup_artifact(working_dir or cp.path):
+            # A backup copy never seeds or joins an app; it stays unowned and
+            # the Orphans page lists it as Expected (see is_backup_artifact).
+            continue
         # `declared_name` comes from the compose file and is meaningful.
         # `cp.display` is only the directory basename — matching an existing app
         # by a generic one (`gateway`, `server`, `docker`) is how an unrelated
@@ -991,6 +1024,24 @@ def build_apps(
             for (t, k), a in app.assocs.items():
                 if k == key:
                     a.excluded = True
+
+    # --- Step 12b: backup artifacts are never removable app resources -------
+    # Anything under backups_dir that still got attached (directory nesting,
+    # name similarity, even a manifest entry) is kept visible but excluded:
+    # excluded associations are not owners for Orphans and never become plan
+    # steps.
+    by_key_type = {(r.type, r.key): r for r in resources}
+    for slug, app in apps.items():
+        for key, assoc in app.assocs.items():
+            r = by_key_type.get(key)
+            if r is None or assoc.excluded or not is_backup_artifact(_resource_path(r)):
+                continue
+            assoc.excluded = True
+            assoc.evidence.append(Evidence(
+                source="correlate",
+                statement="inside DEL backups_dir — backup/restore artifact, excluded from app ownership; manual review",
+                weight=0,
+            ))
 
     # --- Step 13: global shared-resource detection --------------------------
     # 13a: a weak name-similarity claim (<60) loses outright to another app's

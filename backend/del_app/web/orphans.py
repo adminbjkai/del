@@ -9,7 +9,7 @@ from fastapi.responses import HTMLResponse
 
 from del_app import auth
 from del_app.auth import User
-from del_app.correlate import _DOCKER_BUILTIN_NETWORKS
+from del_app.correlate import _DOCKER_BUILTIN_NETWORKS, is_backup_artifact
 from del_app.db import get_db, q
 from del_app.web.queries import (
     ALL_RESOURCE_TYPES,
@@ -129,6 +129,16 @@ def classify_orphan_candidate(
     display = display or key
     path = path or data.get("fragment_path") or data.get("file") or ""
 
+    if is_backup_artifact(path or data.get("working_dir") or (key if key.startswith("/") else None)):
+        return {
+            "bucket": "expected",
+            "label": "Expected",
+            "reason": (
+                "inside DEL's backups_dir — a backup/restore copy, not a live app or leftover; "
+                "never removed by a plan (manual review)"
+            ),
+        }
+
     # ----- Docker networks -----
     if res_type == "network":
         name = (display or key).strip()
@@ -224,8 +234,16 @@ def classify_orphan_candidate(
             port_num = int(data.get("port") if data.get("port") is not None else -1)
         except (TypeError, ValueError):
             port_num = -1
-        proc = (data.get("process") or data.get("comm") or "").lower()
+        proc_raw = data.get("process") or data.get("comm") or ""
+        proc = proc_raw.lower()
         unit = (data.get("systemd_unit") or "").lower()
+        pid = data.get("pid")
+        # Process evidence for the reason text: the scanner's own ss/proc
+        # fields only (comm name + pid, never the command line).
+        proc_evidence = (
+            f"process '{proc_raw}'" + (f", pid {pid}" if pid not in (None, "", 0) else "")
+            if proc_raw else "no owning process reported"
+        )
         if port_num in _SYSTEM_PORTS or port_num in (5432, 3306, 6379, 27017, 11211):
             return {
                 "bucket": "system",
@@ -258,14 +276,17 @@ def classify_orphan_candidate(
                 "bucket": "actionable",
                 "label": "Actionable",
                 "reason": (
-                    f"listener on port {port_num} via {data.get('systemd_unit') or proc or 'unknown'} "
+                    f"listener on port {port_num} via unit {data.get('systemd_unit')} ({proc_evidence}) "
                     "— unit/process not correlated to any DEL application"
                 ),
             }
         return {
             "bucket": "actionable",
             "label": "Actionable",
-            "reason": f"listening port {port_num if port_num >= 0 else display} not matched to any known app",
+            "reason": (
+                f"listening port {port_num if port_num >= 0 else display} ({proc_evidence}; "
+                "no systemd unit known) not matched to any known app"
+            ),
         }
 
     # ----- processes -----
@@ -316,17 +337,26 @@ def classify_orphan_candidate(
                     else "config present but not enabled (not serving) — review if leftover"
                 ),
             }
-        # A catch-all / default vhost has no server_name (or only `_`) and no
-        # upstream: it exists to reject unknown Host headers, not to serve an
-        # app, so it is never a leftover.
+        # A catch-all / default vhost has no server_name (or only `_`): it
+        # exists to answer unknown Host headers, not to serve an app, so it is
+        # never a leftover.
         names = [n for n in (data.get("server_names") or []) if n and n != "_"]
-        if not names or not (data.get("upstreams") or []):
+        if not names:
             return {
                 "bucket": "system",
                 "label": "System",
+                "reason": "default/catch-all vhost (no server_name) — answers unknown hosts, not an app site",
+            }
+        # A named site with no proxy_pass serves static files or redirects. It
+        # is still a real site someone may depend on, so it stays a review
+        # candidate — just not one DEL can tie to a listener.
+        if not (data.get("upstreams") or []):
+            return {
+                "bucket": "actionable",
+                "label": "Actionable",
                 "reason": (
-                    "default/catch-all vhost (no server_name or no upstream) — "
-                    "rejects unknown hosts, not an app site"
+                    f"enabled named site ({', '.join(names[:3])}) with no proxy_pass upstream — "
+                    "static/redirect-only, not attributed to any app; check its root/redirect target"
                 ),
             }
         return {
@@ -589,15 +619,21 @@ def _classify_orphan_rows(rows: list[dict], compose_images: dict[str, str] | Non
     return classified, counts
 
 
+def classify_orphans(conn, latest: int | None) -> tuple[list[dict], dict[str, int]]:
+    """Every orphan candidate in scan `latest`, classified — the single path
+    shared by /orphans, the dashboard count and the assistant's orphan
+    context, so the three can never report different buckets or counts."""
+    sql, params = _orphan_query(latest)
+    rows = _rows(q(conn, sql, params))
+    return _classify_orphan_rows(rows, _compose_declared_images(conn))
+
+
 def _actionable_orphan_count(conn, latest: int | None) -> int:
     with _ORPHAN_COUNT_LOCK:
         if _ORPHAN_COUNT_CACHE["scan"] == latest:
             return _ORPHAN_COUNT_CACHE["count"]
 
-    sql, params = _orphan_query(latest)
-    rows = _rows(q(conn, sql, params))
-    compose_images = _compose_declared_images(conn)
-    _classified, counts = _classify_orphan_rows(rows, compose_images)
+    _classified, counts = classify_orphans(conn, latest)
     count = counts["actionable"]
 
     with _ORPHAN_COUNT_LOCK:
@@ -621,13 +657,10 @@ def orphans_view(
     conn = get_db()
     try:
         latest = _latest_scan_id(conn)
-        sql, params = _orphan_query(latest)
-        rows = _rows(q(conn, sql, params))
-        compose_images = _compose_declared_images(conn)
+        all_classified, counts = classify_orphans(conn, latest)
     finally:
         conn.close()
 
-    all_classified, counts = _classify_orphan_rows(rows, compose_images)
     classified: list[dict] = []
     for r in all_classified:
         if show_all or r["bucket"] == "actionable":
@@ -661,5 +694,5 @@ def orphans_view(
         total=len(classified),
         show_all=show_all,
         counts=counts,
-        unfiltered_total=len(rows),
+        unfiltered_total=len(all_classified),
     )

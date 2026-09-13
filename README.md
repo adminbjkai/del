@@ -98,6 +98,7 @@ live under `reports/<date>/`:
 | [reports/2026-07-26/](reports/2026-07-26/) | Optimization pass: Installed dates, Eastern UI times, docs open, validation log |
 | [reports/2026-08-13/](reports/2026-08-13/) | Recovery of DEL job 191 (netdata live removal that touched foreign units) |
 | [reports/2026-08-24/](reports/2026-08-24/) | Frontend/accessibility audit fixes |
+| [reports/2026-09-13/](reports/2026-09-13/) | Read-only Nginx alias audit of scan 249's confidence-60 site associations |
 
 ### Local-only files this repo references but does not contain
 
@@ -121,7 +122,9 @@ above is intentional audit history, not stale content — leave it as-is.
 ## Tests
 
 ```bash
-cd /apps/del/backend && ../.venv/bin/python -m pytest ../tests/ -q
+cd /apps/del/backend && ../.venv/bin/python -m pytest ../tests/ -q -W error
 ```
 
-339 passed, 1 skipped as of this writing.
+Every change must leave this at zero failures with warnings treated as errors.
+The pass/skip counts change with nearly every commit, so they are not pinned
+here; each pass records its own count in `CHANGELOG.md`.

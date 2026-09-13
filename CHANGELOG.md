@@ -2,6 +2,29 @@
 
 ## 2026.9.13
 
+One orphan classification everywhere: the assistant's *orphans* scope used to
+classify rows one at a time and skipped the row-set rules (Git repo inside a
+candidate directory, dual-stack sockets, vendor-unit listeners), so it reported
+41 more Actionable rows than `/orphans` on scan 254. The page, the dashboard
+count and the assistant now all call `web/orphans.py::classify_orphans`.
+
+Backups are never app resources: Compose copies under `backups_dir`
+(`/apps/del/backups/<app>/compose_project`) were attached to DEL by directory
+nesting — `deck-renderer` at 95/exclusive/safe. Correlation now skips them
+entirely, excludes any other association that reaches a path inside
+`backups_dir` (even a manifest entry), the planner refuses them as steps, and
+Orphans lists them as Expected.
+
+Orphans wording: the glossary's *Unassociated* now states the real rule (no
+non-excluded owner at confidence 60 or more, and no protected-app claim, in the
+latest scan). An enabled site with a `server_name` but no `proxy_pass` is now
+Actionable with a static/redirect reason, instead of being called a catch-all
+and put in System; only a site with no `server_name` stays System. Port reasons
+name the process and pid, or say that no owning process was reported.
+Scan 255: 174 Actionable / 407 System / 63 Expected (the previous classifier on
+the same rows: 176 / 409 / 59; the only row changes are the 4 backup copies and
+`aidocs.bjk.ai` and `iphone.bjk.ai`). Tests: 376 passed, 2 skipped (`-W error`).
+
 Ownership accuracy: a listener or process running under a systemd user manager
 is now attributed to the innermost service in its cgroup path. Before this, `/proc/<pid>/cgroup` for the OpenClaw
 gateway (`user@1000.service/app.slice/openclaw-gateway.service`) was reported as
