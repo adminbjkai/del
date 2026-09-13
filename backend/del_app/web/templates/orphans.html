@@ -3,7 +3,7 @@
 {% block title %}Orphans{% endblock %}
 {% block content %}
 <div class="page-header">
-  <h1>Orphan candidates <span class="count-pill">{{ total }}</span></h1>
+  <h1>Orphan candidate rows <span class="count-pill">{{ total }}</span></h1>
   <div class="page-actions">
     {% if show_all %}
       <a class="btn btn-sm btn-ghost" href="/orphans">Actionable only</a>
@@ -17,7 +17,7 @@
   </div>
 </div>
 
-<p class="page-lede">Name relatedness here is no probable owner (≥60). Possible/weak claims may still exist; shared and probable owners live on Apps and Resources. Unassigned chips mean no association rows at all, which is stricter than this page.</p>
+<p class="page-lede">These are resource rows with no probable owner (≥60) in the latest scan—not necessarily separate apps. Possible/weak claims may still exist; protected-tree rows are suppressed, and shared/probable owners live on Apps and Resources. Unassigned chips mean no association rows at all.</p>
 <div class="callout callout-info">
   <span class="callout-title">Review only</span>
   Nothing on this page can be deleted from here — decide per app on its own page.
@@ -39,10 +39,10 @@
     <span class="stat-label">Expected</span>
     <span class="stat-hint">Known non-orphan situations, e.g. still declared by compose</span>
   </a>
-  <span class="stat-card" title="No association rows at all — stricter and broader than the buckets above">
+  <span class="stat-card" title="No probable owner in the latest scan — may still have a weak or protected-tree association">
     <span class="stat-value">{{ unfiltered_total }}</span>
-    <span class="stat-label">Unassociated</span>
-    <span class="stat-hint">Total resources with no owner rows</span>
+    <span class="stat-label">No probable owner</span>
+    <span class="stat-hint">Raw rows before System/Expected classification</span>
   </span>
 </div>
 

@@ -779,6 +779,37 @@ def test_orphan_classification_filters_system_noise():
     assert vol["bucket"] == "actionable"
 
 
+def test_protected_app_weak_association_is_not_orphan(authed_client, settings_env):
+    """Protected trees must not leak weak/shared associations into Orphans."""
+    from del_app.db import get_db, x
+
+    conn = get_db()
+    try:
+        scan_id = x(conn, "INSERT INTO scans (status) VALUES ('done')")
+        app_id = x(
+            conn,
+            "INSERT INTO applications (slug, name, status, protected, last_seen) VALUES (?,?,?,?,?)",
+            ("protected-tree", "Protected tree", "running", 1, scan_id),
+        )
+        resource_id = x(
+            conn,
+            "INSERT INTO resources (type, key, display, state, data_json, last_seen) VALUES (?,?,?,?,?,?)",
+            ("compose_project", "/apps/protected-tree/nested", "nested", "found", "{}", scan_id),
+        )
+        x(
+            conn,
+            "INSERT INTO associations (app_id, resource_id, confidence, ownership, shared, excluded) VALUES (?,?,?,?,?,?)",
+            (app_id, resource_id, 55, "shared", 1, 0),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    resp = authed_client.get("/orphans")
+    assert resp.status_code == 200
+    assert "/apps/protected-tree/nested" not in resp.text
+
+
 def test_orphan_image_referenced_by_compose_project_is_expected_not_default(authed_client, settings_env):
     """Compose-declared unused image is Expected — hidden from default Actionable view,
     visible with ?show=all and a precise reason."""

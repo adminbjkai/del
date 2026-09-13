@@ -52,8 +52,8 @@
   </a>
   <a class="stat-card {{ 'is-warn' if stats.get('orphan_candidates', 0) > 0 else '' }}" href="/orphans">
     <div class="stat-value">{{ stats.get('orphan_candidates', 0) }}</div>
-    <div class="stat-label">Orphan candidates</div>
-    <div class="stat-hint">no probable owner — review</div>
+    <div class="stat-label">Orphan candidate rows</div>
+    <div class="stat-hint">resource rows with no probable owner — review</div>
   </a>
   <a class="stat-card" href="/resources/{{ stats.get('shared_top_type', 'volume') }}?filter=shared">
     <div class="stat-value">{{ stats.get('shared_resources', 0) }}</div>

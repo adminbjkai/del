@@ -204,6 +204,9 @@ def _owner_map(conn, resource_ids: list[int]) -> dict[int, dict]:
 # second, a sub-60 name-similarity guess (Step 11's difflib fallback) is enough
 # to hide a resource while still being too weak to make it removable anywhere:
 # a dead zone where the resource is neither actionable nor cleanable.
+# Protected applications are the deliberate exception: their weak/shared
+# associations still mean "keep this in the protected tree", so those rows must
+# not reappear as actionable orphans.
 _ORPHAN_MIN_OWNING_CONFIDENCE = 60
 
 
@@ -216,7 +219,7 @@ def _orphan_query(latest: int | None) -> tuple[str, tuple]:
             JOIN applications ap ON ap.id = a.app_id
             WHERE a.resource_id = r.id
               AND a.excluded = 0
-              AND a.confidence >= ?
+              AND (a.confidence >= ? OR ap.protected = 1)
     """
     params: list[Any] = [_ORPHAN_MIN_OWNING_CONFIDENCE]
     if latest is not None:
