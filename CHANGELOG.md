@@ -2,6 +2,11 @@
 
 ## 2026.9.13
 
+Strategic safety pass: generic Compose directories nested below archived clones
+inside `/apps/agyinstall` no longer become false 95-confidence removable
+projects. The live agyinstall deployment tool is also protected in production
+configuration.
+
 Orphan clarification pass: validated source clones (`flashflix-tvos`,
 `ultraflix-apk`, `ExpenseOwl`, `MySpeed`, `notes`, and `ShareX`) now have
 explicit blocked manifests instead of misleading weak app matches. Historical

@@ -5,7 +5,7 @@ backups_dir = "/apps/del/backups"
 logs_dir = "/apps/del/logs"
 scan_roots = ["/apps", "/data/apps", "/opt", "/srv", "/var/www"]
 helper_socket = "/run/del/helper.sock"
-protected_apps = ["del"]
+protected_apps = ["del", "agyinstall"]
 
 [assistant]
 enabled = true

@@ -173,7 +173,9 @@ def build_apps(resources: list[Resource], manifests: dict[str, Manifest]) -> lis
   treated as a project directory for name matching.
 - **Nested Compose projects stay conservative** — a Compose definition inside a
   different app's project tree is retained as a shared, blocked association rather
-  than being promoted to a same-name removable app. If that nested definition
+  than being promoted to a same-name removable app. This also applies when the
+  Compose directory has a generic layout name such as `docker`, `deploy`, or
+  `scripts` several levels below the outer project. If that nested definition
   declares bind mounts or named volumes, its association carries `data` loss risk;
   otherwise it carries `config` risk.
 - **Bare directories need stronger evidence than spelling** — the fuzzy fallback

@@ -405,6 +405,9 @@ def build_apps(
                         continue
                     if working_dir.startswith(dp.rstrip("/") + "/") and len(dp) > best_len:
                         matched_slug, best_len = slug, len(dp)
+                        if (_slugify(cp.display) in _GENERIC_DIR_BASENAMES
+                                and os.path.dirname(working_dir.rstrip("/")) != dp.rstrip("/")):
+                            foreign_owner = slug
         if matched_slug is None:
             slug = _slugify(cp.display)
             if slug in _GENERIC_DIR_BASENAMES and working_dir:
@@ -419,6 +422,15 @@ def build_apps(
                         slug = anchored
                         if slug in apps:
                             matched_slug = slug
+                            # A generic layout directory one level below a
+                            # nested clone (e.g. /apps/agyinstall/Cap/packages/
+                            # local-docker) is not the owning app's own root.
+                            # Keep it attached to the outer project as shared,
+                            # blocked evidence instead of promoting it to a
+                            # removable 95-confidence Compose project.
+                            parent_dir = os.path.dirname(working_dir.rstrip("/"))
+                            if parent_dir != project_dir:
+                                foreign_owner = anchored
             if matched_slug is None and (slug in running_project_slugs or slug in apps):
                 matched_slug = slug if slug in apps else None
             if matched_slug is None:
