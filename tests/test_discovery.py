@@ -168,12 +168,16 @@ def test_git_worktree_is_attributed_to_the_common_repository_app():
         type="git_repo", key="/apps/del-2/.git", display="del-2", path="/apps/del-2", state="clean",
         data={"present": True, "git_common_dir": "/apps/del/.git"},
     )
-    apps = build_apps([container, repo, worktree], {})
+    directory = Resource(type="directory", key="/apps/del-2", display="del-2", path="/apps/del-2", state="found", data={})
+    apps = build_apps([container, repo, worktree, directory], {})
     record, assocs = next(item for item in apps if item[0].slug == "del")
     wt = next(a for a in assocs if a.resource_key == "/apps/del-2/.git")
+    worktree_dir = next(a for a in assocs if a.resource_key == "/apps/del-2")
     assert wt.confidence == 95
     assert wt.level == "confirmed"
     assert "shares repository" in wt.evidence[0].statement
+    assert worktree_dir.confidence == 95
+    assert "contains Git worktree" in worktree_dir.evidence[0].statement
 
 
 def test_symlink_alias_is_not_treated_as_a_second_project(tmp_path):

@@ -709,6 +709,17 @@ def build_apps(
                                 data_loss_risk="data",
                                 evidence=[Evidence(source="git", statement=f"Git worktree shares repository {common}", weight=95)],
                             )
+                            for d in directories:
+                                if d.path == r.path:
+                                    app.add(
+                                        d,
+                                        confidence=95,
+                                        ownership="exclusive",
+                                        data_loss_risk="data",
+                                        evidence=[Evidence(source="git", statement=f"directory contains Git worktree for repository {common}", weight=95)],
+                                    )
+                                    app.dir_paths.add(d.path)
+                                    break
                             break
 
     # --- Step 7c: systemd units by WorkingDirectory/ExecStart under app dir --
