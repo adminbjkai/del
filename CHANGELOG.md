@@ -2,6 +2,12 @@
 
 ## 2026.9.13
 
+Reviewed weak filesystem matches are now cleaner: bare directories with no
+Compose, `.env`, or Git signal are not attached to apps by name similarity alone.
+The standalone `cap42` and `cap4l` local projects now have explicit manifests,
+so they are distinguished from the Docker `cap`/`cap4` deployments at 100%
+manual confidence.
+
 Nested Compose projects found inside another app's tree remain conservative
 (shared/blocked) rather than becoming independently removable by name alone. If
 the nested definition declares bind mounts or named volumes, DEL now records

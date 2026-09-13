@@ -1,0 +1,10 @@
+id: cap42
+name: cap42 — local screen recorder
+status: stopped
+host_paths:
+  - /apps/cap42
+  - /apps/cap42/.env
+notes: |
+  Standalone local Python screen-recorder project. Reviewed on 2026-09-13:
+  it is not the Docker cap/cap4 deployment and must not be correlated to those
+  apps by name similarity. Data lives under /apps/cap42/data.

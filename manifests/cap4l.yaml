@@ -1,0 +1,10 @@
+id: cap4l
+name: cap4l — portable local edition
+status: stopped
+host_paths:
+  - /apps/cap4l
+  - /apps/cap4l/.env
+notes: |
+  Standalone local Python portable edition reviewed on 2026-09-13. It is not
+  the Docker cap4 deployment and must not be correlated to cap/cap4 by name
+  similarity. Data lives under /apps/cap4l/data.

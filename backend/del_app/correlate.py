@@ -916,8 +916,17 @@ def build_apps(
     # --- Step 11: name-similarity fallback for anything unmatched so far ----
     for pool in (directories, git_repos, env_files):
         for r in pool:
-            if r.type == "directory" and r.display == "__MACOSX":
-                continue
+            if r.type == "directory":
+                if r.display == "__MACOSX":
+                    continue
+                # A bare directory with no compose, env, or Git signal is not
+                # enough evidence to attach it to an app by spelling alone.
+                # Such paths remain visible as unassociated/manual-review
+                # resources instead of producing false owners (docs/containerd
+                # are common examples).
+                git = r.data.get("git") or {}
+                if not (r.data.get("has_compose") or r.data.get("has_env") or git.get("present")):
+                    continue
             base = r.display
             for slug, app in apps.items():
                 if (r.type, r.key) in app.assocs:

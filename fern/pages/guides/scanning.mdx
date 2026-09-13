@@ -14,7 +14,9 @@ right after logging in for the first time, and any time the host has changed.
   on the host — it only inspects. The only thing DEL ever mutates is the target of an
   approved, executed removal job. Git worktrees are attributed to their common
   repository when detectable; symlink aliases and macOS `__MACOSX` archive
-  metadata are excluded from duplicate/project name matching.
+  metadata are excluded from duplicate/project name matching. Bare directories
+  without Compose, `.env`, or Git signals are not assigned to apps by spelling
+  alone; reviewed standalone projects can be made explicit with a manifest.
 </Callout>
 
 ## Running a scan

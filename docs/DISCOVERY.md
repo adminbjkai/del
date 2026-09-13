@@ -176,6 +176,12 @@ def build_apps(resources: list[Resource], manifests: dict[str, Manifest]) -> lis
   than being promoted to a same-name removable app. If that nested definition
   declares bind mounts or named volumes, its association carries `data` loss risk;
   otherwise it carries `config` risk.
+- **Bare directories need stronger evidence than spelling** — the fuzzy fallback
+  does not attach a directory that has no Compose, `.env`, or Git signal. This
+  keeps ordinary folders such as notes/docs and system directories such as
+  `/opt/containerd` visible for manual review without inventing an app owner.
+  Reviewed standalone projects may use manifests for explicit 100-confidence
+  ownership, as with `cap42` and `cap4l`.
 - **Host-network containers correlate via listener ownership** — a container run
   with `--network host` publishes no distinct container port, so `proc_src.py`
   traces a listening port's pid back to its owning container by matching the

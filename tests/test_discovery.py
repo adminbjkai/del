@@ -218,7 +218,7 @@ def test_name_similarity_only_reaches_possible_level_capped_at_50():
     container = _container("myapp_web", compose_project="myapp", compose_working_dir="/apps/myapp")
     unrelated_dir = Resource(
         type="directory", key="/srv/apps/myapp2", display="myapp2",
-        path="/srv/apps/myapp2", state="found", data={},
+        path="/srv/apps/myapp2", state="found", data={"has_env": True},
     )
     apps = build_apps([container, unrelated_dir], {})
     record, assocs = apps[0]
@@ -227,6 +227,15 @@ def test_name_similarity_only_reaches_possible_level_capped_at_50():
     assert dir_assoc.level == "possible"
     assert dir_assoc.confidence <= 50
     assert dir_assoc.removal_eligible == "blocked"
+
+
+def test_signal_less_directory_does_not_get_a_fuzzy_owner():
+    container = _container("docmost_web", compose_project="docmost", compose_working_dir="/apps/docmost")
+    unrelated_dir = Resource(
+        type="directory", key="/apps/docs", display="docs", path="/apps/docs", state="found", data={},
+    )
+    apps = build_apps([container, unrelated_dir], {})
+    assert all(a.resource_key != "/apps/docs" for _, assocs in apps for a in assocs)
 
 
 def test_bind_mount_gets_confirmed_level_with_data_loss_risk():
