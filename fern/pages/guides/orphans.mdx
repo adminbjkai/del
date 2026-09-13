@@ -52,7 +52,9 @@ An orphan is not automatically junk. Before acting on one, work out which it is:
   up.
 - **Shared infrastructure** — a network, volume, or directory used by several things
   that DEL couldn't confidently attribute to one app. Removing it could break
-  something.
+  something. Nested Compose projects inside another app's tree remain blocked;
+  definitions declaring bind mounts or named volumes are treated as data-risk,
+  not merely config-risk.
 - **Simply un-correlated** — a resource DEL failed to link because of a naming or
   path mismatch. The fix is to add a [manifest](/reference/architecture) entry so the
   next scan attributes it correctly, rather than treating it as an orphan.

@@ -438,11 +438,14 @@ def build_apps(
                 matched_slug = slug
         app = apps[matched_slug]
         if foreign_owner:
+            nested_risk = "data" if (
+                cp.data.get("bind_mount_sources") or cp.data.get("volumes")
+            ) else "config"
             app.add(
                 cp,
                 confidence=55,
                 ownership="shared",
-                data_loss_risk="config",
+                data_loss_risk=nested_risk,
                 evidence=[Evidence(
                     source="compose_src",
                     statement=(

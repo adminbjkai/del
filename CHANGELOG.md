@@ -2,6 +2,11 @@
 
 ## 2026.9.13
 
+Nested Compose projects found inside another app's tree remain conservative
+(shared/blocked) rather than becoming independently removable by name alone. If
+the nested definition declares bind mounts or named volumes, DEL now records
+`data` loss risk instead of understating it as config-only.
+
 Correlation accuracy: Git worktrees now inherit ownership from their common
 repository, symlink aliases are not inventoried as duplicate project directories,
 and macOS `__MACOSX` archive metadata is excluded from project-name matching.

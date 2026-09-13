@@ -171,6 +171,11 @@ def build_apps(resources: list[Resource], manifests: dict[str, Manifest]) -> lis
   directory. Symlink aliases to an already-discovered project are skipped as
   duplicate filesystem inventory, and macOS `__MACOSX` archive metadata is not
   treated as a project directory for name matching.
+- **Nested Compose projects stay conservative** — a Compose definition inside a
+  different app's project tree is retained as a shared, blocked association rather
+  than being promoted to a same-name removable app. If that nested definition
+  declares bind mounts or named volumes, its association carries `data` loss risk;
+  otherwise it carries `config` risk.
 - **Host-network containers correlate via listener ownership** — a container run
   with `--network host` publishes no distinct container port, so `proc_src.py`
   traces a listening port's pid back to its owning container by matching the

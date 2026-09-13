@@ -68,6 +68,24 @@ def _compose_project(display, working_dir, declared_name=None):
     )
 
 
+def test_nested_compose_with_declared_data_is_marked_data_risk_but_stays_blocked():
+    resources = [
+        _compose_project("boxy", "/apps/boxy"),
+        _compose_project("agyinstall", "/apps/agyinstall"),
+        Resource(
+            type="compose_project", key="/apps/agyinstall/boxy", display="boxy", path="/apps/agyinstall/boxy",
+            state="stopped", data={"working_dir": "/apps/agyinstall/boxy", "declared_name": None,
+                                  "config_files": [], "bind_mount_sources": ["./uploads"], "volumes": ["boxy_data"]},
+        ),
+    ]
+    apps = build_apps(resources, {})
+    assoc = next(a for _, assocs in apps for a in assocs if a.resource_key == "/apps/agyinstall/boxy")
+    assert assoc.confidence == 55
+    assert assoc.ownership == "shared"
+    assert assoc.data_loss_risk == "data"
+    assert assoc.removal_eligible == "blocked"
+
+
 def test_nested_compose_in_another_apps_tree_is_not_a_safe_same_name_match():
     # /apps/boxy is the real app; /apps/agyinstall/boxy is an archived clone
     # inside a DIFFERENT project's tree (agyinstall). Both compose files slug
