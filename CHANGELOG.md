@@ -2,6 +2,22 @@
 
 ## 2026.9.13
 
+Ownership accuracy: a listener or process running under a systemd user manager
+is now attributed to the innermost service in its cgroup path. Before this, `/proc/<pid>/cgroup` for the OpenClaw
+gateway (`user@1000.service/app.slice/openclaw-gateway.service`) was reported as
+`user@1000.service`. The user manager is now only the fallback. Ports owned by a
+vendor/package unit that the same scan lists and classifies as System (such as
+`flussonic.service` and `flussonic-epmd.service` from the `flussonic` dpkg
+package) are now System instead of Actionable. The match is exact on the cgroup
+unit and never applies to `user@*.service`. Enabled Nginx sites with no owner
+keep their bucket, and their reason now names the loopback proxy target and the
+unit that owns that listener. Flussonic is not turned into a removable DEL app,
+because the package owns `/opt/flussonic` and its unit files.
+
+Orphan view de-duplication: a Git repository inside a candidate directory, and
+the second address family of a dual-stack listener (same proto, pid, and port),
+are shown as Expected and point back to the row that stays Actionable.
+
 Strategic safety pass: generic Compose directories nested below archived clones
 inside `/apps/agyinstall` no longer become false 95-confidence removable
 projects. The live agyinstall deployment tool is also protected in production

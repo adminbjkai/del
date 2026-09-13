@@ -885,6 +885,107 @@ def test_same_port_different_pid_or_no_pid_is_not_merged():
     assert counts["actionable"] == 4
 
 
+def _unit_row(unit: str, fragment: str, is_custom: bool = False) -> dict:
+    return {
+        "type": "systemd_unit",
+        "key": unit,
+        "display": unit,
+        "path": fragment,
+        "data_json": json.dumps({"fragment_path": fragment, "is_custom": is_custom}),
+    }
+
+
+def _unit_port_row(addr: str, port: int, pid: int, unit: str) -> dict:
+    row = _port_row(addr, port, pid)
+    data = json.loads(row["data_json"])
+    data["systemd_unit"] = unit
+    row["data_json"] = json.dumps(data)
+    return row
+
+
+def test_listener_owned_by_vendor_unit_is_system_like_the_unit():
+    """flussonic.service lives in /lib/systemd/system (package-owned) and its
+    unit row is System; the ports its cgroup owns must not stay Actionable."""
+    from del_app.web.orphans import _classify_orphan_rows
+
+    classified, counts = _classify_orphan_rows(
+        [
+            _unit_row("flussonic.service", "/lib/systemd/system/flussonic.service"),
+            _unit_port_row("0.0.0.0", 8050, 3582, "flussonic.service"),
+            _unit_port_row("[::]", 8050, 3582, "flussonic.service"),
+        ],
+        {},
+    )
+    ports = [r for r in classified if r["type"] == "port"]
+    assert [r["bucket"] for r in ports] == ["system", "system"]
+    assert "vendor/package unit flussonic.service" in ports[0]["reason"]
+    assert "/lib/systemd/system/flussonic.service" in ports[0]["reason"]
+    assert counts == {"actionable": 0, "system": 3, "expected": 0}
+
+
+def test_listener_owned_by_custom_or_unlisted_unit_stays_actionable():
+    """Only an exact cgroup match to a vendor unit row counts: custom units,
+    units absent from the scan, and the enclosing user manager stay Actionable."""
+    from del_app.web.orphans import _classify_orphan_rows
+
+    classified, _counts = _classify_orphan_rows(
+        [
+            _unit_row("myapp.service", "/etc/systemd/system/myapp.service", is_custom=True),
+            _unit_row("user@1000.service", "/lib/systemd/system/user@.service"),
+            _unit_port_row("0.0.0.0", 9001, 10, "myapp.service"),
+            _unit_port_row("127.0.0.1", 9002, 11, "openclaw-gateway.service"),
+            _unit_port_row("127.0.0.1", 9003, 12, "user@1000.service"),
+        ],
+        {},
+    )
+    ports = {r["display"]: r for r in classified if r["type"] == "port"}
+    assert all(r["bucket"] == "actionable" for r in ports.values())
+    assert "openclaw-gateway.service" in ports["127.0.0.1:9002"]["reason"]
+
+
+def test_enabled_nginx_site_reason_names_loopback_target_owner():
+    """An unclaimed site keeps its bucket but says which listener it fronts."""
+    from del_app.web.orphans import _classify_orphan_rows
+
+    site = {
+        "type": "nginx_site",
+        "key": "/etc/nginx/sites-enabled/openclaw",
+        "display": "openclaw",
+        "path": "/etc/nginx/sites-enabled/openclaw",
+        "data_json": json.dumps({
+            "enabled": True,
+            "server_names": ["192.168.1.164"],
+            "upstreams": [
+                {"location": "/", "proxy_pass": "http://127.0.0.1:18789", "port": 18789},
+                {"location": "/x", "proxy_pass": "http://127.0.0.1:18800", "port": 18800},
+                {"location": "/r", "proxy_pass": "http://10.0.0.5:9000", "port": 9000},
+                {"location": "/p", "proxy_pass": "http://127.0.0.10:9100", "port": 9100},
+                {"location": "/h", "proxy_pass": "http://localhost.example.com:9200/", "port": 9200},
+                {"location": "/a", "proxy_pass": "http://localhost:7000/api", "port": 7000},
+            ],
+        }),
+    }
+    classified, counts = _classify_orphan_rows(
+        [
+            site,
+            _unit_port_row("127.0.0.1", 18789, 2072386, "openclaw-gateway.service"),
+            # Two units on one port: the proxy target is ambiguous.
+            _unit_port_row("127.0.0.1", 7000, 31, "a.service"),
+            _unit_port_row("[::1]", 7000, 32, "b.service"),
+        ],
+        {},
+    )
+    reason = classified[0]["reason"]
+    assert classified[0]["bucket"] == "actionable"
+    assert reason.endswith(
+        "proxies to 127.0.0.1:7000 (no listener owner known), "
+        "127.0.0.1:18789 (openclaw-gateway.service), 127.0.0.1:18800 (no listener owner known)"
+    )
+    for remote in ("9000", "9100", "9200"):
+        assert remote not in reason
+    assert counts["actionable"] == 4
+
+
 def test_dual_stack_listener_hidden_from_default_orphans_view(authed_client, settings_env):
     from del_app.db import get_db, x
 

@@ -440,6 +440,60 @@ def _listener_identity(data: dict) -> tuple | None:
         return None
 
 
+_VENDOR_UNIT_DIRS = ("/lib/systemd/", "/usr/lib/systemd/")
+_LOOPBACK_HOSTS = ("127.0.0.1", "localhost", "[::1]")
+_LISTEN_ADDRS = ("127.0.0.1", "0.0.0.0", "::1", "[::1]", "::", "[::]", "*")
+
+
+def _vendor_unit_fragments(rows: list[dict]) -> dict[str, str]:
+    """unit name -> fragment path for vendor/package units (not custom, unit
+    file under /lib/systemd or /usr/lib/systemd) present in this scan."""
+    out: dict[str, str] = {}
+    for r in rows:
+        if r.get("type") != "systemd_unit":
+            continue
+        data = _json_or(r.get("data_json"), {})
+        frag = data.get("fragment_path") or r.get("path") or ""
+        # user@UID.service is the per-user manager that *encloses* user
+        # services (openclaw-gateway.service etc.); owning its cgroup proves
+        # nothing about who installed a listener.
+        key = r.get("key") or ""
+        if key.startswith("user@"):
+            continue
+        if not data.get("is_custom") and frag.startswith(_VENDOR_UNIT_DIRS):
+            out[key] = frag
+    return out
+
+
+def _local_listener_owners(rows: list[dict]) -> dict[int, str]:
+    """port -> owning systemd unit (from the listener's cgroup) for sockets a
+    loopback proxy_pass can reach. Ports held by more than one unit are
+    dropped: the proxy target is then ambiguous."""
+    owners: dict[int, set[str]] = {}
+    for r in rows:
+        if r.get("type") != "port":
+            continue
+        data = _json_or(r.get("data_json"), {})
+        unit = data.get("systemd_unit")
+        if not unit or data.get("pid") in (None, "", 0) or data.get("addr") not in _LISTEN_ADDRS:
+            continue
+        try:
+            owners.setdefault(int(data.get("port")), set()).add(unit)
+        except (TypeError, ValueError):
+            continue
+    return {port: next(iter(units)) for port, units in owners.items() if len(units) == 1}
+
+
+def _nginx_local_targets(data: dict) -> list[int]:
+    ports = []
+    for u in data.get("upstreams") or []:
+        target = (u.get("proxy_pass") or "").split("://", 1)[-1].split("/", 1)[0]
+        host = target.rsplit(":", 1)[0] if ":" in target else target
+        if host in _LOOPBACK_HOSTS and isinstance(u.get("port"), int):
+            ports.append(u["port"])
+    return sorted(set(ports))
+
+
 def _classify_orphan_rows(rows: list[dict], compose_images: dict[str, str] | None) -> tuple[list[dict], dict[str, int]]:
     """Classify rows consistently for the page and dashboard.
 
@@ -455,7 +509,19 @@ def _classify_orphan_rows(rows: list[dict], compose_images: dict[str, str] | Non
     is Expected and points back at the row that stays actionable. Sockets with
     no pid, or different pids, are never merged — a different process on the
     same port is a different service.
+
+    A listener whose cgroup names a vendor/package unit that this same scan
+    lists (unit file under /lib/systemd, e.g. flussonic.service) is System like
+    that unit row: DEL only removes units under /etc/systemd/system, and the
+    package manager owns the rest. Only the exact cgroup unit counts — no name
+    or process heuristics.
+
+    Enabled Nginx sites keep their bucket but name the loopback proxy target
+    and the unit that owns that listener, so the reviewer sees what the site
+    fronts.
     """
+    vendor_units = _vendor_unit_fragments(rows)
+    listener_owners = _local_listener_owners(rows)
     directory_paths = {
         (r.get("path") or r.get("key") or "").rstrip("/")
         for r in rows
@@ -482,6 +548,25 @@ def _classify_orphan_rows(rows: list[dict], compose_images: dict[str, str] | Non
                 "label": "Expected",
                 "reason": "Git metadata inside the same candidate directory — review the directory row, not a second cleanup target",
             }
+        elif (r.get("type") == "port" and cls["bucket"] == "actionable"
+              and data.get("systemd_unit") in vendor_units):
+            unit = data["systemd_unit"]
+            cls = {
+                "bucket": "system",
+                "label": "System",
+                "reason": (
+                    f"listener owned by vendor/package unit {unit} ({vendor_units[unit]}, cgroup match) "
+                    "— managed by the package manager, not an app leftover"
+                ),
+            }
+        elif r.get("type") == "nginx_site" and cls["bucket"] == "actionable":
+            fronts = [
+                f"127.0.0.1:{port} ({listener_owners[port]})" if port in listener_owners
+                else f"127.0.0.1:{port} (no listener owner known)"
+                for port in _nginx_local_targets(data)
+            ]
+            if fronts:
+                cls = dict(cls, reason=f"{cls['reason']}; proxies to {', '.join(fronts)}")
         elif r.get("type") == "port" and cls["bucket"] == "actionable":
             listener = _listener_identity(data)
             if listener is not None:

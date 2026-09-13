@@ -42,6 +42,7 @@ def _run(args: list[str]) -> str:
         return ""
 
 
+_NESTED_SERVICE_RE = re.compile(r"/([A-Za-z0-9@_.\-]+\.service)(?=/|$)")
 _DOCKER_CGROUP_RE = re.compile(r"(?:/docker/|docker-)([0-9a-f]{64})")
 _SYSTEMD_CGROUP_RE = re.compile(
     r"/(?:system|user)\.slice/(?:[^/\n]+\.slice/)*([A-Za-z0-9@_.\-]+\.service)"
@@ -82,7 +83,15 @@ def _cgroup_owner(pid: int, docker_map: dict[str, str]) -> tuple[str | None, str
     unit = None
     m2 = _SYSTEMD_CGROUP_RE.search(content)
     if m2:
+        # A service nested inside a user manager (user@1000.service/app.slice/
+        # openclaw-gateway.service) is owned by the innermost unit; the
+        # enclosing user@UID.service is only the fallback when nothing deeper.
         unit = m2.group(1)
+        if unit.startswith("user@"):
+            tail = content[m2.end():].split("\n", 1)[0]
+            inner = _NESTED_SERVICE_RE.findall(tail)
+            if inner:
+                unit = inner[-1]
 
     return container_name, unit
 

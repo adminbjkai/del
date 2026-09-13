@@ -985,3 +985,31 @@ def test_project_root_rule_does_not_claim_another_projects_tree():
     }
     assert "/apps/agyinstall" not in claimed, "claimed an unrelated project's root"
     assert "/apps/banban" in claimed, "should still claim its own project root"
+
+
+@pytest.mark.parametrize(
+    "cgroup, expected",
+    [
+        # A user service is owned by the innermost unit, not the user manager.
+        ("0::/user.slice/user-1000.slice/user@1000.service/app.slice/openclaw-gateway.service\n",
+         "openclaw-gateway.service"),
+        # Nothing deeper than the manager itself: fall back to user@UID.service.
+        ("0::/user.slice/user-1000.slice/user@1000.service/init.scope\n", "user@1000.service"),
+        ("0::/system.slice/flussonic.service\n", "flussonic.service"),
+        # Only the user manager is looked through; system units are unchanged.
+        ("0::/system.slice/containerd.service/sub.service\n", "containerd.service"),
+        # cgroup v1 multi-line: the first matching line decides.
+        ("12:pids:/system.slice/nginx.service\n1:name=systemd:/system.slice/nginx.service\n",
+         "nginx.service"),
+        ("0::/user.slice/user-1000.slice/session-3.scope\n", None),
+    ],
+)
+def test_cgroup_owner_prefers_innermost_service(tmp_path, monkeypatch, cgroup, expected):
+    real_open = open
+    cg = tmp_path / "cgroup"
+    cg.write_text(cgroup)
+    monkeypatch.setattr(
+        "builtins.open",
+        lambda path, *a, **kw: real_open(cg if path == "/proc/4242/cgroup" else path, *a, **kw),
+    )
+    assert proc_src._cgroup_owner(4242, {}) == (None, expected)

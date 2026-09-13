@@ -72,6 +72,23 @@ application automatically and never appear here as orphans — they're owned
 infrastructure, not debris. Only ports/processes DEL genuinely couldn't attribute
 to anything show up on this page.
 
+For a listener under a systemd user manager, the owning unit is the innermost
+service in its cgroup path: `openclaw-gateway.service` running under
+`user@1000.service` is reported as `openclaw-gateway.service`. The user manager
+is used only when nothing deeper is present. System units are read as before. If that unit is a vendor/package unit listed in
+the same scan (unit file under `/lib/systemd` or `/usr/lib/systemd`, for example
+`flussonic.service` from the `flussonic` package), the port is shown as
+**System**, the same bucket as the unit row. DEL only removes units under
+`/etc/systemd/system`, so the package manager owns these. Only an exact cgroup
+match counts, and `user@*.service` never does.
+
+When the same process binds a port on both IPv4 and IPv6, the second socket is
+**Expected** and points to the first. A Git repository row inside a candidate
+directory is also **Expected**, because you review the directory instead. An
+enabled site with no owner stays **Actionable**, and its reason names each
+loopback proxy target and the unit that owns that listener, for example
+*"proxies to 127.0.0.1:18789 (openclaw-gateway.service)"*.
+
 An unused image is also checked against every discovered compose file: if a
 `docker-compose.yml` still declares an image that no running container currently
 uses, its reason reads *"unused, but referenced by compose project &lt;name&gt;
