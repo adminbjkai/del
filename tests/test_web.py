@@ -246,6 +246,9 @@ def test_view_apps_only_renders_current_enabled_healthy_domains(
     assert "1 unavailable hidden" in resp.text
     assert 'id="gallery-layout-toggle"' in resp.text
     assert 'data-gallery-view="grid"' in resp.text
+    assert 'class="gallery-section-toggle"' in resp.text
+    assert 'aria-expanded="true"' in resp.text
+    assert 'aria-controls="gallery-grid-1"' in resp.text
     assert 'href="/view-apps"' in resp.text
 
 

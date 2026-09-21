@@ -77,10 +77,16 @@
   {% for category in categories %}
   <section class="gallery-section" data-gallery-section="{{ category }}">
     <div class="gallery-section-heading">
-      <h2>{{ category }}</h2>
+      <h2>
+        <button type="button" class="gallery-section-toggle" aria-expanded="true"
+                aria-controls="gallery-grid-{{ loop.index }}">
+          <span class="gallery-section-chevron" aria-hidden="true"></span>
+          {{ category }}
+        </button>
+      </h2>
       <span class="count-pill">{{ apps | selectattr('category', 'equalto', category) | list | length }}</span>
     </div>
-    <div class="gallery-grid">
+    <div class="gallery-grid" id="gallery-grid-{{ loop.index }}">
       {% for app in apps if app.category == category %}
       <article class="app-launch-card" draggable="false"
                data-app-id="{{ app.id }}" data-name="{{ app.name | lower }}"

@@ -1476,6 +1476,7 @@
     var GALLERY_KEY = "del.appGallery.v1";
     var galleryEditing = false;
     var draggedCard = null;
+    var collapsedGallerySections = {};
     var defaultPrefs = {
       view: "grid", density: "comfortable", width: 250, sort: "category",
       favorites: {}, hidden: {}, categories: {}, order: [],
@@ -1510,14 +1511,26 @@
       if (mode === "latency") return Number(a.getAttribute("data-latency")) - Number(b.getAttribute("data-latency"));
       return a.getAttribute("data-name").localeCompare(b.getAttribute("data-name"));
     }
-    function makeGallerySection(category, cards) {
+    function makeGallerySection(category, cards, index) {
       var section = document.createElement("section");
       section.className = "gallery-section";
       section.setAttribute("data-gallery-section", category);
       var heading = document.createElement("div");
       heading.className = "gallery-section-heading";
       var title = document.createElement("h2");
-      title.textContent = category;
+      var toggle = document.createElement("button");
+      var gridId = "gallery-grid-" + index;
+      var collapsed = !!collapsedGallerySections[category];
+      toggle.type = "button";
+      toggle.className = "gallery-section-toggle";
+      toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+      toggle.setAttribute("aria-controls", gridId);
+      var chevron = document.createElement("span");
+      chevron.className = "gallery-section-chevron";
+      chevron.setAttribute("aria-hidden", "true");
+      toggle.appendChild(chevron);
+      toggle.appendChild(document.createTextNode(category));
+      title.appendChild(toggle);
       var count = document.createElement("span");
       count.className = "count-pill";
       count.textContent = String(cards.length);
@@ -1525,6 +1538,8 @@
       heading.appendChild(count);
       var grid = document.createElement("div");
       grid.className = "gallery-grid";
+      grid.id = gridId;
+      grid.hidden = collapsed;
       cards.forEach(function (card) { grid.appendChild(card); });
       section.appendChild(heading);
       section.appendChild(grid);
@@ -1597,7 +1612,9 @@
         return ai === bi ? a.localeCompare(b) : ai - bi;
       });
       appGallery.innerHTML = "";
-      groupNames.forEach(function (name) { appGallery.appendChild(makeGallerySection(name, groups[name])); });
+      groupNames.forEach(function (name, index) {
+        appGallery.appendChild(makeGallerySection(name, groups[name], index + 1));
+      });
       appGallery.setAttribute("data-view", galleryPrefs.view);
       appGallery.setAttribute("data-density", galleryPrefs.density);
       appGallery.style.setProperty("--gallery-card-min", galleryPrefs.width + "px");
@@ -1660,6 +1677,19 @@
       var rect = target.getBoundingClientRect();
       var before = event.clientY < rect.top + rect.height / 2;
       target.parentNode.insertBefore(draggedCard, before ? target : target.nextSibling);
+    });
+    appGallery.addEventListener("click", function (event) {
+      var toggle = event.target.closest(".gallery-section-toggle");
+      if (!toggle) return;
+      var section = toggle.closest(".gallery-section");
+      var grid = document.getElementById(toggle.getAttribute("aria-controls"));
+      if (!section || !grid) return;
+      var expanded = toggle.getAttribute("aria-expanded") === "true";
+      var category = section.getAttribute("data-gallery-section");
+      toggle.setAttribute("aria-expanded", expanded ? "false" : "true");
+      grid.hidden = expanded;
+      if (expanded) collapsedGallerySections[category] = true;
+      else delete collapsedGallerySections[category];
     });
     if (gallerySearch) gallerySearch.addEventListener("input", renderGallery);
     if (gallerySearchOp) gallerySearchOp.addEventListener("change", renderGallery);
