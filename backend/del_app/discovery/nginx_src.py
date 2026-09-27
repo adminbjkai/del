@@ -203,7 +203,7 @@ def collect() -> list[Resource]:
         if os.path.isdir(SITES_AVAILABLE):
             for name in sorted(os.listdir(SITES_AVAILABLE)):
                 path = os.path.join(SITES_AVAILABLE, name)
-                if path in seen_paths:
+                if path in seen_paths or not os.path.isfile(path):
                     continue
                 # basename not present in sites-enabled ⇒ not live: this is
                 # config debris (*.bak, *.retired, *.stale, or any other

@@ -84,10 +84,24 @@ def _bind_mount_sources(services: dict) -> list[str]:
     return sources
 
 
+class _ComposeLoader(yaml.SafeLoader):
+    """SafeLoader that accepts Compose merge tags such as !override and !reset."""
+
+
+_ComposeLoader.add_multi_constructor(
+    "!",
+    lambda loader, suffix, node: (
+        loader.construct_mapping(node) if isinstance(node, yaml.MappingNode)
+        else loader.construct_sequence(node) if isinstance(node, yaml.SequenceNode)
+        else loader.construct_scalar(node)
+    ),
+)
+
+
 def _parse_compose_file(path: str) -> dict | None:
     try:
         with open(path, "r", errors="replace") as f:
-            data = yaml.safe_load(f)
+            data = yaml.load(f, Loader=_ComposeLoader)
     except Exception:
         logger.warning("compose_src: failed to parse %s", path)
         return None

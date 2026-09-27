@@ -62,6 +62,8 @@ def _env_var_names(path: str) -> tuple[bool, list[str], int]:
                 name = line.split("=", 1)[0].strip()
                 if name:
                     names.append(name)
+    except PermissionError:
+        logger.info("fs_src: no permission to read %s, skipping", env_path)
     except Exception:
         logger.exception("fs_src: failed to read %s", env_path)
     return True, names, len(names)
