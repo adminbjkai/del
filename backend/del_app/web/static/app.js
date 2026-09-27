@@ -98,6 +98,10 @@
     // plain number (allow commas, %, leading currency-free)
     var plain = raw.replace(/,/g, "").replace(/%$/, "");
     if (/^-?[0-9]*\.?[0-9]+$/.test(plain)) return { n: parseFloat(plain), s: raw };
+    // "#123" ids (plans, scans) and ", "-joined number lists (host ports:
+    // "8083, 8767") sort by their first number, not as text.
+    var lead = /^#?(\d+)(?:,\s+\d+)*$/.exec(raw);
+    if (lead) return { n: parseFloat(lead[1]), s: raw };
     var dur = parseDuration(raw);
     if (dur !== null) return { n: dur, s: raw };
     var size = parseSize(raw);
@@ -118,6 +122,10 @@
   function compareRows(a, b, col, dir) {
     var va = cellValue(a.cells[col]);
     var vb = cellValue(b.cells[col]);
+    // Blank cells ("—", unknown dates) stay at the bottom in both directions.
+    var ea = va.n === null && va.s === "";
+    var eb = vb.n === null && vb.s === "";
+    if (ea || eb) return ea === eb ? 0 : (ea ? 1 : -1);
     var res;
     if (va.n !== null && vb.n !== null) {
       res = va.n - vb.n;
@@ -972,17 +980,19 @@
           buttons: ["reset", "apply"],
           closeOnApply: true,
         },
-        comparator: function (a, b, nodeA, nodeB) {
-          var sa = nodeA && nodeA.data ? nodeA.data["s" + idx] : a;
-          var sb = nodeB && nodeB.data ? nodeB.data["s" + idx] : b;
-          if (sa == null) sa = "";
-          if (sb == null) sb = "";
-          if (typeof sa === "number" && typeof sb === "number") return sa - sb;
-          if (typeof sa === "number") return -1;
-          if (typeof sb === "number") return 1;
-          if (sa < sb) return -1;
-          if (sa > sb) return 1;
-          return 0;
+        // Same ordering as the vanilla engine (compareRows): numbers first,
+        // then text. Blank cells stay at the bottom in both directions, so
+        // "newest first" never opens on a page of unknown dates.
+        comparator: function (a, b, nodeA, nodeB, isDescending) {
+          var va = nodeA && nodeA.data ? nodeA.data["s" + idx] : sortValue(a);
+          var vb = nodeB && nodeB.data ? nodeB.data["s" + idx] : sortValue(b);
+          var ea = va.n === null && va.s === "";
+          var eb = vb.n === null && vb.s === "";
+          if (ea || eb) return ea === eb ? 0 : (ea ? 1 : -1) * (isDescending ? -1 : 1);
+          if (va.n !== null && vb.n !== null) return va.n - vb.n;
+          if (va.n !== null) return -1;
+          if (vb.n !== null) return 1;
+          return va.s < vb.s ? -1 : va.s > vb.s ? 1 : 0;
         },
         cellRenderer: function (params) {
           var span = document.createElement("span");
@@ -998,14 +1008,15 @@
         var cell = tr.cells[idx];
         var text = cell ? (cell.getAttribute("data-filter-value") || cell.textContent || "").replace(/\s+/g, " ").trim() : "";
         var sortRaw = cell ? cell.getAttribute("data-sort-value") : "";
-        var sortVal = sortRaw && NUM_RE.test(sortRaw) ? parseFloat(sortRaw) : (text || "").toLowerCase();
         var filterVal = text === "—" ? "" : text;
         // Original <td> stays in the hidden table with data-sort-value /
         // data-filter-value / data-priority intact; snapshot them on the row
         // so export and comparators never depend on AG Grid dropping attrs.
         row["c" + idx] = (sortRaw && NUM_RE.test(sortRaw)) ? parseFloat(sortRaw) : filterVal;
         row["t" + idx] = cell ? (cell.getAttribute("title") || cell.textContent || "").replace(/\s+/g, " ").trim() : "";
-        row["s" + idx] = sortVal;
+        // data-sort-value may be an ISO timestamp (Installed, Started…) as
+        // well as a number; sortValue parses both, plus sizes and durations.
+        row["s" + idx] = sortValue(sortRaw !== null && sortRaw !== undefined ? sortRaw : text);
         row["h" + idx] = cell ? cell.innerHTML : "";
         row["ds" + idx] = cell ? cell.getAttribute("data-sort-value") : null;
         row["df" + idx] = cell ? cell.getAttribute("data-filter-value") : null;
@@ -1075,6 +1086,9 @@
           flex: 1,
           suppressMovable: false,
           lockPinned: true,
+          // Header clicks toggle asc/desc; a third "unsorted" state just
+          // looks like a broken sort.
+          sortingOrder: ["asc", "desc"],
         },
         // Paginated lists keep every page row in the DOM. Rows are laid out
         // in document order (see CSS) so header-click sorting cannot stack

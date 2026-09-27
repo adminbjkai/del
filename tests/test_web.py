@@ -373,6 +373,27 @@ def test_table_engine_uses_fixed_row_layout():
     assert quartz != -1 and app_css != -1 and quartz < app_css
 
 
+def test_grid_icon_font_is_csp_safe(authed_client):
+    """nginx sends font-src 'self': the quartz icon font must be a same-origin file,
+    not a data: URL, or every header icon (sort arrow, filter) renders as a box."""
+    root = Path(__file__).resolve().parents[1]
+    quartz = (root / "backend/del_app/web/static/vendor/ag-theme-quartz.css").read_text()
+    assert "data:font" not in quartz
+    assert 'url("ag-grid-quartz-icons.woff2")' in quartz
+    r = authed_client.get("/static/vendor/ag-grid-quartz-icons.woff2")
+    assert r.status_code == 200
+    assert r.headers["content-type"] == "font/woff2"
+
+
+def test_grid_sorts_by_parsed_sort_value():
+    """Date columns carry an ISO data-sort-value; the grid must sort on that
+    (via sortValue), not on the MM-DD-YY display text, and toggle asc/desc."""
+    root = Path(__file__).resolve().parents[1]
+    js = (root / "backend/del_app/web/static/app.js").read_text()
+    assert 'row["s" + idx] = sortValue(' in js
+    assert 'sortingOrder: ["asc", "desc"]' in js
+
+
 def test_apps_list_show_removed_toggle(authed_client, settings_env):
     """Default list hides apps not in the latest completed scan; ?show=removed keeps them."""
     from del_app.db import get_db, x

@@ -60,6 +60,7 @@ _VENDOR_TYPES = {
     "ag-grid-community.min.js": "application/javascript",
     "ag-grid.css": "text/css",
     "ag-theme-quartz.css": "text/css",
+    "ag-grid-quartz-icons.woff2": "font/woff2",
     "AG-GRID-LICENSE.txt": "text/plain",
 }
 

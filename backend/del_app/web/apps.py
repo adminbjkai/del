@@ -74,7 +74,7 @@ def apps_list(
         if status:
             sql += " AND status = ?"
             params.append(status)
-        sql += " ORDER BY name"
+        sql += " ORDER BY name COLLATE NOCASE"
         apps = _rows(q(conn, sql, tuple(params)))
 
         # Per-app aggregates: resource count, warning count (possible / low
@@ -388,7 +388,7 @@ def palette_json(user: User = Depends(auth.require_user)) -> JSONResponse:
         if latest is not None:
             apps_sql += " WHERE last_seen = ?"
             params = (latest,)
-        apps_sql += " ORDER BY name"
+        apps_sql += " ORDER BY name COLLATE NOCASE"
         app_rows = _rows(q(conn, apps_sql, params))
         app_ids = []
         slug_to_id = {}

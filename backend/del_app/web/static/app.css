@@ -1172,7 +1172,7 @@ a.assistant-ask-link.chip:hover { color: var(--accent); background: var(--accent
 .del-ag-grid .ag-cell-rich .cluster { row-gap: 0.25rem; }
 .del-ag-grid .ag-cell-rich details { margin: 0.15rem 0 0; }
 .del-ag-grid .ag-cell-rich ul { margin: 0.25rem 0 0; padding-left: 1rem; }
-.del-ag-grid .ag-cell-stack { align-items: flex-start; padding-top: 8px; padding-bottom: 8px; }
+.del-ag-grid .ag-cell-stack { align-items: center; }
 .del-ag-grid .ag-cell-stack .ag-cell-inner {
   white-space: normal; overflow: hidden; display: -webkit-box;
   -webkit-line-clamp: 2; -webkit-box-orient: vertical;
