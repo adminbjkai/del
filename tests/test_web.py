@@ -91,6 +91,12 @@ def _with_csrf(client: TestClient) -> str:
 # auth boundary
 # ---------------------------------------------------------------------------
 
+def test_no_public_api_docs():
+    from del_app.main import create_app
+    paths = {getattr(r, "path", None) for r in create_app().routes}
+    assert not paths & {"/docs", "/redoc", "/openapi.json"}
+
+
 def test_unauthenticated_redirects_to_login(anon_client):
     resp = anon_client.get("/", follow_redirects=False)
     assert resp.status_code == 303

@@ -79,8 +79,7 @@ Rules:
   Compose: always `"127.0.0.1:<port>:<internal_port>"`. Systemd: bind the
   app/uvicorn/etc. with `--host 127.0.0.1`.
 - One host port per public-facing service. If an app needs multiple internal
-  routes (e.g. DEL's docs preview at `8072`/`8073` alongside its main app at
-  `8075`), that's fine — each gets its own port and its own nginx `location`
+  routes, that's fine — each gets its own port and its own nginx `location`
   block, but each is still `127.0.0.1`-only and each should be listed in the
   manifest.
 - **DEL is the port registry.** Before assigning a new port, check what's
@@ -339,7 +338,6 @@ host_paths:
 systemd_units:
   - del-web.service
   - del-helper.service
-  - del-docs.service
 nginx:
   - /etc/nginx/sites-available/del.bjk.ai
   - /etc/nginx/sites-enabled/del.bjk.ai

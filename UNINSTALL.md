@@ -9,22 +9,19 @@ service.
 
 ## Manual removal steps
 
-1. **Stop and disable all three units:**
+1. **Stop and disable both units:**
    ```bash
    sudo systemctl disable --now del-web.service
    sudo systemctl disable --now del-helper.service
-   sudo systemctl disable --now del-docs.service
    ```
 2. **Remove the unit files:**
    ```bash
    sudo rm -f /etc/systemd/system/del-web.service
    sudo rm -f /etc/systemd/system/del-helper.service
-   sudo rm -f /etc/systemd/system/del-docs.service
    sudo systemctl daemon-reload
    ```
 3. **Remove the nginx site** (this one file's `server{}` block holds the app
-   location, plus the `/docs` and `/_next` documentation-site locations —
-   removing it removes both):
+   and inventory-export locations):
    ```bash
    sudo rm -f /etc/nginx/sites-enabled/del.bjk.ai
    sudo rm -f /etc/nginx/sites-available/del.bjk.ai
@@ -34,8 +31,7 @@ service.
    (Run `nginx -t` before reloading — if it fails, something else references the
    removed file; fix that before reloading.)
 4. **Remove the inventory export's basic-auth password file.** Despite the name,
-   this file protects only `/miscwork.html` (and its `/inventory` alias); `/docs`
-   has no `auth_basic` directive at all:
+   this file protects only `/miscwork.html` (and its `/inventory` alias):
    ```bash
    sudo rm -f /etc/nginx/.del-docs-htpasswd
    ```
@@ -49,11 +45,10 @@ service.
    sudo rm -rf /usr/local/lib/del-helper
    sudo rm -rf /etc/del                # holds only helper-policy.json
    ```
-6. **Remove the application tree and its `/opt` symlink** (this includes the
-   Fern docs sources under `/apps/del/fern/`, which back `del-docs.service`):
+6. **Remove the application tree and its `/opt` symlink** :
    ```bash
    sudo rm -f /opt/del                # symlink only, not a copy of the tree
-   rm -rf /apps/del                   # the actual project root, including database/, backups/, logs/, manifests/, fern/
+   rm -rf /apps/del                   # the actual project root, including database/, backups/, logs/, manifests/
    ```
    Take a final `del-admin backup-db` snapshot and copy anything you want to keep
    out of `/apps/del/backups` **before** this step — it deletes the backups

@@ -6,35 +6,30 @@
 # status
 systemctl status del-web.service
 systemctl status del-helper.service
-systemctl status del-docs.service
 
 # restart (e.g. after an update)
 sudo systemctl restart del-helper.service
 sudo systemctl restart del-web.service       # restart helper first; del-web Wants= it
-sudo systemctl restart del-docs.service      # independent of del-web/del-helper
 
 # stop
 sudo systemctl stop del-web.service
 sudo systemctl stop del-helper.service
-sudo systemctl stop del-docs.service
 
 # start
 sudo systemctl start del-helper.service
 sudo systemctl start del-web.service
-sudo systemctl start del-docs.service
 ```
 
-All three units are `enable`d, so they come back on boot. `del-web` has
+Both units are `enable`d, so they come back on boot. `del-web` has
 `Restart=on-failure` (3s backoff); `del-helper` has `Restart=on-failure` (2s
-backoff); `del-docs` has `Restart=on-failure` (10s backoff).
+backoff).
 
 ## Logs
 
 ```bash
-# systemd journal (primary source for all three units)
+# systemd journal (primary source for both units)
 journalctl -u del-web.service -f
 journalctl -u del-helper.service -f
-journalctl -u del-docs.service -f
 journalctl -u del-web.service -u del-helper.service --since "1 hour ago"
 
 # on-disk logs
@@ -100,29 +95,6 @@ dirty worktree.
    copy outside `sites-enabled` (e.g. `/apps/del/backups/`), never inside it.
    See `docs/DEPLOYMENT-CONVENTION.md` §6 for the full server-wide convention.
 
-## Updating the documentation site content
-
-Docs content is the `.mdx` pages under `/apps/del/fern/pages/` (and navigation
-in `/apps/del/fern/docs.yml`), rendered by `del-docs.service`
-(`fern-api docs dev --port 8072 --backend-port 8073`).
-
-`install.sh` does not install `del-docs.service`; if `/docs` returns 502 the unit
-is simply not there yet — install it per INSTALL.md before troubleshooting further.
-
-1. Edit the relevant page(s) under `/apps/del/fern/pages/*.mdx` (or
-   `fern/pages/guides/*.mdx`, `fern/pages/reference/*.mdx`).
-2. **Restart is required to see the change served**: `del-docs`'s dev-server
-   file watcher logs a `[change]` / `Reload completed` line to the journal on
-   every edit, but that reload does not reliably re-render already-served
-   page bodies — verified by editing a page live and finding the new content
-   absent from the served HTML until the unit was restarted. So:
-   ```bash
-   sudo systemctl restart del-docs.service
-   ```
-3. Verify: `curl -sSL http://127.0.0.1:8072/docs/guides/operations | grep -c
-   '<some text you just added>'`, or open `https://del.bjk.ai/docs/...`
-   (docs are not basic-auth protected).
-
 ## Assistant (inventory Q&A)
 
 Read-only chat at `/assistant` and in the right-rail **Ask** tab on every
@@ -181,7 +153,7 @@ old copy.
 A self-contained, browsable export of the full inventory (built from `del.db` plus
 the `/apps/del/miscwork/` build scripts, gitignored) is served at
 `https://del.bjk.ai/miscwork.html` (aliased at `/inventory`), basic-auth protected
-via `/etc/nginx/.del-docs-htpasswd` (docs at `/docs` are open; inventory is not).
+via `/etc/nginx/.del-docs-htpasswd`.
 It is a point-in-time snapshot for browsing/handoff, not a live-refreshing view —
 regenerate it manually from `/apps/del/miscwork/extract.py` (and the other scripts
 in that directory) when

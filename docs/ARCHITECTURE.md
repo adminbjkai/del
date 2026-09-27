@@ -13,7 +13,7 @@ served at https://del.bjk.ai behind Nginx, bound only to localhost.
 | Templates/UI | Jinja2 server-rendered + vanilla JS + `app.css` plus assistant and vendored AG Grid styles | No Node toolchain; fully self-contained (CSP `script-src 'self'`, no CDN); theme follows `localStorage`, else OS `prefers-color-scheme`, else dark, with a header toggle (`data-theme`, persisted in `localStorage`) |
 | Database | SQLite (WAL mode) via sqlite3 + migration runner | Single admin user; zero-ops; file lives in /apps/del/database/del.db |
 | Privileged layer | del-helper: separate root daemon on a unix socket | Strict allowlist; web app never runs shell as root |
-| Deployment | Host systemd units (del-web.service, del-helper.service, del-docs.service) | See below |
+| Deployment | Host systemd units (del-web.service, del-helper.service) | See below |
 
 ### Why systemd, not a container
 
@@ -38,12 +38,6 @@ via systemd, and journald logging.
   a compromised web tier rewrite the code root executes and the allowlist that
   bounds it. The repo copies (`helper/*.py`, `config/helper-policy.json`) are the
   source; redeploy them before restarting the unit after an edit.
-- **del-docs.service** — serves the Fern-built documentation site (this repo's
-  `fern/` sources) on 127.0.0.1:8072/8073, fronted by Nginx at `/docs` (and its
-  `/_next` static assets) **without** HTTP basic auth (open documentation). The
-  app UI at `/` still requires DEL session login. Docs carry no privileged access
-  — they only serve static/rendered content. `install.sh` does not install this
-  unit; see INSTALL.md.
 
 ## Process / privilege model
 
@@ -175,7 +169,6 @@ being uncompromised.
 ├── logs/
 ├── docs/                  durable reference (this file, DISCOVERY, REMOVAL-LIFECYCLE, …)
 ├── reports/<date>/        finished one-off audits and working notes
-├── fern/                  Fern docs sources served by del-docs.service
 ├── scripts/
 │   ├── install.sh         idempotent installer (helper deploy, units, nginx, health)
 │   ├── del-admin          CLI: create-admin, change-password, migrate, rescan, backup-db

@@ -8,7 +8,7 @@ it has no tools, no helper access, and no route that mutates state. Its job is t
 help a human decide; the decision and the removal still go through DEL's planner.
 
 This document is the design contract. `docs/ARCHITECTURE.md`, `SECURITY.md`,
-`OPERATIONS.md`, `README.md` and the Fern page `fern/pages/guides/assistant.mdx`
+`OPERATIONS.md` and `README.md`
 must agree with it; when the code changes, this file changes first.
 
 ## Goals and non-goals

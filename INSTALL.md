@@ -13,7 +13,7 @@
     with the system `/usr/bin/python3`). `install.sh` copies both to
     `/usr/local/lib/del-helper/`; that deployed copy is what root executes.
   - `config/` — `del.toml`, `del-web.service`, `del-helper.service`,
-    `del-docs.service`, `nginx-del.bjk.ai.conf`, `helper-policy.json`.
+    `nginx-del.bjk.ai.conf`, `helper-policy.json`.
 - DNS: **the `del.bjk.ai` A/AAAA record must already exist in IONOS**, pointing at this
   host's public IP (same record set the rest of `*.bjk.ai` uses, since TLS is served
   from the existing wildcard cert). If it does not exist, HTTPS access will 404 at
@@ -70,33 +70,17 @@ cd /apps/del
 The script does not touch any other application, container, compose project, nginx
 site, systemd unit, or cron entry on the host — installing DEL is additive only.
 
-## Two manual steps `install.sh` does not perform
+## One manual step `install.sh` does not perform
 
-The installed nginx site proxies `/docs` and serves `/miscwork.html`, but the
-installer sets up neither backing piece. After a clean install both paths fail
-until you do these by hand.
+The installed nginx site serves `/miscwork.html`, but the installer does not
+create its basic-auth file, so that path fails until you do this by hand.
 
-### 1. The documentation site (`del-docs.service`)
-
-Without this unit, `https://del.bjk.ai/docs` returns **502** — nginx proxies to
-127.0.0.1:8072 and nothing is listening there.
-
-```bash
-sudo cp /apps/del/config/del-docs.service /etc/systemd/system/del-docs.service
-sudo systemctl daemon-reload
-sudo systemctl enable --now del-docs.service
-curl -fsSI https://del.bjk.ai/docs | head -1
-```
-
-The unit runs `npx --yes fern-api docs dev` as `bjkai`, so `/usr/local/bin/npx`
-must exist and the first start will spend a while fetching Fern.
-
-### 2. The inventory export's basic-auth file
+### The inventory export's basic-auth file
 
 `location = /miscwork.html` sets `auth_basic_user_file
 /etc/nginx/.del-docs-htpasswd`. If that file does not exist nginx fails the
 request (500) rather than prompting, so it must be created before the export
-serves — even though `/docs` itself has no `auth_basic` at all.
+serves.
 
 ```bash
 sudo htpasswd -c /etc/nginx/.del-docs-htpasswd <username>   # apache2-utils

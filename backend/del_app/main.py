@@ -35,7 +35,8 @@ async def _lifespan(app: FastAPI):
 
 
 def create_app() -> FastAPI:
-    app = FastAPI(title="DEL", lifespan=_lifespan)
+    # No public API docs: every route except /login, /healthz and /static needs a session.
+    app = FastAPI(title="DEL", lifespan=_lifespan, docs_url=None, redoc_url=None, openapi_url=None)
 
     @app.exception_handler(NeedsLogin)
     async def _needs_login_handler(request: Request, exc: NeedsLogin) -> RedirectResponse:

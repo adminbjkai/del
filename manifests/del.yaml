@@ -10,7 +10,6 @@ host_paths:
 systemd_units:
   - del-web.service
   - del-helper.service
-  - del-docs.service
 nginx:
   - /etc/nginx/sites-available/del.bjk.ai
   - /etc/nginx/sites-enabled/del.bjk.ai

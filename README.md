@@ -41,7 +41,6 @@ still uses the planner. See [docs/ASSISTANT.md](docs/ASSISTANT.md).
 | Bind | 127.0.0.1:8075 (Nginx-fronted only, not publicly reachable directly) |
 | Web unit | `del-web.service` — runs as user `bjkai` (groups `bjkai`, `docker`, `adm`) |
 | Helper unit | `del-helper.service` — runs as `root`, executing the root-owned deployed copy at `/usr/local/lib/del-helper/` with its policy at `/etc/del/helper-policy.json` (the repo copies under `helper/` and `config/` are the source; `install.sh` deploys them) |
-| Docs unit | `del-docs.service` — Fern docs site, runs as `bjkai`, ports 8072/8073, `/docs` + `/_next` open (no basic auth; app UI still session-login). **`install.sh` does not install this unit** — see INSTALL.md |
 | Helper socket | `/run/del/helper.sock`, mode `0660`, owner `root:bjkai` |
 | Project root | `/apps/del` (also reachable via `/opt/del`, a symlink to `/apps/del`) |
 | Backend package | `/apps/del/backend/del_app` (import as `del_app`), Python 3.10 venv at `/apps/del/.venv` |
@@ -53,7 +52,7 @@ still uses the planner. See [docs/ASSISTANT.md](docs/ASSISTANT.md).
 | Admin CLI | `/apps/del/scripts/del-admin` (`create-admin`, `change-password`, `migrate`, `rescan`, `backup-db`) |
 | TLS | Nginx, existing `bjk.ai` wildcard cert |
 | Protection | DEL is flagged `protected=1`; the planner refuses to build a removal plan for it |
-| Inventory export | Self-contained, whole-server inventory dump (`/apps/del/miscwork/`, gitignored) served at `https://del.bjk.ai/miscwork.html` (and aliased at `/inventory`), the only basic-auth-protected location in the vhost (`auth_basic_user_file /etc/nginx/.del-docs-htpasswd`). `/docs` has no `auth_basic` at all |
+| Inventory export | Self-contained, whole-server inventory dump (`/apps/del/miscwork/`, gitignored) served at `https://del.bjk.ai/miscwork.html` (and aliased at `/inventory`), the only basic-auth-protected location in the vhost (`auth_basic_user_file /etc/nginx/.del-docs-htpasswd`) |
 | Unauthenticated routes | `/login`, `/healthz`, `/favicon.ico`, and `/static/*` (`app.css`, `app.js`, `theme-init.js`, `favicon.svg`, `assistant.css`, `assistant.js`, plus `/static/vendor/` AG Grid Community 32.3.3: `ag-grid.css`, `ag-theme-quartz.css`, `ag-grid-community.min.js`). Login (`login.html`) loads only `app.css` + `theme-init.js` + favicon — not AG Grid or assistant scripts. Everything else — including `/app-icon/{domain}` and `/palette.json` — requires a session |
 
 ## Quick start
@@ -65,12 +64,9 @@ cd /apps/del
 ```
 Then open https://del.bjk.ai, log in, and run a scan from Settings (or `POST /scan`).
 
-`install.sh` installs `del-web.service` and `del-helper.service` only. Two things
-it does **not** do, and which `/docs` and `/miscwork.html` respectively need — see
-INSTALL.md for the commands: install `config/del-docs.service`, and create
-`/etc/nginx/.del-docs-htpasswd`.
-
-Rendered documentation (Fern) is served at https://del.bjk.ai/docs (no basic auth).
+`install.sh` installs `del-web.service` and `del-helper.service` only. It does
+**not** create `/etc/nginx/.del-docs-htpasswd`, which `/miscwork.html` needs — see
+INSTALL.md.
 
 ## Documentation index
 
@@ -115,8 +111,8 @@ If you are reading the committed repo, do not go looking for them:
 
 ### Documentation structure
 
-`fern/pages/**` mirrors the root/`docs/` markdown for the published Fern site
-at `/docs`; update both together when a fact changes. The `reports/` table
+The root and `docs/` markdown files are the only documentation (the Fern site
+at `/docs` was removed 2026-09-27). The `reports/` table
 above is intentional audit history, not stale content — leave it as-is.
 
 ## Tests

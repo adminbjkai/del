@@ -155,21 +155,12 @@ DEL itself is recorded as `protected=1` in the `applications` table (see
 through DEL"`), and the planner refuses to build a removal plan for it — DEL cannot
 remove itself by design, not just by policy.
 
-## Documentation site (`/docs`, `/_next`)
-
-The rendered Fern documentation site (`del-docs.service`, a `fern-api docs dev`
-process on 127.0.0.1:8072/8073) is exposed at `https://del.bjk.ai/docs` **without
-HTTP basic auth** (open documentation by operator choice, 2026-07-26). Those
-paths bypass the app entirely and are proxied straight to the docs dev server.
-The docs site serves only static/rendered documentation — it has no access to
-the DEL database, helper socket, or app session cookies. The **app UI** at `/`
-still requires DEL session login.
+## Inventory export (`/miscwork.html`)
 
 The whole-server inventory export at `/miscwork.html` (and `/inventory`) is the
 **only** location in the vhost with an `auth_basic` directive — it is HTTP
 basic-auth protected via `/etc/nginx/.del-docs-htpasswd` because it contains a full
-host inventory dump, not public docs. Despite the file's name, `/docs` does not use
-it.
+host inventory dump.
 
 ## What is never logged
 
@@ -250,7 +241,3 @@ The original full attacker/vector/mitigation table lives in `docs/server-audit.m
   repeating these directives.
 - `/apps/del/config/secret.key` (HMAC signing key) is mode `0600` — keep it that
   way.
-- `del-docs.service`: `NoNewPrivileges=true`, runs as `bjkai`. It has **no** basic
-  auth in front of it and no systemd sandbox profile beyond that flag; the
-  justification is that it serves only static/rendered documentation and holds no
-  access to the DEL database, helper socket, or session cookies.
