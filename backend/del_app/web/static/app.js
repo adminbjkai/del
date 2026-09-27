@@ -2002,28 +2002,21 @@
     railResizer, glossaryRail, "--rail-width", "del.rightRailWidth",
     280, 520, 300, -1
   );
-  function setGlossaryCollapsed(collapsed, remember) {
+  function setGlossaryCollapsed(collapsed) {
     if (!layout) return;
     if (window.matchMedia && window.matchMedia("(max-width: 1279px)").matches) {
       layout.classList.remove("glossary-collapsed");
       return;
     }
     layout.classList.toggle("glossary-collapsed", !!collapsed);
-    if (remember !== false) {
-      try { localStorage.setItem(GLOSSARY_COLLAPSE_KEY, collapsed ? "1" : "0"); } catch (e) {}
-    }
     if (glossaryCollapseBtn) {
       glossaryCollapseBtn.setAttribute("aria-label", collapsed ? "Show help panel" : "Hide help panel");
       glossaryCollapseBtn.title = collapsed ? "Show help panel" : "Hide help panel";
     }
   }
-  // No saved choice yet: keep the rail open only on wide screens (>= 1600px)
-  // so tables get the width on a typical laptop; the choice is not stored.
-  try {
-    var savedRail = localStorage.getItem(GLOSSARY_COLLAPSE_KEY);
-    if (savedRail === null) setGlossaryCollapsed(window.innerWidth < 1600, false);
-    else setGlossaryCollapsed(savedRail === "1", false);
-  } catch (e) {}
+  // The rail starts closed on every page; opening it lasts for this page only.
+  try { localStorage.removeItem(GLOSSARY_COLLAPSE_KEY); } catch (e) {}
+  setGlossaryCollapsed(true);
   if (glossaryCollapseBtn) {
     glossaryCollapseBtn.addEventListener("click", function () {
       setGlossaryCollapsed(!(layout && layout.classList.contains("glossary-collapsed")));
@@ -2045,16 +2038,13 @@
       panel.hidden = panel.getAttribute("data-rail-panel") !== tab;
     });
     if (layout) layout.classList.toggle("ask-open", tab === "ask");
-    try { localStorage.setItem(RAIL_TAB_KEY, tab); } catch (e) {}
     if (tab === "ask") setGlossaryCollapsed(false);
   }
   document.querySelectorAll(".rail-tab").forEach(function (btn) {
     btn.addEventListener("click", function () { setRailTab(btn.getAttribute("data-rail-tab")); });
   });
-  try {
-    var savedTab = localStorage.getItem(RAIL_TAB_KEY);
-    if (savedTab === "ask" && document.getElementById("rail-panel-ask")) setRailTab("ask");
-  } catch (e) {}
+  // Ask is never reopened from a previous page; clear the old saved tab.
+  try { localStorage.removeItem(RAIL_TAB_KEY); } catch (e) {}
   var askFab = document.getElementById("assistant-fab");
   if (askFab) {
     askFab.addEventListener("click", function () {
