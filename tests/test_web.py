@@ -288,14 +288,46 @@ def test_parse_and_format_dt_helpers():
     parsed = routes._parse_dt("2026-07-26 19:04:30")
     assert parsed is not None and parsed.tzinfo is not None
     assert parsed.hour == 19
-    # earliest of docker + dir signals
+    assert routes._app_dates([])["installed_at"] is None
+
+
+def test_app_dates_use_birth_times_not_folder_ctime():
+    """Installed = earliest creation time; folder ctime/mtime only feed Last changed.
+
+    Regression: n50 was shown as installed 09-28 because a file was added to
+    /apps/n50 that day, though the folder was created 07-18.
+    """
     rows = [
-        {"type": "container", "data_json": '{"created": "2026-05-13T11:31:00Z"}'},
-        {"type": "directory", "data_json": '{"ctime": "2026-01-01T00:00:00Z", "mtime": "2026-06-01T00:00:00Z"}'},
+        {"type": "directory", "data": {
+            "birthtime": "2026-07-18T17:21:42Z", "ctime": "2026-09-28T16:55:02Z",
+            "mtime": "2026-09-28T16:55:02Z", "git": {"head_committed_at": "2026-09-24T05:44:03Z"}}},
+        {"type": "systemd_unit", "data": {
+            "is_custom": True, "fragment_birthtime": "2026-07-18T18:03:32Z",
+            "fragment_mtime": "2026-07-18T18:03:32Z"}},
+        {"type": "nginx_site", "data": {
+            "enabled": True, "file_birthtime": "2026-07-28T11:21:26Z", "file_mtime": "2026-09-28T07:51:40Z"}},
+        # A stale sites-available copy and a shared resource never count.
+        {"type": "nginx_site", "data": {"enabled": False, "file_birthtime": "2020-01-01T00:00:00Z"}},
+        {"type": "container", "shared": 1, "data": {"created": "2019-01-01T00:00:00Z"}},
     ]
-    # directory contributes ctime only (first of birth/ctime/mtime); earliest overall is dir ctime
-    assert routes._installed_at_from_resources(rows).startswith("2026-01-01")
-    assert routes._installed_at_from_resources([]) is None
+    out = routes._app_dates(rows, "2026-07-19 19:35:57")
+    assert out["installed_at"] == "2026-07-18T17:21:42Z"
+    assert out["installed_source"] == "folder created"
+    assert out["installed_bound"] is False
+    assert out["last_changed_at"] == "2026-09-28T16:55:02Z"
+    assert out["last_changed_source"] == "folder contents changed"
+
+
+def test_app_dates_bounded_by_first_scan():
+    """Files recreated after DEL first saw the app: Installed is 'by' the first scan."""
+    rows = [{"type": "container", "data": {"created": "2026-09-01T00:00:00Z"}}]
+    out = routes._app_dates(rows, "2026-07-19 19:35:57")
+    assert out["installed_at"] == "2026-07-19T19:35:57Z"
+    assert out["installed_bound"] is True
+    assert out["last_changed_at"] == "2026-09-01T00:00:00Z"
+    # No host creation time at all → first scan, still bounded.
+    out = routes._app_dates([{"type": "directory", "data": {"mtime": "2026-09-01T00:00:00Z"}}], "2026-07-19 19:35:57")
+    assert out["installed_bound"] is True and out["installed_at"].startswith("2026-07-19")
 
 
 def test_apps_list_shows_installed_column_and_container_date(authed_client, settings_env):
@@ -2375,3 +2407,61 @@ def test_backup_copy_under_backups_dir_is_expected_not_actionable(authed_client,
         conn.close()
     assert backup not in authed_client.get("/orphans").text
     assert backup in authed_client.get("/orphans", params={"show": "all"}).text
+
+
+def test_gallery_category_domain_suffix_slug_and_substrings():
+    """tix-bjk-ai is not AI; gittodoc is not a todo app; an app's cards share one category."""
+    assert routes._gallery_category("tix-bjk-ai", "tix-bjk-ai", "tix.bjk.ai") != "AI & Automation"
+    assert routes._gallery_category("gittodoc", "gittodoc", "gittodoc.bjk.ai") == "Developer Tools"
+    assert routes._gallery_category("boxy", "boxy", "boxy.bjk.ai") == routes._gallery_category(
+        "boxy", "boxy", "boxy.bjk.ai"
+    )
+
+
+def test_view_apps_merges_redirect_aliases(authed_client, settings_env, monkeypatch):
+    """A domain that 301s to another listed domain is shown on that card, not as its own app."""
+    import json
+
+    from del_app.db import get_db, x
+
+    conn = get_db()
+    try:
+        scan_id = x(conn, "INSERT INTO scans (status) VALUES ('done')")
+        app_id = x(
+            conn,
+            "INSERT INTO applications (slug, name, status, kind, first_seen, last_seen) "
+            "VALUES ('gd64','gd64','running','systemd',?,?)",
+            (scan_id, scan_id),
+        )
+        site = x(
+            conn,
+            "INSERT INTO resources (type, key, display, state, data_json, first_seen, last_seen) "
+            "VALUES ('nginx_site','s','s','enabled',?,?,?)",
+            (json.dumps({"enabled": True, "server_names": ["gd64.bjk.ai", "c64.bjk.ai"]}), scan_id, scan_id),
+        )
+        x(conn, "INSERT INTO associations (app_id, resource_id, confidence, ownership, shared) "
+                "VALUES (?,?,90,'exclusive',0)", (app_id, site))
+        conn.commit()
+    finally:
+        conn.close()
+    ok = {"healthy": True, "status": 200, "latency_ms": 5, "checked_at": "2026-09-30T12:00:00+00:00"}
+    monkeypatch.setattr(gallery, "_probe_domains", lambda domains, force=False: {
+        "gd64.bjk.ai": dict(ok, redirects_to=None),
+        "c64.bjk.ai": dict(ok, redirects_to="gd64.bjk.ai"),
+    })
+    resp = authed_client.get("/view-apps")
+    assert resp.status_code == 200
+    assert "1 online" in resp.text
+    assert "also c64.bjk.ai" in resp.text
+    assert "1 redirect aliases merged" in resp.text
+
+
+def test_scan_records_manifest_path(settings_env):
+    """applications.manifest_path is the file the app's manifest was loaded from."""
+    from del_app import manifests
+
+    m = manifests.Manifest(id="mfapp", name="MF App")
+    manifests.save(m)
+    loaded = manifests.load_all()["mfapp"]
+    assert loaded._source_path and loaded._source_path.endswith("mfapp.yaml")
+    assert "_source_path" not in loaded.model_dump()

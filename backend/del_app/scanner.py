@@ -166,18 +166,23 @@ def run_scan() -> int:
         app_count = 0
         assoc_count = 0
         for record, associations in apps:
+            manifest = manifests.get(record.slug)
+            manifest_path = manifest._source_path if manifest is not None else None
             existing_app = db.q(conn, "SELECT id FROM applications WHERE slug=?", (record.slug,))
             if existing_app:
                 app_id = existing_app[0]["id"]
                 conn.execute(
-                    "UPDATE applications SET name=?, status=?, kind=?, protected=?, last_seen=? WHERE id=?",
-                    (record.name, record.status, record.kind, int(record.protected), scan_id, app_id),
+                    "UPDATE applications SET name=?, status=?, kind=?, protected=?, manifest_path=?, "
+                    "last_seen=? WHERE id=?",
+                    (record.name, record.status, record.kind, int(record.protected), manifest_path,
+                     scan_id, app_id),
                 )
             else:
                 cur = conn.execute(
-                    "INSERT INTO applications (slug, name, status, kind, protected, first_seen, last_seen) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?)",
-                    (record.slug, record.name, record.status, record.kind, int(record.protected), scan_id, scan_id),
+                    "INSERT INTO applications (slug, name, status, kind, protected, manifest_path, "
+                    "first_seen, last_seen) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                    (record.slug, record.name, record.status, record.kind, int(record.protected),
+                     manifest_path, scan_id, scan_id),
                 )
                 app_id = cur.lastrowid
             app_count += 1

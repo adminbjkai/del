@@ -39,7 +39,7 @@ from del_app.web import (
 )
 from del_app.web.formatting import (
     _format_dt,
-    _installed_at_from_resources,
+    _app_dates,
     _iso_sort_key,
     _parse_dt,
 )
@@ -74,7 +74,7 @@ __all__ = [
     "_format_dt",
     "_parse_dt",
     "_iso_sort_key",
-    "_installed_at_from_resources",
+    "_app_dates",
     "_gallery_category",
     "_valid_gallery_domain",
     "_probe_domains",

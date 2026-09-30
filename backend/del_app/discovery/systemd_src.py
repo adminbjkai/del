@@ -11,6 +11,7 @@ import os
 import re
 import subprocess
 
+from del_app.discovery.file_times import stat_times
 from del_app.models import Resource
 
 logger = logging.getLogger("del_app.discovery.systemd_src")
@@ -257,5 +258,16 @@ def collect() -> list[Resource]:
             )
     except Exception:
         logger.exception("systemd_src: timer resource build failed")
+
+    # Custom unit files: when the unit file was written (birth) and last edited.
+    try:
+        custom = [r for r in resources if r.type == "systemd_unit" and r.data.get("is_custom") and r.path]
+        times = stat_times([r.path for r in custom])
+        for r in custom:
+            t = times.get(r.path) or {}
+            r.data["fragment_birthtime"] = t.get("birthtime")
+            r.data["fragment_mtime"] = t.get("mtime")
+    except Exception:
+        logger.exception("systemd_src: unit file times failed")
 
     return resources

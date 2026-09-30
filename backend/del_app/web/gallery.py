@@ -3,13 +3,17 @@ plus docker-reclaimable-bytes and favicon-proxy helpers used by the
 dashboard/gallery."""
 from __future__ import annotations
 
+import base64
 import json
+from pathlib import Path
 import re
 import subprocess
 import threading
 import time
 import urllib.error
 import urllib.request
+import urllib.parse
+from urllib.parse import unquote, urljoin
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from typing import Any
@@ -74,7 +78,7 @@ _CATEGORY_KEYWORDS = [
     ("AI & Automation", ("=ai", "ocr", "agent", "glean", "gongyu", "deep", "poco",
                          "claude", "glm", "llm", "gpt", "chat")),
     ("Productivity", ("kan", "board", "task", "plan", "focal", "calendar", "slash",
-                      "banban", "lastboard", "todo")),
+                      "banban", "lastboard", "=todo")),
     ("Infrastructure", ("portainer", "dock", "komodo", "netdata", "beszel", "monitor",
                         "speed", "hivedock", "appwrite", "cron", "schedule", "uptime",
                         "status", "dashboard", "homepage", "=home", "portracker")),
@@ -173,7 +177,19 @@ def _gallery_category(slug: str, name: str, domain: str) -> str:
     the public suffix is dropped, so every `*.bjk.ai` endpoint does not land
     in AI & Automation on the strength of the TLD.
     """
-    haystack = " ".join((slug, name, domain.split(".", 1)[0])).lower()
+    # An app's cards stay together: its slug and name decide, and a domain
+    # label (api.boxy..., status.x...) is only a fallback. A slug derived from
+    # a domain ("tix-bjk-ai") drops that suffix so "-ai" is not a keyword hit.
+    def _strip(text: str) -> str:
+        return re.sub(r"[-_ .]bjk[-_ .]ai$", "", text.lower())
+
+    category = _match_category(" ".join((_strip(slug), _strip(name))))
+    if category == "Other" and domain:
+        category = _match_category(domain.split(".", 1)[0].lower())
+    return category
+
+
+def _match_category(haystack: str) -> str:
     for category, keywords in _CATEGORY_KEYWORDS:
         for keyword in keywords:
             if keyword.startswith("="):
@@ -200,16 +216,23 @@ def _probe_domain(domain: str) -> dict[str, Any]:
         headers={"User-Agent": "DEL-App-Gallery/1.0", "Accept": "text/html,*/*;q=0.8"},
         method="GET",
     )
+    final_url = ""
     try:
         with urllib.request.urlopen(request, timeout=_APP_PROBE_TIMEOUT) as response:
             status = int(response.getcode())
+            final_url = response.geturl() or ""
     except urllib.error.HTTPError as exc:
         status = int(exc.code)
+        final_url = exc.geturl() or ""
     except Exception as exc:
         error = type(exc).__name__
     latency_ms = max(1, round((time.monotonic() - started) * 1000))
+    # urllib follows redirects; the host it ended on tells an alias
+    # (c64.bjk.ai -> gd64.bjk.ai) apart from an app of its own.
+    final_host = (urllib.parse.urlsplit(final_url).hostname or "").lower() if final_url else ""
     return {
         "healthy": status is not None and 100 <= status < 500,
+        "redirects_to": final_host if final_host and final_host != domain else None,
         "status": status,
         "latency_ms": latency_ms,
         "error": error,
@@ -323,35 +346,164 @@ _ICON_ALLOWED_TYPES = (
 )
 
 
-def _fetch_icon(domain: str) -> tuple[bytes, str] | None:
-    """Fetch one favicon. Returns (body, content_type) or None.
+_STATIC_ICONS_DIR = Path(__file__).resolve().parent / "static" / "icons"
 
-    Never raises, and never propagates an auth challenge: a 401/403 is simply
-    "no icon". Size-capped so a hostile or misconfigured endpoint cannot feed
-    DEL an unbounded body.
+_DOMAIN_STATIC_ICONS = {
+    "openknowledge.bjk.ai": "openknowledge.svg",
+    "turkflix.bjk.ai": "turkflix.png",
+    "tldraw.bjk.ai": "tldraw.svg",
+    "ironcalc.bjk.ai": "ironcalc.svg",
+    "caprust.bjk.ai": "caprust.svg",
+    "notecapai.bjk.ai": "notecapai.svg",
+    "tix.bjk.ai": "tix.svg",
+    "usg.bjk.ai": "usg.svg",
+    "astv.bjk.ai": "astv.svg",
+    "atv.bjk.ai": "atv.svg",
+    "fileshare2.bjk.ai": "fileshare.svg",
+    "fs2.bjk.ai": "fileshare.svg",
+    "vshare.bjk.ai": "fileshare.svg",
+    "b64pdf2.bjk.ai": "pdf64.svg",
+    "pdf64.bjk.ai": "pdf64.svg",
+    "cdx64.bjk.ai": "b64.svg",
+    "d64.bjk.ai": "b64.svg",
+    "gd64.bjk.ai": "b64.svg",
+    "img2.bjk.ai": "img2.svg",
+    "claw-audit.bjk.ai": "claw.svg",
+    "ginstall.bjk.ai": "installer.svg",
+    "agyinstall.bjk.ai": "installer.svg",
+    "mitv.bjk.ai": "iptv.svg",
+    "xtreampulsar.bjk.ai": "iptv.svg",
+    "hls.bjk.ai": "iptv.svg",
+    "lives.bjk.ai": "iptv.svg",
+    "shows.bjk.ai": "iptv.svg",
+    "17run.bjk.ai": "monitor.svg",
+    "montr.bjk.ai": "monitor.svg",
+    "mtxt.bjk.ai": "editor.svg",
+    "txt.bjk.ai": "editor.svg",
+    "htmls.bjk.ai": "editor.svg",
+    "jsonp.bjk.ai": "json.svg",
+    "tbl.bjk.ai": "table.svg",
+    "n50.bjk.ai": "notion.svg",
+    "vnce.bjk.ai": "vnc.svg",
+}
+
+
+def _fetch_icon(domain: str) -> tuple[bytes, str] | None:
+    """Fetch one icon/favicon for a domain. Returns (body, content_type) or None.
+
+    1. Checks static official overrides for apps with special assets.
+    2. Probes direct endpoints (/favicon.ico, /favicon.png, /favicon.svg).
+    3. Scrapes root HTML for <link rel="icon"...> or apple-touch-icon.
     """
+    # 1. Check official static icon overrides
+    static_name = _DOMAIN_STATIC_ICONS.get(domain)
+    if static_name:
+        static_file = _STATIC_ICONS_DIR / static_name
+        if static_file.is_file():
+            try:
+                body = static_file.read_bytes()
+                ext = static_file.suffix.lower()
+                ctype = "image/svg+xml" if ext == ".svg" else ("image/png" if ext == ".png" else "image/x-icon")
+                return body, ctype
+            except Exception:
+                pass
+
+    # 2. Check standard direct favicon paths
+    for path in ("/favicon.ico", "/favicon.png", "/favicon.svg"):
+        request = urllib.request.Request(
+            f"https://{domain}{path}",
+            headers={"User-Agent": "DEL-App-Gallery/1.0", "Accept": "image/*"},
+            method="GET",
+        )
+        try:
+            with urllib.request.urlopen(request, timeout=_ICON_TIMEOUT) as response:
+                if int(response.getcode()) != 200:
+                    continue
+                ctype = (response.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+                body = response.read(_ICON_MAX_BYTES + 1)
+                if not body or len(body) > _ICON_MAX_BYTES:
+                    continue
+                # Validate image signature or content-type
+                is_img = (
+                    ctype.startswith("image/")
+                    or body[:4] == b"\x00\x00\x01\x00"
+                    or body[:4] == b"\x89PNG"
+                    or b"<svg" in body[:250]
+                    or body[:4] == b"GIF8"
+                )
+                if not is_img or ctype == "text/html":
+                    continue
+                if ctype not in _ICON_ALLOWED_TYPES:
+                    if body[:4] == b"\x00\x00\x01\x00":
+                        ctype = "image/x-icon"
+                    elif body[:4] == b"\x89PNG":
+                        ctype = "image/png"
+                    elif b"<svg" in body[:250]:
+                        ctype = "image/svg+xml"
+                    else:
+                        ctype = "image/x-icon"
+                return body, ctype
+        except Exception:
+            continue
+
+    # 3. Inspect root HTML for <link rel="icon"...> or apple-touch-icon
     request = urllib.request.Request(
-        f"https://{domain}/favicon.ico",
-        headers={"User-Agent": "DEL-App-Gallery/1.0", "Accept": "image/*"},
+        f"https://{domain}/",
+        headers={"User-Agent": "Mozilla/5.0 (DEL-App-Gallery/1.0)", "Accept": "text/html,*/*;q=0.8"},
         method="GET",
     )
     try:
         with urllib.request.urlopen(request, timeout=_ICON_TIMEOUT) as response:
-            if int(response.getcode()) != 200:
-                return None
-            ctype = (response.headers.get("Content-Type") or "").split(";")[0].strip().lower()
-            if ctype and not ctype.startswith("image/"):
-                return None
-            body = response.read(_ICON_MAX_BYTES + 1)
-            if not body or len(body) > _ICON_MAX_BYTES:
-                return None
-            if ctype not in _ICON_ALLOWED_TYPES:
-                ctype = "image/x-icon"
-            return body, ctype
+            if int(response.getcode()) == 200:
+                html = response.read(131072).decode("utf-8", errors="ignore")
+                for link in re.findall(r"<link[^>]+>", html, re.I):
+                    if re.search(r"rel=[\"']?(?:shortcut )?icon[\"']?", link, re.I) or re.search(
+                        r"rel=[\"']?apple-touch-icon[\"']?", link, re.I
+                    ):
+                        m = re.search(r"href=[\"']([^\"']+)[\"']", link, re.I)
+                        if not m:
+                            continue
+                        href = m.group(1).strip()
+                        if href.startswith("data:image/svg+xml"):
+                            if ";base64," in href:
+                                return base64.b64decode(href.split(";base64,", 1)[1]), "image/svg+xml"
+                            return unquote(href.split(",", 1)[1]).encode("utf-8"), "image/svg+xml"
+                        elif href.startswith("data:image/png;base64,"):
+                            return base64.b64decode(href.split(";base64,", 1)[1]), "image/png"
+
+                        icon_url = urljoin(f"https://{domain}/", href)
+                        ireq = urllib.request.Request(
+                            icon_url,
+                            headers={"User-Agent": "DEL-App-Gallery/1.0", "Accept": "image/*"},
+                            method="GET",
+                        )
+                        try:
+                            with urllib.request.urlopen(ireq, timeout=_ICON_TIMEOUT) as iresp:
+                                if int(iresp.getcode()) == 200:
+                                    idata = iresp.read(_ICON_MAX_BYTES + 1)
+                                    ictype = (iresp.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+                                    is_img = (
+                                        ictype.startswith("image/")
+                                        or idata[:4] in (b"\x00\x00\x01\x00", b"\x89PNG")
+                                        or b"<svg" in idata[:250]
+                                    )
+                                    if idata and len(idata) <= _ICON_MAX_BYTES and is_img and ictype != "text/html":
+                                        if ictype not in _ICON_ALLOWED_TYPES:
+                                            if idata[:4] == b"\x00\x00\x01\x00":
+                                                ictype = "image/x-icon"
+                                            elif idata[:4] == b"\x89PNG":
+                                                ictype = "image/png"
+                                            elif b"<svg" in idata[:250]:
+                                                ictype = "image/svg+xml"
+                                            else:
+                                                ictype = "image/x-icon"
+                                        return idata, ictype
+                        except Exception:
+                            pass
     except Exception:
-        # HTTPError (401/403/404), TLS failure, DNS failure, timeout — all
-        # mean the same thing here: show the fallback initial.
-        return None
+        pass
+
+    return None
 
 
 def _cached_icon(domain: str) -> tuple[bytes, str] | None:
@@ -447,9 +599,27 @@ def view_apps(
     force = request.query_params.get("refresh") == "1"
     probes = _probe_domains(list(owners), force=force)
     apps: list[dict[str, Any]] = []
+    # A domain that redirects to another listed domain is an alias, not an
+    # app: show it on the target's card instead of as its own "online" card.
+    aliases: dict[str, list[str]] = {}
+    for domain in owners:
+        target = probes.get(domain, {}).get("redirects_to")
+        if target and target in owners and probes.get(target, {}).get("healthy"):
+            aliases.setdefault(target, []).append(domain)
+    aliased = {d for group in aliases.values() for d in group}
+    # One category per app, so boxy.bjk.ai and api.boxy.bjk.ai stay together:
+    # the domain fallback uses the app's primary domain (first label == slug,
+    # else the shortest).
+    primary: dict[str, str] = {}
+    for domain, app in owners.items():
+        slug = str(app.get("slug") or "")
+        best = primary.get(slug)
+        rank = (domain.split(".", 1)[0] != slug.lower(), len(domain), domain)
+        if best is None or rank < (best.split(".", 1)[0] != slug.lower(), len(best), best):
+            primary[slug] = domain
     for domain, app in owners.items():
         health = probes.get(domain, {})
-        if not health.get("healthy"):
+        if not health.get("healthy") or domain in aliased:
             continue
         score = app.get("owner_score") or (0, 0, 0)
         inferred_name = domain.split(".", 1)[0].replace("-", " ").replace("_", " ").title()
@@ -469,12 +639,14 @@ def view_apps(
                 "icon_url": f"/app-icon/{domain}",
                 "initial": str(display_name).strip()[:1].upper() or "?",
                 "category": _gallery_category(
-                    str(app.get("slug") or ""), str(display_name), domain
+                    str(app.get("slug") or ""), str(app.get("name") or ""),
+                    primary.get(str(app.get("slug") or ""), domain),
                 ),
                 "status": app.get("status") or "unknown",
                 "kind": app.get("kind") or "unknown",
                 "protected": bool(app.get("protected")),
                 "http_status": health.get("status"),
+                "aliases": sorted(aliases.get(domain, [])),
                 "latency_ms": health.get("latency_ms"),
                 "checked_at": health.get("checked_at"),
             }
@@ -501,7 +673,8 @@ def view_apps(
         apps=apps,
         categories=categories,
         candidate_count=len(owners),
-        excluded_count=max(0, len(owners) - len(apps)),
+        excluded_count=max(0, len(owners) - len(apps) - len(aliased)),
+        alias_count=len(aliased),
         latest_scan=latest,
         checked_at=checked_at,
         user=user,

@@ -43,6 +43,17 @@ _GENERIC_DIR_BASENAMES = frozenset({
     "resources",
 })
 
+# Path components that mark a copy/fixture tree rather than a live deployment.
+# A compose file under /apps/<x>/samples/deploy or /apps/<x>/backups/<y> is
+# reference or restore material; it must never seed an application of its own.
+_FIXTURE_DIR_NAMES = frozenset({
+    "backup", "backups", "sample", "samples", "example", "examples",
+    "test", "tests", "e2e-tests", "fixture", "fixtures", "testdata",
+})
+
+# Resource types that tell DEL whether an app is actually running.
+_RUNTIME_TYPES = frozenset({"container", "systemd_unit", "compose_project"})
+
 
 def _slugify(name: str) -> str:
     s = re.sub(r"[^a-z0-9]+", "-", name.lower()).strip("-")
@@ -165,6 +176,24 @@ def _foreign_project_root(working_dir: str | None, target_slug: str, apps: dict)
     return owner_slug
 
 
+def _in_fixture_tree(working_dir: str) -> bool:
+    """True when any component of `working_dir` below its top-level project
+    directory is a backup/sample/example/test tree (see _FIXTURE_DIR_NAMES)."""
+    proj = _project_dir_for(working_dir)
+    if not proj:
+        return False
+    rest = working_dir.rstrip("/")[len(proj):].strip("/")
+    return any(_slugify(part) in _FIXTURE_DIR_NAMES for part in rest.split("/") if part)
+
+
+def _is_runtime_running(r: Resource) -> bool:
+    if r.type == "container":
+        return (r.data.get("state") or r.state or "").lower() == "running"
+    if r.type == "systemd_unit":
+        return (r.state or "").lower() == "active"
+    return False  # a compose file never runs by itself; its containers do
+
+
 def _level_for_confidence(confidence: int) -> str:
     if confidence >= 95:
         return "confirmed"
@@ -284,6 +313,7 @@ def build_apps(
 
     apps: dict[str, _AppBuilder] = {}
     container_slug: dict[str, str] = {}  # container name -> slug
+    project_wd_slug: dict[str, str] = {}  # compose working_dir of a docker project -> slug
     unit_slug: dict[str, str] = {}  # systemd unit name -> slug
 
     # --- Step 1: seed apps from compose project labels ---------------------
@@ -315,10 +345,38 @@ def build_apps(
             if wd:
                 working_dirs.add(wd)
                 app.dir_paths.add(wd)
+                project_wd_slug.setdefault(wd.rstrip("/"), slug)
             if any((c.data.get("state") or "").lower() == "running" for _ in [c]):
                 app.status = "running"
 
+    # OpenSandbox runs short-lived per-session containers (and egress sidecars)
+    # on behalf of the app whose compose project runs `opensandbox/server`.
+    # They carry no compose label, but their opensandbox.io labels tie them to
+    # that server; they are not apps of their own.
+    sandbox_owner = next(
+        (container_slug[c.key] for conts in project_containers.values() for c in conts
+         if str(c.data.get("image") or "").startswith("opensandbox/server")),
+        None,
+    )
     for c in standalone_containers:
+        labels = c.data.get("labels") or {}
+        if sandbox_owner and (
+            "opensandbox.io/id" in labels or "opensandbox.io/egress-sidecar-for" in labels
+        ):
+            container_slug[c.key] = sandbox_owner
+            apps[sandbox_owner].add(
+                c,
+                confidence=90,
+                ownership="exclusive",
+                data_loss_risk="none",
+                evidence=[Evidence(
+                    source="docker",
+                    statement="OpenSandbox session container (opensandbox.io label); "
+                              f"its sandbox server runs in {sandbox_owner}",
+                    weight=90,
+                )],
+            )
+            continue
         slug = _slugify(c.key)
         app = apps.setdefault(slug, _AppBuilder(slug, c.key, "container"))
         container_slug[c.key] = slug
@@ -403,13 +461,18 @@ def build_apps(
         name_candidates = [cp.data.get("declared_name")]
         if _slugify(cp.display) not in _GENERIC_DIR_BASENAMES:
             name_candidates.append(cp.display)
-        matched_slug = None
-        for cand in name_candidates:
+        # The compose file that Docker reports as the working dir of an
+        # existing project IS that project, whatever its declared name
+        # (/apps/immich-app with `name: immich` runs as project "immich").
+        # Matching by name first made _foreign_project_root seed a duplicate
+        # "immich-app" app that claimed the same compose file and directory.
+        matched_slug = project_wd_slug.get((working_dir or "").rstrip("/")) if working_dir else None
+        for cand in name_candidates if matched_slug is None else ():
             if cand and _slugify(cand) in apps:
                 matched_slug = _slugify(cand)
                 break
         foreign_owner = None
-        if matched_slug is not None and working_dir:
+        if matched_slug is not None and working_dir and working_dir.rstrip("/") not in project_wd_slug:
             foreign_owner = _foreign_project_root(working_dir, matched_slug, apps)
             if foreign_owner:
                 # The name matched an existing app, but the compose file lives
@@ -466,6 +529,20 @@ def build_apps(
                                 foreign_owner = anchored
             if matched_slug is None and (slug in running_project_slugs or slug in apps):
                 matched_slug = slug if slug in apps else None
+            if matched_slug is None and working_dir:
+                # Never seed a new app from a compose file in a backup/sample/
+                # example/test tree, nor from one nested inside ANOTHER known
+                # app's project tree (/apps/karakeep/packages/benchmarks).
+                # Attach it to the enclosing app as shared/blocked evidence
+                # when there is one; otherwise leave it unowned for review.
+                project_dir = _project_dir_for(working_dir)
+                enclosing = _slugify(project_dir.rsplit("/", 1)[-1]) if project_dir else None
+                nested = bool(project_dir) and project_dir != working_dir.rstrip("/")
+                fixture = _in_fixture_tree(working_dir)
+                if fixture or (nested and enclosing != slug and enclosing in apps):
+                    if enclosing not in apps:
+                        continue
+                    matched_slug = foreign_owner = enclosing
             if matched_slug is None:
                 # Name the app after the slug we resolved, not the raw
                 # directory basename. When the slug was anchored to the
@@ -564,6 +641,27 @@ def build_apps(
         slug = container_slug.get(c_name)
         if not slug:
             continue
+        if _is_broad_root(bm.path or ""):
+            # A host path outside any app directory (/etc/localtime,
+            # /var/run/docker.sock, /etc/nginx, /home/bjkai/.ssh, /apps
+            # itself) is used by the container but belongs to the host. The
+            # planner already refuses to delete it; the label must agree, so
+            # it is recorded as shared with the host (blocked), never
+            # exclusive app data.
+            apps[slug].add(
+                bm,
+                confidence=95,
+                ownership="shared",
+                data_loss_risk="data",
+                evidence=[Evidence(
+                    source="docker",
+                    statement=f"host system path bind-mounted into container {c_name}; "
+                              "shared with the host, not removable with the app",
+                    weight=95,
+                )],
+            )
+            apps[slug].assocs[(bm.type, bm.key)].shared = True
+            continue
         apps[slug].add(
             bm,
             confidence=95,
@@ -571,8 +669,7 @@ def build_apps(
             data_loss_risk="data",
             evidence=[Evidence(source="docker", statement=f"bind mount used by container {c_name}", weight=95)],
         )
-        if bm.path and not _is_broad_root(bm.path):
-            apps[slug].dir_paths.add(bm.path)
+        apps[slug].dir_paths.add(bm.path)
 
     # --- Step 6: networks (compose label -> confirmed; attached container ---
     # -> high, since infra networks are commonly shared) ---------------------
@@ -988,6 +1085,7 @@ def build_apps(
                     )
 
     # --- Step 12: manifests always win --------------------------------------
+    manifest_status: dict[str, str] = {}
     for slug, manifest in manifests.items():
         app = apps.get(slug)
         if app is None:
@@ -995,7 +1093,12 @@ def build_apps(
         if manifest.name:
             app.name = manifest.name
         if manifest.status:
-            app.status = manifest.status
+            # Runtime state comes from the host (see the status pass below);
+            # the manifest value is only the fallback when DEL has nothing
+            # to judge by. "active" is lifecycle wording, not a runtime
+            # state, so it maps to the UI vocabulary's "running".
+            ms = manifest.status.strip().lower()
+            manifest_status[slug] = "running" if ms == "active" else ms
         app.domains.update(manifest.domains)
 
         by_key = {r.key: r for r in resources}
@@ -1069,6 +1172,36 @@ def build_apps(
             if len(resource_owners.get(key, set())) > 1:
                 assoc.shared = True
             assoc.removal_eligible = _removal_eligible(assoc.level, assoc.shared, assoc.excluded)
+
+    # --- Step 14: status and kind from what the host actually runs ---------
+    # running: any owned container is running or owned unit is active.
+    # stopped: the app has owned runtime resources (non-shared, non-excluded,
+    #   >=80 confidence containers/units/compose files) and none is running.
+    # absent: declared by a manifest, but nothing it names is on the host.
+    # unknown: nothing DEL can judge by (bare directory, only shared units).
+    for slug, app in apps.items():
+        runtime = []
+        for key, assoc in app.assocs.items():
+            r = by_key_type.get(key)
+            if (r is None or assoc.resource_type not in _RUNTIME_TYPES
+                    or assoc.shared or assoc.excluded or assoc.confidence < 80):
+                continue
+            runtime.append(r)
+        if app.status == "running" or any(_is_runtime_running(r) for r in runtime):
+            app.status = "running"
+        elif runtime:
+            app.status = "stopped"
+        elif not app.assocs:
+            # Only a manifest names it; none of its paths/units exist any more.
+            app.status = "absent"
+        elif slug in manifest_status:
+            app.status = manifest_status[slug]
+        # A compose file with no containers is not what runs the app when an
+        # owned systemd unit exists (boxy runs via boxy.service).
+        if (app.kind == "compose_stopped"
+                and any(r.type == "systemd_unit" for r in runtime)
+                and not any(r.type == "container" for r in runtime)):
+            app.kind = "systemd"
 
     # --- Build final AppRecord + Association list per app -------------------
     result: list[tuple[AppRecord, list[Association]]] = []

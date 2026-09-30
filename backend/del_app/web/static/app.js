@@ -1639,6 +1639,12 @@
         button.classList.toggle("active", active);
         button.setAttribute("aria-pressed", active ? "true" : "false");
       });
+      document.querySelectorAll("[data-category-pill]").forEach(function (pill) {
+        var cat = pill.getAttribute("data-category-pill");
+        var active = cat === categoryFilter;
+        pill.classList.toggle("active", active);
+        pill.setAttribute("aria-pressed", active ? "true" : "false");
+      });
     }
 
     galleryCards.forEach(function (card) {
@@ -1708,6 +1714,15 @@
     if (gallerySearch) gallerySearch.addEventListener("input", renderGallery);
     if (gallerySearchOp) gallerySearchOp.addEventListener("change", renderGallery);
     if (galleryCategory) galleryCategory.addEventListener("change", renderGallery);
+    document.querySelectorAll("[data-category-pill]").forEach(function (pill) {
+      pill.addEventListener("click", function () {
+        var cat = pill.getAttribute("data-category-pill");
+        if (galleryCategory) {
+          galleryCategory.value = cat;
+        }
+        renderGallery();
+      });
+    });
     if (gallerySort) gallerySort.addEventListener("change", function () {
       galleryPrefs.sort = gallerySort.value; saveGalleryPrefs(); renderGallery();
     });

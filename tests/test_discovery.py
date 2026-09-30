@@ -736,8 +736,8 @@ def test_proc_src_sanitize_args_redacts_secret_shaped_flags():
 
 
 def test_fs_src_epoch_to_iso_and_directory_timestamps(tmp_path, monkeypatch):
-    """Directory resources must carry mtime/ctime ISO timestamps for the
-    Installed column (no birthtime required on Linux)."""
+    """Directory resources carry mtime/ctime ISO timestamps and the real
+    statx birth time (ext4/tmpfs record it; Python 3.10 os.stat cannot)."""
     assert fs_src._epoch_to_iso(None) is None
     assert fs_src._epoch_to_iso(0).startswith("1970-01-01")
 
@@ -773,6 +773,7 @@ protected_apps = ["del"]
     data = dirs[0].data
     assert data.get("mtime") and data["mtime"].endswith("Z")
     assert data.get("ctime") and data["ctime"].endswith("Z")
+    assert data.get("birthtime") and data["birthtime"].endswith("Z")
     assert "size_kb" in data
 
 

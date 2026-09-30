@@ -294,7 +294,8 @@ Schema (`del_app/manifests.py`):
 ```yaml
 id: <name>                       # required; slug, matches the filename (<id>.yaml)
 name: <Display Name>              # optional human label
-status: active                    # active | retired | unknown, etc.
+status: active                    # fallback only: DEL derives running/stopped from the app's own
+                                  # units/containers; this is used when it owns none (active → running)
 domains:
   - <name>.bjk.ai                 # every public hostname this app owns
 compose:

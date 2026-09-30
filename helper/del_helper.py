@@ -24,6 +24,7 @@ import grp
 import json
 import os
 import pwd
+import re
 import signal
 import socketserver
 import stat
@@ -104,6 +105,36 @@ def _timestamp() -> str:
 # ---------------------------------------------------------------------------
 # operations
 # ---------------------------------------------------------------------------
+# Only these statements leave the helper. Returning raw text would make
+# read_nginx_config a root file-read for anything another op can place in the
+# nginx dirs (file_backup + path_restore); a filtered skeleton leaks nothing
+# but nginx routing directives, which is all nginx_src parses.
+_NGINX_KEEP = {"server_name", "listen", "ssl_certificate", "client_max_body_size", "proxy_pass"}
+_NGINX_KEEP_HEADERS = {"upgrade", "connection"}
+
+
+def _nginx_directives_only(text: str) -> str:
+    text = re.sub(r"#[^\n]*", "", text)
+    out: list[str] = []
+    for m in re.finditer(r"([^;{}]*)([;{}])", text):
+        body, sep = m.group(1).strip(), m.group(2)
+        words = body.split()
+        if sep == "}":
+            out.append("}")
+        elif sep == "{":
+            if words and words[0] in ("server", "location"):
+                out.append(" ".join(words) + " {")
+            else:
+                out.append("block {")
+        elif words and (
+            words[0] in _NGINX_KEEP
+            or (words[0] == "proxy_set_header" and len(words) > 1
+                and words[1].lower() in _NGINX_KEEP_HEADERS)
+        ):
+            out.append(" ".join(words) + ";")
+    return "\n".join(out) + "\n"
+
+
 class Operations:
     """Each method: (args: dict, dry_run: bool, policy: dict) -> result dict.
 
@@ -123,6 +154,37 @@ class Operations:
         rc, out, err = _run(["ss", "-lntp"])
         if rc != 0:
             raise OpError(f"ss failed (rc={rc}): {err.strip()}")
+        return {"output": out, "changed": []}
+
+    def read_nginx_config(self, args, dry_run):
+        # Read-only: return the text of one nginx config file. Needed because
+        # some site files are root-only (0600) and del-web (NoNewPrivileges)
+        # cannot sudo. Confined to the nginx config dirs by validation.
+        realpath = V.validate_nginx_read_path(args.get("path", ""), self.policy)
+        try:
+            fd = os.open(realpath, os.O_RDONLY | os.O_NOFOLLOW | os.O_NONBLOCK)
+        except OSError as exc:
+            raise OpError(f"cannot open {realpath}: {exc.strerror}")
+        with os.fdopen(fd, "rb") as fh:
+            st = os.fstat(fh.fileno())
+            if not stat.S_ISREG(st.st_mode):
+                raise OpError(f"not a regular file: {realpath}")
+            if st.st_size > V.NGINX_READ_MAX_BYTES:
+                raise OpError(f"file too large ({st.st_size} bytes): {realpath}")
+            data = fh.read(V.NGINX_READ_MAX_BYTES + 1)
+        if len(data) > V.NGINX_READ_MAX_BYTES:
+            raise OpError(f"file too large: {realpath}")
+        return {"output": _nginx_directives_only(data.decode("utf-8", errors="replace")),
+                "changed": []}
+
+    def read_crontab(self, args, dry_run):
+        # Read-only: `crontab -l -u <user>`; a user with no crontab yields "".
+        user = V.validate_username(args.get("user", ""))
+        rc, out, err = _run(["crontab", "-l", "-u", user], timeout=30)
+        if rc != 0:
+            if "no crontab for" in (err or "").lower():
+                return {"output": "", "changed": []}
+            raise OpError(f"crontab -l failed (rc={rc}): {err.strip()[:200]}")
         return {"output": out, "changed": []}
 
     def ping(self, args, dry_run):
@@ -659,6 +721,7 @@ def handle_request(raw: bytes, ops: Operations, auditor: Auditor) -> dict:
 ALLOWED_OPS = {
     "ping", "compose_down", "container_stop", "container_rm", "image_rm",
     "volume_rm", "network_rm", "systemd_stop", "systemd_disable", "nginx_test", "list_listeners",
+    "read_nginx_config", "read_crontab",
     "systemd_rm_unit", "cron_rm", "nginx_rm_site", "nginx_test_reload",
     "path_delete", "tmux_kill", "process_term", "backup_tar", "volume_backup",
     "file_backup", "path_restore",

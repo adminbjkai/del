@@ -1,5 +1,56 @@
 # Changelog
 
+## 2026.9.30
+
+Accurate install dates. *Installed* used the earliest of the app folder's ctime
+and container Created, but a folder's ctime moves every time a file is added,
+so n50 (folder created 2026-07-18) showed as installed 2026-09-28. Discovery now
+records real ext4 birth times (`stat -c %W`; Python 3.10 cannot read them) for
+app folders, custom unit files and nginx site files, plus the last git commit
+time. *Installed* is the earliest creation time of the app's own non-shared
+resources. When DEL saw the app before any of those files existed (the files
+were recreated since), it shows "by <first scan>". A new *Last changed* column
+and field shows the newest folder change, git commit, container recreate, or
+unit/site edit, and the hover text names the source.
+
+Status and kind from the host. Apps with runtime resources, none of them
+running, are now *stopped* instead of *unknown* (11 apps: glmflix, ppv,
+ginstall, …). A manifest's `active` maps to *running*. Manifest apps whose
+folders no longer exist are *absent*: cap42, cap4l, myspeed-source and sharex.
+boxy and bjkai-shorturl-by-claude are *systemd*, not *compose_stopped*.
+Scan 335: 66 running, 15 stopped, 4 absent, 0 unknown.
+
+Correlation:
+- No more phantom apps. immich-app merged into immich, dependency-track into
+  dependencytrack. benchmarks, notecapai and knowledgebase were compose files
+  in nested, backup or sample trees.
+- OpenSandbox session containers belong to SurfSense, not six separate apps.
+- System bind mounts are shared and blocked, not exclusive and "safe":
+  docker.sock, `/etc/*`, `/apps`, `/home/bjkai`.
+
+Root-only reads through the helper. del-web runs with `NoNewPrivileges`, so the
+`sudo` fallbacks for 0600 nginx sites and user crontabs had failed since 09-27
+(bjk.ai's shorturl site and bjkai's crontab had disappeared). Two new read-only
+helper ops, `read_nginx_config` and `read_crontab`, bring the allowlist to 24.
+The nginx op returns only the routing directives DEL parses, never raw file
+text. nginx parsing now ignores commented-out directives.
+
+Other fixes:
+- Docker label values with secret-looking keys, such as
+  `opensandbox.io/egress-auth-token`, are redacted before storage, and 3
+  already-stored rows were scrubbed.
+- `applications.manifest_path` is now written, so the *Manifest* field is no
+  longer always "—".
+- The detail page's resource count matches the list: excluded rows are listed
+  separately.
+- Gallery: domains that redirect to another listed app are merged onto its card
+  (c64, cdx64, d64 → gd64). Categories are decided per app: tix is no longer
+  AI, and gittodoc is no longer a todo app.
+- Gallery: bundled icons for apps without a usable favicon, and category filter
+  pills. This is 09-22 work that was already live but uncommitted.
+
+Tests: 425 passed, 2 skipped (`-W error`).
+
 ## 2026.9.13
 
 One orphan classification everywhere: the assistant's *orphans* scope used to

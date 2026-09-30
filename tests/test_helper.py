@@ -450,3 +450,144 @@ def test_compose_down_dryrun_lowercases_and_falls_back_to_label_teardown():
     out = r["output"]
     assert "linkstash" in out and "Linkstash" not in out   # lowercased
     assert "label=com.docker.compose.project=linkstash" in out   # label teardown
+
+
+# ---------------------------------------------------------------------------
+# read-only lookups: read_nginx_config / read_crontab
+# ---------------------------------------------------------------------------
+@pytest.fixture
+def nginx_read_policy(tmp_path, tmp_policy):
+    enabled = tmp_path / "ngx" / "sites-enabled"
+    available = tmp_path / "ngx" / "sites-available"
+    confd = tmp_path / "ngx" / "conf.d"
+    for d in (enabled, available, confd):
+        d.mkdir(parents=True)
+    return {**tmp_policy,
+            "nginx_read_roots": [str(enabled), str(available), str(confd)]}
+
+
+def _ngx(policy, idx):
+    import pathlib
+    return pathlib.Path(policy["nginx_read_roots"][idx])
+
+
+def test_nginx_read_allowed_path_ok_including_enabled_symlink(nginx_read_policy, tmp_path):
+    site = _ngx(nginx_read_policy, 1) / "site.conf"
+    site.write_text("server { server_name x.example; }\n")
+    site.chmod(0o600)
+    link = _ngx(nginx_read_policy, 0) / "site.conf"
+    link.symlink_to(site)
+    assert V.validate_nginx_read_path(str(link), nginx_read_policy) == str(site)
+
+    ops = H.Operations(nginx_read_policy)
+    for dry in (True, False):
+        resp = H.handle_request(json.dumps({
+            "op": "read_nginx_config", "args": {"path": str(link)}, "dry_run": dry,
+        }).encode(), ops, _auditor(tmp_path))
+        assert resp["ok"] is True, resp
+        assert "x.example" in resp["output"] and resp["changed"] == []
+    audit = (tmp_path / "audit.log").read_text().splitlines()
+    assert json.loads(audit[-1])["op"] == "read_nginx_config"
+
+
+@pytest.mark.parametrize("bad", ["/etc/shadow", "/etc/passwd", "relative.conf", "", None])
+def test_nginx_read_rejects_paths_outside_nginx(nginx_read_policy, bad):
+    with pytest.raises(V.ValidationError):
+        V.validate_nginx_read_path(bad, nginx_read_policy)
+
+
+def test_nginx_read_rejects_dotdot_and_escaping_symlink(nginx_read_policy, tmp_path):
+    secret = tmp_path / "secret.txt"
+    secret.write_text("TOPSECRET")
+    enabled = _ngx(nginx_read_policy, 0)
+    with pytest.raises(V.ValidationError):
+        V.validate_nginx_read_path(str(enabled) + "/../../../secret.txt", nginx_read_policy)
+    (enabled / "evil.conf").symlink_to(secret)
+    with pytest.raises(V.ValidationError):
+        V.validate_nginx_read_path(str(enabled / "evil.conf"), nginx_read_policy)
+    # the root itself / a directory is not a readable file
+    (enabled / "subdir").mkdir()
+    with pytest.raises(V.ValidationError):
+        V.validate_nginx_read_path(str(enabled / "subdir"), nginx_read_policy)
+    with pytest.raises(V.ValidationError):
+        V.validate_nginx_read_path(str(enabled), nginx_read_policy)
+
+
+def test_nginx_read_default_roots_reject_etc_shadow():
+    with pytest.raises(V.ValidationError):
+        V.validate_nginx_read_path("/etc/nginx/sites-enabled/../../shadow", {})
+    with pytest.raises(V.ValidationError):
+        V.validate_nginx_read_path("/etc/shadow", {})
+
+
+def test_nginx_read_size_cap(nginx_read_policy, tmp_path, monkeypatch):
+    big = _ngx(nginx_read_policy, 2) / "big.conf"
+    big.write_text("x" * 2048)
+    monkeypatch.setattr(V, "NGINX_READ_MAX_BYTES", 1024)
+    resp = H.handle_request(json.dumps({
+        "op": "read_nginx_config", "args": {"path": str(big)}, "dry_run": False,
+    }).encode(), H.Operations(nginx_read_policy), _auditor(tmp_path))
+    assert resp["ok"] is False and "too large" in resp["error"]
+
+
+@pytest.mark.parametrize("bad", ["-r", "root; id", "a b", "../root", "x" * 40, "", None,
+                                 "--help", "no_such_user_del_test"])
+def test_read_crontab_rejects_bad_username(tmp_policy, tmp_path, monkeypatch, bad):
+    ran = []
+    monkeypatch.setattr(H, "_run", lambda cmd, timeout=0: ran.append(cmd) or (0, "", ""))
+    with pytest.raises(V.ValidationError):
+        V.validate_username(bad)
+    resp = H.handle_request(json.dumps({
+        "op": "read_crontab", "args": {"user": bad}, "dry_run": False,
+    }).encode(), H.Operations(tmp_policy), _auditor(tmp_path))
+    assert resp["ok"] is False and ran == []
+
+
+def test_read_crontab_runs_list_only_and_maps_no_crontab_to_empty(tmp_policy, tmp_path, monkeypatch):
+    ran = []
+
+    def fake_run(cmd, timeout=0):
+        ran.append(cmd)
+        return (1, "", "no crontab for root\n")
+
+    monkeypatch.setattr(H, "_run", fake_run)
+    resp = H.handle_request(json.dumps({
+        "op": "read_crontab", "args": {"user": "root"}, "dry_run": True,
+    }).encode(), H.Operations(tmp_policy), _auditor(tmp_path))
+    assert resp == {"ok": True, "dry_run": True, "output": "", "error": None, "changed": []}
+    assert ran == [["crontab", "-l", "-u", "root"]]
+
+    monkeypatch.setattr(H, "_run", lambda cmd, timeout=0: (0, "* * * * * /bin/true\n", ""))
+    resp = H.handle_request(json.dumps({
+        "op": "read_crontab", "args": {"user": "root"}, "dry_run": False,
+    }).encode(), H.Operations(tmp_policy), _auditor(tmp_path))
+    assert resp["ok"] is True and "/bin/true" in resp["output"]
+
+
+def test_read_ops_are_allowlisted():
+    assert {"read_nginx_config", "read_crontab"} <= H.ALLOWED_OPS
+
+
+def test_read_nginx_config_returns_routing_directives_only():
+    """A non-nginx file placed in the nginx dirs (e.g. via file_backup +
+    path_restore) must not leak through read_nginx_config: only routing
+    directives and block structure leave the helper."""
+    secret = "API_KEY=supersecret\nDB_PASS=hunter2;\npassword abc;\n"
+    site = (
+        "# server_name commented.example;\n"
+        "server {\n  listen 443 ssl;\n  server_name a.bjk.ai b.bjk.ai;\n"
+        "  ssl_certificate /etc/x.pem; ssl_certificate_key /etc/secret.key;\n"
+        "  auth_basic_user_file /etc/nginx/.htpasswd;\n"
+        "  location /api/ {\n    proxy_pass http://127.0.0.1:8055;\n"
+        "    proxy_set_header Upgrade $http_upgrade;\n"
+        "    proxy_set_header Authorization \"Bearer tok\";\n  }\n"
+        "  if ($x) { return 301 https://y; }\n}\n"
+    )
+    out = H._nginx_directives_only(secret + site)
+    for leaked in ("supersecret", "hunter2", "abc", "secret.key", "htpasswd", "Bearer", "commented"):
+        assert leaked not in out
+    assert "server_name a.bjk.ai b.bjk.ai;" in out
+    assert "location /api/ {" in out
+    assert "proxy_pass http://127.0.0.1:8055;" in out
+    assert "proxy_set_header Upgrade $http_upgrade;" in out
+    assert out.count("{") == out.count("}")

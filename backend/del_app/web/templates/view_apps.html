@@ -10,6 +10,7 @@
   <div class="page-actions">
     <span class="badge badge-ok">{{ apps | length }} online</span>
     {% if excluded_count %}<span class="badge badge-grey" title="Enabled domains that failed the live HTTPS check">{{ excluded_count }} unavailable hidden</span>{% endif %}
+    {% if alias_count %}<span class="badge badge-grey" title="Domains that redirect to another listed app; shown on that app's card">{{ alias_count }} redirect aliases merged</span>{% endif %}
     <a class="btn btn-sm" href="/view-apps?refresh=1" data-pending-label="Checking…"
        title="Bypass the two-minute health cache and check every domain again">Refresh health</a>
   </div>
@@ -50,6 +51,16 @@
   </div>
   <button type="button" class="btn btn-sm" id="gallery-layout-toggle" aria-expanded="false" aria-controls="gallery-layout-panel">Customize</button>
 </section>
+
+<nav class="gallery-category-bar" aria-label="Filter apps by category">
+  <div class="gallery-category-pills">
+    <button type="button" class="category-pill active" data-category-pill="" aria-pressed="true">All apps</button>
+    <button type="button" class="category-pill" data-category-pill="__favorites" aria-pressed="false">★ Favorites</button>
+    {% for category in categories %}
+    <button type="button" class="category-pill" data-category-pill="{{ category }}" aria-pressed="false">{{ category }}</button>
+    {% endfor %}
+  </div>
+</nav>
 
 <section class="gallery-layout-panel" id="gallery-layout-panel" hidden aria-label="Customize gallery layout">
   <label>Card width
@@ -101,6 +112,7 @@
           <span class="app-launch-copy">
             <strong class="app-launch-name">{{ app.name }}</strong>
             <span class="app-launch-domain">{{ app.domain }}</span>
+            {% if app.aliases %}<span class="app-launch-domain muted" title="These domains redirect here">also {{ app.aliases | join(', ') }}</span>{% endif %}
           </span>
           <span class="app-launch-arrow" aria-hidden="true">↗</span>
         </a>

@@ -14,11 +14,11 @@ def collect() -> list[Resource]   # read-only, never raises on partial failure (
 |---|---|---|
 | `docker_src.py` | containers, images, volumes, networks | `docker inspect`/`ps`/`images`/`volume ls`/`network ls` via subprocess JSON (does not require direct socket access) |
 | `compose_src.py` | compose projects | scans `settings.scan_roots` for compose files, parses with `yaml` |
-| `nginx_src.py` | nginx sites | parses `/etc/nginx/sites-enabled` and `sites-available` |
-| `systemd_src.py` | units, timers | `systemctl show` / `list-units` / `list-timers`, plus reads custom unit files |
+| `nginx_src.py` | nginx sites | parses `/etc/nginx/sites-enabled` and `sites-available`; root-only (0600) files via the helper's read-only `read_nginx_config`; site file birth/modify times |
+| `systemd_src.py` | units, timers | `systemctl show` / `list-units` / `list-timers`, plus reads custom unit files and their birth/modify times |
 | `proc_src.py` | listening sockets, processes, sessions | `ss -lntp`, `ps`, `tmux ls` |
-| `cron_src.py` | cron entries | `/etc/cron.d` files, user crontabs |
-| `fs_src.py` | project directories, git repos | scans `scan_roots`, fast `du` estimate, git info, `.env` variable **names only** |
+| `cron_src.py` | cron entries | `/etc/cron.d` files, user crontabs via the helper's read-only `read_crontab` |
+| `fs_src.py` | project directories, git repos | scans `scan_roots`, fast `du` estimate, git info (incl. last commit time), folder birth time (`stat -c %W`, `file_times.py`), `.env` variable **names only** |
 
 `scan_roots` (from `del.toml`): `/apps`, `/data/apps`, `/opt`, `/srv`, `/var/www`.
 
@@ -239,6 +239,29 @@ def build_apps(resources: list[Resource], manifests: dict[str, Manifest]) -> lis
   are **blocked from removal until explicitly approved** per-application — removing
   one app's plan will never silently take a resource another app depends on. This
   is the one case where the per-row *approve* action changes what a plan contains.
+- **Host bind mounts are never an app's**: a bind-mount source outside every app
+  directory (`/var/run/docker.sock`, `/etc/*`, `/apps`, `/home/bjkai`, …) is
+  recorded shared/blocked, never exclusive/safe.
+- **Nested and fixture compose files don't create apps**: a compose file inside a
+  backup, sample, example, test or fixture tree, or nested in another known app's
+  tree, attaches to the enclosing app (55, shared, blocked) or stays unowned. A
+  compose file in a running Docker project's working directory joins that project's
+  app (so `/apps/immich-app` belongs to the `immich` project).
+- **Status and kind come from the host (Step 14)**: from the app's own non-shared,
+  non-excluded runtime resources at confidence ≥ 80 — any running container or
+  `active` unit → `running`; owned runtime resources, none running → `stopped`;
+  a manifest app with nothing left on the host → `absent`; otherwise the manifest `status` (`active` → `running`) or `unknown`. A
+  `compose_stopped` app that owns a systemd unit and no containers is `kind=systemd`.
+
+## Dates shown for an app
+
+- **Installed**: the earliest *creation* time among the app's own resources — folder
+  birth time (statx), custom unit file birth time, enabled nginx site file birth
+  time, container Created. Folder ctime/mtime are never used: they move whenever an
+  entry is added. If DEL's first sighting of the app itself is earlier
+  still, that scan time is shown as "by <date>" / "on or before".
+- **Last changed**: the newest of folder mtime, last git commit, container
+  (re)creation, unit file edit, nginx site file edit.
 
 ## Persistence: what a scan rewrites
 

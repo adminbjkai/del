@@ -16,6 +16,7 @@
           <li><strong>running / active</strong> — up now</li>
           <li><strong>stopped / exited / inactive</strong> — installed but not running</li>
           <li><strong>paused / unknown</strong> — held or unclear</li>
+          <li><strong>absent</strong> — only a manifest names it; none of its folders, units or containers exist on the host any more</li>
         </ul>
       </dd>
       <dt>Warnings</dt>
@@ -23,7 +24,9 @@
       <dt>Protected</dt>
       <dd>DEL will not build a removal plan (e.g. DEL itself).</dd>
       <dt>Installed</dt>
-      <dd>Best install-time signal in Eastern time: container Created, directory age, or first discovery.</dd>
+      <dd>When the app first appeared on this host, in Eastern time: the earliest creation (birth) time of its own folder, service unit file, enabled nginx site file or container. Shown as “by” a date when DEL's first scan is earlier than every creation time it can read.</dd>
+      <dt>Last changed</dt>
+      <dd>The newest of: a file added or removed in its folder, its last git commit, a container recreate, or an edit to its unit or nginx site file.</dd>
       <dt>Kind</dt>
       <dd>Primary runtime: compose, container, systemd, …</dd>
     </dl>

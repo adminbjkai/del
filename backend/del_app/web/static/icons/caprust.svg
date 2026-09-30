@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <defs>
+    <linearGradient id="caprust-grad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#708f7a"/>
+      <stop offset="100%" stop-color="#567763"/>
+    </linearGradient>
+  </defs>
+  <rect width="48" height="48" rx="12" fill="url(#caprust-grad)"/>
+  <path d="M26 14 A10 10 0 1 0 34 22" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="round"/>
+  <polygon points="34,16 41,20 34,24" fill="#ffffff"/>
+  <circle cx="24" cy="24" r="3" fill="#ffffff"/>
+</svg>

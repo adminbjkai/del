@@ -1,0 +1,5 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <rect width="48" height="48" rx="12" fill="#3b82f6"/>
+  <text x="24" y="22" font-family="monospace, sans-serif" font-size="13" font-weight="900" fill="#ffffff" text-anchor="middle">BASE</text>
+  <text x="24" y="36" font-family="monospace, sans-serif" font-size="16" font-weight="900" fill="#93c5fd" text-anchor="middle">64</text>
+</svg>

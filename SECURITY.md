@@ -74,11 +74,11 @@ deployed copy.**
 
 ### Allowlisted operations (summary)
 
-`ping`, `list_listeners`, `compose_down`, `container_stop`/`container_rm`,
+`ping`, `list_listeners`, `read_nginx_config`, `read_crontab`, `compose_down`, `container_stop`/`container_rm`,
 `image_rm`, `volume_rm`, `network_rm`, `systemd_stop`/`systemd_disable`/`systemd_rm_unit`,
 `cron_rm`, `nginx_rm_site`, `nginx_test`, `nginx_test_reload`, `path_delete`,
 `path_restore`, `tmux_kill`, `process_term`, `backup_tar`, `volume_backup`,
-`file_backup` — **22 operations**, matching `ALLOWED_OPS` in `del_helper.py`.
+`file_backup` — **24 operations**, matching `ALLOWED_OPS` in `del_helper.py`.
 Nothing outside this fixed list is possible; a compromised `del-web` cannot smuggle
 an arbitrary command past the helper. Every operation supports `dry_run` (returns
 what would happen without changing anything) and is logged to
@@ -199,7 +199,7 @@ The original full attacker/vector/mitigation table lives in `docs/server-audit.m
 | Vector | Mitigation |
 |---|---|
 | Internet → Nginx → auth bypass | TLS termination + security headers (incl. CSP and HSTS with `includeSubDomains`) at Nginx; `del-web` bound to 127.0.0.1 only; a session required on every route except `/login`, `/healthz`, `/favicon.ico` and `/static/*` (app + assistant assets and `/static/vendor/` AG Grid); rate-limited login |
-| Compromised web session → arbitrary host command | Fixed 22-op helper allowlist with independent re-validation bounds the blast radius regardless of what `del-web` is tricked into requesting |
+| Compromised web session → arbitrary host command | Fixed 24-op helper allowlist with independent re-validation bounds the blast radius regardless of what `del-web` is tricked into requesting |
 | Compromised web tier → rewrite what root runs | Helper code and policy are deployed `root:root` outside `/apps/del`; `protected_units` refuses to stop `del-helper` itself |
 | Path traversal / symlink escape | `realpath` canonicalization + protected-root refusal + approved-root confinement on every path argument, including backup *reads* and restore *writes* |
 | Command/argument injection | subprocess arg-arrays only, `shell=False`, everywhere |

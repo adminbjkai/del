@@ -11,6 +11,7 @@ import subprocess
 from datetime import datetime, timezone
 
 from del_app.config import get_settings
+from del_app.discovery.file_times import stat_times
 from del_app.models import Resource
 
 logger = logging.getLogger("del_app.discovery.fs_src")
@@ -104,6 +105,17 @@ def _git_info(path: str) -> dict | None:
     except Exception:
         info["dirty"] = None
 
+    try:
+        head = subprocess.run(
+            ["git", "-C", path, "log", "-1", "--format=%ct"],
+            capture_output=True, text=True, timeout=GIT_TIMEOUT, check=False,
+        )
+        info["head_committed_at"] = (
+            _epoch_to_iso(head.stdout.strip()) if head.returncode == 0 and head.stdout.strip() else None
+        )
+    except Exception:
+        info["head_committed_at"] = None
+
     return info
 
 
@@ -164,20 +176,17 @@ def collect() -> list[Resource]:
                 except Exception:
                     logger.exception("fs_src: failed to list top-level files of %s", path)
 
-                # Installation-time signals: birthtime when available (Linux
-                # often lacks true birthtime → falls back to ctime), plus mtime.
-                # ISO-UTC strings so the web layer can sort/format without
-                # re-statting the host.
-                mtime_iso = ctime_iso = birthtime_iso = None
+                # mtime/ctime change whenever an entry is added or removed, so
+                # they say "last changed", never "installed". Birth time comes
+                # from statx (see file_times) and is the real creation time.
+                mtime_iso = ctime_iso = None
                 try:
                     st = os.stat(path)
                     mtime_iso = _epoch_to_iso(st.st_mtime)
                     ctime_iso = _epoch_to_iso(st.st_ctime)
-                    birth = getattr(st, "st_birthtime", None)
-                    if birth:
-                        birthtime_iso = _epoch_to_iso(birth)
                 except OSError:
                     pass
+                birthtime_iso = (stat_times([path]).get(path) or {}).get("birthtime")
 
                 data = {
                     "size_kb": size_kb,

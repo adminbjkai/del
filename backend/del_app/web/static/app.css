@@ -984,7 +984,7 @@ a.assistant-ask-link.chip:hover { color: var(--accent); background: var(--accent
 .status-failed, .status-error, .status-dead { background: var(--tone-danger-bg); color: var(--tone-danger-fg); }
 .status-stopped, .status-exited, .status-refused, .status-paused, .status-inactive { background: var(--tone-warn-bg); color: var(--tone-warn-fg); }
 .status-running { background: var(--tone-info-bg); color: var(--tone-info-fg); }
-.status-pending, .status-draft, .status-unknown, .status-removed { background: var(--tone-neutral-bg); color: var(--tone-neutral-fg); }
+.status-pending, .status-draft, .status-unknown, .status-removed, .status-absent { background: var(--tone-neutral-bg); color: var(--tone-neutral-fg); }
 /* Only a live job/scan pulses; an app that is simply "running" stays still. */
 .badge.status-running.is-live { animation: pulse 1.6s ease-in-out infinite; }
 @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.55; } }
@@ -1404,6 +1404,58 @@ pre.output {
 .gallery-toolbar > label:not(.gallery-search-wrap) { min-width: 145px; }
 .gallery-view-switch { display: inline-flex; gap: 0.25rem; }
 .gallery-view-switch .btn.active { background: var(--accent-soft); border-color: color-mix(in srgb, var(--accent) 40%, transparent); color: var(--accent); }
+
+/* Centered category selection bar at top of screen */
+.gallery-category-bar {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  margin: 0.5rem 0 1.25rem;
+  padding: 0 0.5rem;
+}
+.gallery-category-pills {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  align-items: center;
+  gap: 0.45rem;
+  max-width: 1100px;
+}
+.category-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  padding: 0.35rem 0.85rem;
+  font-size: 0.82rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  background: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 9999px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  user-select: none;
+  white-space: nowrap;
+}
+.category-pill:hover {
+  color: var(--text);
+  border-color: var(--border);
+  background: var(--bg-sunken);
+  transform: translateY(-1px);
+}
+.category-pill.active {
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-color: color-mix(in srgb, var(--accent) 45%, transparent);
+  font-weight: 600;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+}
+.category-pill:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
 .gallery-layout-panel {
   display: grid; grid-template-columns: minmax(220px, 1fr) minmax(180px, .6fr);
   align-items: center; gap: 0.8rem 1.2rem;

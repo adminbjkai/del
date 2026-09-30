@@ -1,19 +1,17 @@
 """Cron discovery source: /etc/crontab, /etc/cron.d/*, the periodic run-parts
-directories (cron.hourly/daily/weekly/monthly), and per-user crontabs (via
-`sudo crontab -l -u <user>`, read-only). Never edits any cron file or crontab.
+directories (cron.hourly/daily/weekly/monthly), and per-user crontabs (via the
+root helper's read-only `read_crontab` op). Never edits any cron file or crontab.
 """
 from __future__ import annotations
 
 import logging
 import os
 import re
-import subprocess
 
 from del_app.models import Resource
 
 logger = logging.getLogger("del_app.discovery.cron_src")
 
-TIMEOUT = 10
 CRONTAB_LINE_RE = re.compile(
     r"^\s*(@\w+|\S+\s+\S+\s+\S+\s+\S+\s+\S+)\s+(\S+)\s+(.*)$"
 )
@@ -110,19 +108,34 @@ def _candidate_users() -> list[str]:
     return users
 
 
+def _read_user_crontab(user: str) -> str | None:
+    """Return the user's crontab text ("" if none), or None if unreadable.
+
+    Reading another user's crontab needs root; del-web runs with
+    NoNewPrivileges (sudo can never work), so this goes through the root
+    helper's read-only `read_crontab` op.
+    """
+    try:
+        from del_app import helper_client
+        resp = helper_client.call("read_crontab", {"user": user},
+                                  dry_run=False, timeout=30)
+    except Exception as exc:
+        logger.warning("cron_src: helper unavailable, cannot read crontab for %s: %s",
+                       user, exc)
+        return None
+    if resp.get("ok"):
+        return resp.get("output") or ""
+    logger.warning("cron_src: helper could not read crontab for %s: %s",
+                   user, resp.get("error"))
+    return None
+
+
 def _parse_user_crontabs(resources: list[Resource]) -> None:
     for user in _candidate_users():
-        try:
-            proc = subprocess.run(
-                ["sudo", "-n", "crontab", "-l", "-u", user],
-                capture_output=True, text=True, timeout=TIMEOUT, check=False,
-            )
-        except Exception:
-            logger.exception("cron_src: crontab -l failed for %s", user)
-            continue
-        if proc.returncode != 0:
-            continue  # no crontab for this user
-        for line in proc.stdout.splitlines():
+        text = _read_user_crontab(user)
+        if not text:
+            continue  # no crontab for this user, or unreadable
+        for line in text.splitlines():
             stripped = line.strip()
             if not stripped or stripped.startswith("#"):
                 continue

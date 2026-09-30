@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import subprocess
 
 from del_app.models import Resource
@@ -18,6 +19,14 @@ logger = logging.getLogger("del_app.discovery.docker_src")
 TIMEOUT = 30
 BATCH_SIZE = 50
 
+
+# Label values can be credentials (e.g. `opensandbox.io/egress-auth-token`,
+# traefik basic-auth users). DEL stores names, never secret values.
+_SECRET_LABEL = re.compile(r"token|secret|passw|api[-_.]?key|auth(?!or)|credential|private[-_.]?key", re.I)
+
+
+def _redact_labels(labels: dict) -> dict:
+    return {k: ("<redacted>" if _SECRET_LABEL.search(k) else v) for k, v in (labels or {}).items()}
 
 def _run(args: list[str], timeout: int = TIMEOUT) -> str:
     """Run a read-only docker CLI command, return stdout text or "" on failure."""
@@ -144,7 +153,7 @@ def _collect_containers() -> tuple[list[Resource], dict[str, dict]]:
                 "published_ports": sorted(set(published_ports)),
                 "port_mappings": sorted(port_mappings, key=lambda p: (p["host"], p["container"])),
                 "env_var_names": _env_var_names(config.get("Env")),
-                "labels": {k: v for k, v in labels.items() if not k.startswith("com.docker.compose.project.environment")},
+                "labels": _redact_labels({k: v for k, v in labels.items() if not k.startswith("com.docker.compose.project.environment")}),
                 "bind_mounts": bind_mounts,
                 "volume_mounts": [v["name"] for v in volume_mounts if v.get("name")],
                 "created": c.get("Created"),
@@ -316,7 +325,7 @@ def _collect_volumes(container_index: dict[str, dict]) -> list[Resource]:
                 state="orphan" if not containers_using else "attached",
                 data={
                     "driver": detail.get("Driver"),
-                    "labels": labels,
+                    "labels": _redact_labels(labels),
                     "compose_project": labels.get("com.docker.compose.project"),
                     "containers_using": containers_using,
                     "projects_using": projects_using,
@@ -382,7 +391,7 @@ def _collect_networks(container_index: dict[str, dict]) -> list[Resource]:
                 data={
                     "driver": driver,
                     "scope": detail.get("Scope"),
-                    "labels": labels,
+                    "labels": _redact_labels(labels),
                     "compose_project": labels.get("com.docker.compose.project"),
                     "projects_using": projects_using,
                     "shared_across_projects": len(projects_using) > 1,

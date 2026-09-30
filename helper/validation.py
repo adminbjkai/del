@@ -21,6 +21,7 @@ from __future__ import annotations
 
 import fnmatch
 import os
+import pwd
 import re
 from typing import Iterable
 
@@ -410,3 +411,50 @@ def validate_restore_target(original_path: str, policy: dict) -> str:
         raise ValidationError(f"restore target is too shallow, refusing: {realpath!r}")
 
     return realpath
+
+
+# ---------------------------------------------------------------------------
+# read-only lookups (nginx config text, user crontabs)
+# ---------------------------------------------------------------------------
+_DEFAULT_NGINX_READ_ROOTS = (
+    "/etc/nginx/sites-enabled", "/etc/nginx/sites-available", "/etc/nginx/conf.d",
+)
+NGINX_READ_MAX_BYTES = 1024 * 1024
+
+# POSIX-ish login name; the leading character can never be '-', so the value can
+# never be parsed as a crontab option.
+_USERNAME_RE = re.compile(r"\A[A-Za-z_][A-Za-z0-9_.\-]{0,31}\Z")
+
+
+def validate_nginx_read_path(path: str, policy: dict | None = None) -> str:
+    """Validate a path the helper will *read* and return to the web tier.
+
+    The realpath must sit strictly inside one of the nginx config dirs, so the
+    op cannot be turned into a general root file-read (``/etc/shadow``, keys)
+    via ``..`` or a symlink pointing elsewhere. Returns the realpath.
+    """
+    if not isinstance(path, str) or not path:
+        raise ValidationError("nginx path must be a non-empty string")
+    if not os.path.isabs(path):
+        raise ValidationError(f"nginx path must be absolute: {path!r}")
+    if ".." in path.split("/") or "\x00" in path:
+        raise ValidationError(f"nginx path must not contain '..': {path!r}")
+    roots = (policy or {}).get("nginx_read_roots") or _DEFAULT_NGINX_READ_ROOTS
+    realpath = os.path.realpath(path)
+    if _matched_root(realpath, roots) is None:
+        raise ValidationError(
+            f"nginx path resolves outside the nginx config dirs: {realpath!r}")
+    if not os.path.isfile(realpath):
+        raise ValidationError(f"nginx path is not a regular file: {realpath!r}")
+    return realpath
+
+
+def validate_username(user: str) -> str:
+    """A login name matching a strict charset that exists in the passwd db."""
+    if not isinstance(user, str) or not _USERNAME_RE.match(user):
+        raise ValidationError(f"invalid username: {user!r}")
+    try:
+        pwd.getpwnam(user)
+    except KeyError:
+        raise ValidationError(f"unknown user: {user!r}")
+    return user

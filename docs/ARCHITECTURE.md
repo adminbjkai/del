@@ -54,7 +54,7 @@ del-web (user bjkai, groups docker+adm)
   ↓ JSON over unix socket /run/del/helper.sock (0660 root:bjkai)
 del-helper (root, Python stdlib only, ~1,100 lines across del_helper.py +
             validation.py, no web framework; runs from /usr/local/lib/del-helper/)
-  • Fixed 22-operation allowlist (see below)
+  • Fixed 24-operation allowlist (see below)
   • Validates every argument; canonicalizes paths (realpath, no symlink escape)
   • Refuses protected roots; refuses paths outside approved roots
   • Refuses protected units (del-*, sshd, nginx, docker, systemd-*, cron, …)
@@ -80,6 +80,8 @@ subprocess arg-arrays (never shell=True).
 |---|---|---|
 | ping | — | health |
 | list_listeners | — | read-only `ss -lntp` as root; used by `proc_src.py` to resolve listener ownership when the caller can't run `ss` itself |
+| read_nginx_config | path | read-only; returns one file's text. Realpath must be a regular file inside /etc/nginx/sites-enabled, sites-available or conf.d, ≤ 1 MiB, opened O_NOFOLLOW. Used by `nginx_src.py` for root-only (0600) site files — del-web runs with NoNewPrivileges, so `sudo` cannot work |
+| read_crontab | user | read-only `crontab -l -u <user>`; user must be a valid existing login name (never starts with `-`); "no crontab" → empty. Used by `cron_src.py` |
 | compose_down | project, config_files[], remove_volumes?, remove_images_mode? | config files must exist & be under approved roots |
 
 `compose_down` tears the project down by config file and then sweeps any
@@ -242,12 +244,19 @@ unconditionally on every page:
 - scans(id, started, finished, status, stats_json)
 - applications(id, slug, name, status, kind, protected, manifest_path, first_seen, last_seen)
   — `first_seen` / `last_seen` are scan IDs. The UI resolves them to `scans.started`
-  timestamps. **Installed** is computed at read time (not a column): earliest of
-  associated container `data_json.created`, directory `birthtime`/`ctime`/`mtime`,
-  else the first_seen scan time.
+  timestamps. **Installed** and **Last changed** are computed at read time (not
+  columns) by `formatting._app_dates` from the app's own non-shared resources.
+  Installed = earliest creation time: directory `birthtime`, custom unit
+  `fragment_birthtime`, enabled nginx site `file_birthtime`, container `created`;
+  capped by when DEL first saw the app (`applications.first_seen`; shown as
+  "by"/"on or before"). Directory ctime/mtime are never install signals — they
+  move whenever an entry is added. Last changed = newest of directory `mtime`,
+  git `head_committed_at`, container `created`, unit `fragment_mtime`, site `file_mtime`.
 - resources(id, type, key, display, path, state, data_json, first_seen scan, last_seen scan)
-  — directory resources include `mtime`/`ctime`/`birthtime` ISO timestamps in data_json;
-  containers include Docker `created`.
+  — directory resources include `mtime`/`ctime`/`birthtime` ISO timestamps in data_json
+  (birth time from statx via `stat -c %W`, `discovery/file_times.py`) and git
+  `head_committed_at`; custom systemd units add `fragment_birthtime`/`fragment_mtime`;
+  nginx sites add `file_birthtime`/`file_mtime`; containers include Docker `created`.
 
 - associations(app_id, resource_id, confidence, ownership, shared, data_loss_risk,
   removal_eligible, recommended_action, evidence_json, source, approved_by_user, excluded)
@@ -498,6 +507,6 @@ new reality. A rescan failure is logged and audited as
   `includeSubDomains`. No external asset origins.
 - Secrets never logged; env values stripped at the discovery source layer; the DB
   and backups directory are not world-readable.
-- Helper socket 0660 root:bjkai; 22 allowlisted operations; args validated twice;
+- Helper socket 0660 root:bjkai; 24 allowlisted operations; args validated twice;
   helper code and policy deployed root-owned outside `/apps/del`.
 - DEL itself flagged protected=1; planner refuses to plan its removal.

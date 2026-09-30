@@ -9,7 +9,7 @@ from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 from del_app import auditlog, auth
 from del_app.auth import User
 from del_app.db import get_db, q
-from del_app.web.formatting import _installed_at_from_resources, _level
+from del_app.web.formatting import _app_dates, _level
 from del_app.web.queries import (
     RESOURCE_TYPE_LABELS,
     _json_or,
@@ -48,6 +48,24 @@ _PALETTE_PAGES = [
     {"title": "Settings", "url": "/settings"},
 ]
 
+
+
+def _dates_from(assoc: dict) -> bool:
+    """Whether an association's resource dates count for its app.
+
+    Shared resources never do. Excluded ones only when a manifest declared
+    them (the operator's "this is the app's, but never remove it", e.g. the
+    notes source clone); correlator exclusions such as DEL backups are not
+    the app's own history.
+    """
+    if assoc.get("shared"):
+        return False
+    if not assoc.get("excluded"):
+        return True
+    evidence = _json_or(assoc.get("evidence_json"), [])
+    return bool(evidence) and all(
+        isinstance(e, dict) and e.get("source") == "manifest" for e in evidence
+    )
 
 @router.get("/apps", response_class=HTMLResponse)
 def apps_list(
@@ -107,12 +125,12 @@ def apps_list(
                 )
             )
             detail_sql = f"""
-                SELECT a.app_id AS app_id, r.type AS type, r.data_json AS data_json
+                SELECT a.app_id AS app_id, r.type AS type, r.data_json AS data_json,
+                       a.shared AS shared, a.excluded AS excluded, a.evidence_json AS evidence_json
                 FROM associations a
                 JOIN resources r ON r.id = a.resource_id
-                WHERE a.excluded = 0
-                  AND a.app_id IN ({id_ph})
-                  AND r.type IN ('nginx_site', 'port', 'container', 'directory')
+                WHERE a.app_id IN ({id_ph})
+                  AND r.type IN ('nginx_site', 'port', 'container', 'directory', 'systemd_unit')
             """
             detail_params: list[Any] = list(app_ids)
             # Not scoped in ?show=removed: a removed app's resources carry a
@@ -130,10 +148,14 @@ def apps_list(
 
     domains: dict[int, set] = {}
     ports: dict[int, set] = {}
-    install_signals: dict[int, list[dict]] = {}
+    date_rows: dict[int, list[dict]] = {}
     for d in detail:
         data = _json_or(d.get("data_json"), {})
         aid = d["app_id"]
+        if _dates_from(d):
+            date_rows.setdefault(aid, []).append({"type": d["type"], "data": data})
+        if d.get("excluded"):
+            continue
         if d["type"] == "nginx_site":
             # Only enabled sites contribute domains: non-enabled/stale
             # sites-available copies must never leak their server_names.
@@ -148,13 +170,6 @@ def apps_list(
         elif d["type"] == "container":
             for p in data.get("published_ports", []) or []:
                 ports.setdefault(aid, set()).add(str(p))
-            install_signals.setdefault(aid, []).append(
-                {"type": "container", "data_json": d.get("data_json")}
-            )
-        elif d["type"] == "directory":
-            install_signals.setdefault(aid, []).append(
-                {"type": "directory", "data_json": d.get("data_json")}
-            )
 
     for app in apps:
         aid = app.get("id")
@@ -168,9 +183,9 @@ def apps_list(
         last_seen_id = app.get("last_seen")
         first_seen_at = scan_times.get(int(first_seen_id)) if first_seen_id is not None else None
         last_seen_at = scan_times.get(int(last_seen_id)) if last_seen_id is not None else None
-        installed = _installed_at_from_resources(install_signals.get(aid, []))
-        # Prefer host signals; fall back to when DEL first discovered the app.
-        app["installed_at"] = installed or first_seen_at
+        # Capped only by when DEL first saw the app itself: resource rows keyed
+        # by port number or image id are reused across apps and predate them.
+        app.update(_app_dates(date_rows.get(aid, []), first_seen_at))
         app["first_seen_at"] = first_seen_at
         app["last_seen_at"] = last_seen_at
         app["is_removed"] = bool(
@@ -291,7 +306,8 @@ def app_detail(
             domains.update(data.get("server_names") or [])
     app["domains"] = sorted(domains)
 
-    # Human dates: resolve scan IDs → scan.started; install time from resources.
+    # Human dates: resolve scan IDs -> scan.started; installed / last changed
+    # from the app's own (non-excluded, non-shared) resources.
     first_seen_id = app.get("first_seen")
     last_seen_id = app.get("last_seen")
     app["first_seen_at"] = (
@@ -300,17 +316,15 @@ def app_detail(
     app["last_seen_at"] = (
         scan_times.get(int(last_seen_id)) if last_seen_id is not None else None
     )
-    install_rows = [
-        {
-            "type": a.get("resource_type"),
-            "data_json": a.get("resource_data_json"),
-        }
-        for a in assoc_rows
-        if a.get("resource_type") in ("container", "directory")
-    ]
-    app["installed_at"] = (
-        _installed_at_from_resources(install_rows) or app.get("first_seen_at")
-    )
+    # Same count as the Applications list: excluded associations are shown
+    # for review but are not the app's resources.
+    app["res_count"] = sum(1 for a in assoc_rows if not a.get("excluded"))
+    app["excluded_count"] = len(assoc_rows) - app["res_count"]
+    own = [a for a in assoc_rows if _dates_from(a)]
+    app.update(_app_dates(
+        [{"type": a.get("resource_type"), "data": a["resource_data"]} for a in own],
+        app["first_seen_at"],
+    ))
 
     return _render(
         "app_detail.html",

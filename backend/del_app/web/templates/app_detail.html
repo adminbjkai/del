@@ -12,10 +12,11 @@
 <div class="meta-row">
   <span class="meta"><span class="meta-k">Kind</span> <span class="meta-v">{{ app.get('kind') or '—' }}</span></span>
   <span class="meta"><span class="meta-k">Domains</span> <span class="meta-v">{{ m.domain_links(app.get('domains')) }}</span></span>
-  <span class="meta"><span class="meta-k">Installed</span> <span class="meta-v"><span class="dt">{{ format_dt(app.get('installed_at')) }}</span></span></span>
+  <span class="meta" title="{{ app.get('installed_source') or 'No creation time on the host' }}"><span class="meta-k">Installed</span> <span class="meta-v">{% if app.get('installed_bound') %}by {% endif %}<span class="dt">{{ format_dt(app.get('installed_at')) }}</span></span></span>
+  <span class="meta" title="{{ app.get('last_changed_source') or 'No change time on the host' }}"><span class="meta-k">Last changed</span> <span class="meta-v"><span class="dt">{{ format_dt(app.get('last_changed_at')) }}</span></span></span>
   <span class="meta"><span class="meta-k">First seen</span> <span class="meta-v"><span class="dt">{{ format_dt(app.get('first_seen_at')) }}</span></span></span>
   <span class="meta"><span class="meta-k">Last seen</span> <span class="meta-v"><span class="dt">{{ format_dt(app.get('last_seen_at')) }}</span></span></span>
-  <span class="meta"><span class="meta-k">Resources</span> <span class="meta-v">{{ associations | length }}</span></span>
+  <span class="meta"><span class="meta-k">Resources</span> <span class="meta-v">{{ app.res_count }}{% if app.excluded_count %} <span class="muted">+{{ app.excluded_count }} excluded</span>{% endif %}</span></span>
   <span class="meta"><span class="meta-k">Manifest</span> <span class="meta-v">{{ app.get('manifest_path') or '—' }}</span></span>
 </div>
 <p class="page-lede">This app's resources and their name relatedness — shared, probable owner, or possible (weak).</p>
@@ -108,8 +109,14 @@
       <dt>Kind</dt><dd>{{ app.get('kind') or '—' }}</dd>
       <dt>Domains</dt><dd>{{ m.domain_links(app.get('domains')) }}</dd>
       <dt>Installed</dt>
-      <dd title="Best available host signal (container created / project directory age), else first discovery">
-        <span class="dt">{{ format_dt(app.get('installed_at')) }}</span>
+      <dd>
+        {% if app.get('installed_bound') %}on or before {% endif %}<span class="dt">{{ format_dt(app.get('installed_at')) }}</span>
+        {% if app.get('installed_source') %}<span class="muted text-sm">({{ app.get('installed_source') }})</span>{% endif %}
+      </dd>
+      <dt>Last changed</dt>
+      <dd>
+        <span class="dt">{{ format_dt(app.get('last_changed_at')) }}</span>
+        {% if app.get('last_changed_source') %}<span class="muted text-sm">({{ app.get('last_changed_source') }})</span>{% endif %}
       </dd>
       <dt>First seen by DEL</dt>
       <dd title="Scan #{{ app.get('first_seen') or '—' }}">
@@ -120,7 +127,7 @@
         <span class="dt">{{ format_dt(app.get('last_seen_at')) }}</span>
       </dd>
       <dt>Manifest</dt><dd>{{ app.get('manifest_path') or '—' }}</dd>
-      <dt>Resources</dt><dd>{{ associations | length }}</dd>
+      <dt>Resources</dt><dd>{{ app.res_count }}{% if app.excluded_count %} <span class="muted">(+{{ app.excluded_count }} excluded, listed for review)</span>{% endif %}</dd>
     </dl>
 
     {% if resources_by_type %}

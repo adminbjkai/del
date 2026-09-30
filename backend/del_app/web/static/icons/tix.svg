@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 48 48" width="48" height="48">
+  <rect width="48" height="48" rx="12" fill="#0d1117" stroke="#30363d" stroke-width="2"/>
+  <rect x="8" y="14" width="32" height="20" rx="4" fill="#161b22" stroke="#58a6ff" stroke-width="2"/>
+  <circle cx="8" cy="24" r="3" fill="#0d1117" stroke="#58a6ff" stroke-width="2"/>
+  <circle cx="40" cy="24" r="3" fill="#0d1117" stroke="#58a6ff" stroke-width="2"/>
+  <line x1="20" y1="18" x2="20" y2="30" stroke="#58a6ff" stroke-width="1.5" stroke-dasharray="2 2"/>
+  <text x="27" y="27" font-family="-apple-system, sans-serif" font-size="9" font-weight="bold" fill="#e6edf3">NYC</text>
+</svg>

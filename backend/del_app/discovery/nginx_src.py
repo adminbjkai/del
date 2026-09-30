@@ -1,14 +1,14 @@
 """Nginx discovery source: tolerant regex parser for /etc/nginx/sites-enabled
 and /etc/nginx/sites-available. Read-only: only reads files, never edits or
-reloads nginx. Falls back to `sudo cat` only if direct read fails (files here
-are world-readable, but hosts may differ)."""
+reloads nginx. Files that are not readable by the web user (root-only 0600
+sites) are read through the root helper's read-only `read_nginx_config` op."""
 from __future__ import annotations
 
 import logging
 import os
 import re
-import subprocess
 
+from del_app.discovery.file_times import stat_times
 from del_app.models import Resource
 
 logger = logging.getLogger("del_app.discovery.nginx_src")
@@ -22,17 +22,22 @@ def _read_file(path: str) -> str | None:
         with open(path, "r", errors="replace") as f:
             return f.read()
     except PermissionError:
-        try:
-            proc = subprocess.run(
-                ["sudo", "-n", "cat", path], capture_output=True, text=True, timeout=10
-            )
-            if proc.returncode == 0:
-                return proc.stdout
-            logger.warning("nginx_src: sudo cat failed for %s: %s", path, proc.stderr[:200])
-        except Exception:
-            logger.exception("nginx_src: sudo cat errored for %s", path)
-    except Exception:
-        logger.exception("nginx_src: failed to read %s", path)
+        pass
+    except Exception as exc:
+        logger.warning("nginx_src: failed to read %s: %s", path, exc)
+        return None
+    # Root-only (0600) site file. del-web runs with NoNewPrivileges, so sudo
+    # can never work here; ask the root helper for the read-only file text.
+    try:
+        from del_app import helper_client
+        resp = helper_client.call("read_nginx_config", {"path": path},
+                                  dry_run=False, timeout=30)
+    except Exception as exc:
+        logger.warning("nginx_src: helper unavailable, cannot read %s: %s", path, exc)
+        return None
+    if resp.get("ok"):
+        return resp.get("output") or ""
+    logger.warning("nginx_src: helper refused to read %s: %s", path, resp.get("error"))
     return None
 
 
@@ -116,6 +121,9 @@ def _resource_from_file(path: str, enabled: bool, stale_copy: bool = False) -> R
     text = _read_file(path)
     if text is None:
         return None
+    # Commented-out directives are not config (the stock `default` site
+    # carries a whole commented example server block).
+    text = re.sub(r"#[^\n]*", "", text)
 
     symlink_target = None
     if os.path.islink(path):
@@ -218,5 +226,15 @@ def collect() -> list[Resource]:
                     resources.append(res)
     except Exception:
         logger.exception("nginx_src: failed to list %s", SITES_AVAILABLE)
+
+    # Site file times (stat follows the sites-enabled symlink to the real file).
+    try:
+        times = stat_times([r.path for r in resources if r.path])
+        for r in resources:
+            t = times.get(r.path) or {}
+            r.data["file_birthtime"] = t.get("birthtime")
+            r.data["file_mtime"] = t.get("mtime")
+    except Exception:
+        logger.exception("nginx_src: file times failed")
 
     return resources

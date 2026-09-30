@@ -40,6 +40,8 @@ class Manifest(pydantic.BaseModel):
     notes: str | None = None
     shared: list[str] = pydantic.Field(default_factory=list)
     excluded: list[str] = pydantic.Field(default_factory=list)
+    # File the manifest was loaded from (set by load_all, never serialized).
+    _source_path: str | None = pydantic.PrivateAttr(default=None)
 
     @pydantic.field_validator("id")
     @classmethod
@@ -78,6 +80,7 @@ def load_all() -> dict[str, Manifest]:
             if not data:
                 continue
             manifest = Manifest(**data)
+            manifest._source_path = path
             result[manifest.id] = manifest
         except Exception:
             logger.exception("manifests: failed to load %s", path)

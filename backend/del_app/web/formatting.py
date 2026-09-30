@@ -2,6 +2,7 @@
 display strings. No DB access, no routes."""
 from __future__ import annotations
 
+from datetime import datetime
 from typing import Any
 
 from del_app.web.queries import _json_or
@@ -166,43 +167,74 @@ def _iso_sort_key(value: Any) -> str:
     return dt.strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
-def _earliest_iso(*values: Any) -> str | None:
-    """Return the earliest parseable timestamp as ISO-UTC, or None."""
-    best_dt = None
-    for v in values:
-        dt = _parse_dt(v)
-        if dt is None:
-            continue
-        if best_dt is None or dt < best_dt:
-            best_dt = dt
-    if best_dt is None:
-        return None
-    return best_dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+def _app_dates(resource_rows: list[dict], first_seen_at: Any = None) -> dict:
+    """Installed / last-changed times for one app from its own resources.
 
+    Installed = the earliest time something of the app was *created* on this
+    host: directory birth time (statx), custom unit file birth time, enabled
+    nginx site file birth time, container creation. Directory ctime/mtime are
+    never used for it — they move whenever a file is added to the folder.
+    DEL's own first sighting is an upper bound: an app it saw on 07-19 was
+    installed on or before 07-19 even if its files were recreated since, so
+    when no creation time is older, the date is shown as "on or before".
 
-def _installed_at_from_resources(resource_rows: list[dict]) -> str | None:
-    """Best-effort install time from associated containers/directories.
+    Last changed = the newest of: directory mtime, last git commit, container
+    (re)creation, unit/site file edits.
 
-    Preference order of *signals* (earliest wins across all of them):
-      - container `created` (Docker Created)
-      - directory birthtime / ctime / mtime (filesystem)
-    Returns ISO-UTC string or None when no signal is available.
+    Shared resources are skipped: another app's history is not this one's.
     """
-    candidates: list[Any] = []
+    installed: list[tuple[datetime, str]] = []
+    changed: list[tuple[datetime, str]] = []
+
+    def _add(bucket: list, value: Any, source: str) -> None:
+        dt = _parse_dt(value)
+        if dt is not None:
+            bucket.append((dt, source))
+
     for r in resource_rows:
+        if r.get("shared"):
+            continue
         rtype = r.get("type") or r.get("resource_type")
         data = r.get("data") if isinstance(r.get("data"), dict) else None
         if data is None:
             data = _json_or(r.get("data_json") or r.get("resource_data_json"), {})
-        if rtype == "container":
-            if data.get("created"):
-                candidates.append(data["created"])
-        elif rtype == "directory":
-            for key in ("birthtime", "ctime", "mtime"):
-                if data.get(key):
-                    candidates.append(data[key])
-                    break  # one directory contributes its best single signal
-    return _earliest_iso(*candidates)
+        if rtype == "directory":
+            _add(installed, data.get("birthtime"), "folder created")
+            _add(changed, data.get("mtime"), "folder contents changed")
+            _add(changed, (data.get("git") or {}).get("head_committed_at"), "last git commit")
+        elif rtype == "container":
+            _add(installed, data.get("created"), "container created")
+            _add(changed, data.get("created"), "container recreated")
+        elif rtype == "systemd_unit" and data.get("is_custom"):
+            _add(installed, data.get("fragment_birthtime"), "service unit created")
+            _add(changed, data.get("fragment_mtime"), "service unit edited")
+        elif rtype == "nginx_site" and data.get("enabled"):
+            _add(installed, data.get("file_birthtime"), "nginx site created")
+            _add(changed, data.get("file_mtime"), "nginx site edited")
+
+    first_seen = _parse_dt(first_seen_at)
+    out: dict = {
+        "installed_at": None, "installed_source": None, "installed_bound": False,
+        "last_changed_at": None, "last_changed_source": None,
+    }
+    if installed:
+        dt, source = min(installed, key=lambda t: t[0])
+        if first_seen is not None and first_seen < dt:
+            dt, source = first_seen, "first seen by DEL; files recreated since"
+            out["installed_bound"] = True
+    elif first_seen is not None:
+        dt, source = first_seen, "first seen by DEL; no creation time on host"
+        out["installed_bound"] = True
+    else:
+        dt = None
+    if dt is not None:
+        out["installed_at"] = dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+        out["installed_source"] = source
+    if changed:
+        dt, source = max(changed, key=lambda t: t[0])
+        out["last_changed_at"] = dt.strftime("%Y-%m-%dT%H:%M:%SZ")
+        out["last_changed_source"] = source
+    return out
 
 
 def _duration(started: Any, finished: Any) -> str:
