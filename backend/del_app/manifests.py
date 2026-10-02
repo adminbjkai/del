@@ -62,9 +62,10 @@ def _path_for(slug: str) -> str:
     return path
 
 
-def load_all() -> dict[str, Manifest]:
+def load_all(*, strict: bool = False) -> dict[str, Manifest]:
     """Load every manifest under manifests_dir, keyed by app slug. Tolerant of
-    a missing directory or individual malformed files (log + skip)."""
+    a missing directory or individual malformed files (log + skip). Scans use
+    strict=True so invalid safety overrides cannot silently disappear."""
     result: dict[str, Manifest] = {}
     manifests_dir = _manifests_dir()
     if not os.path.isdir(manifests_dir):
@@ -84,6 +85,8 @@ def load_all() -> dict[str, Manifest]:
             result[manifest.id] = manifest
         except Exception:
             logger.exception("manifests: failed to load %s", path)
+            if strict:
+                raise ValueError(f"invalid manifest: {name}") from None
             continue
     return result
 

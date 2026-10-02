@@ -167,32 +167,38 @@ def _type_counts(conn, latest_scan: int | None) -> list[dict]:
     ]
 
 
-def _owner_map(conn, resource_ids: list[int]) -> dict[int, dict]:
-    """resource_id -> {"apps": [{slug,name}], "shared": bool} for non-excluded
-    associations. Read-only join over associations + applications."""
+def _owner_map(conn, resource_ids: list[int], *, latest: int | None = None) -> dict[int, dict]:
+    """Non-excluded owners present in the requested completed scan.
+
+    Bound each query below SQLite's legacy 999-parameter limit. A resource
+    page or assistant context can contain thousands of process/file rows.
+    """
     out: dict[int, dict] = {}
     if not resource_ids:
         return out
-    placeholders = ",".join("?" for _ in resource_ids)
-    rows = _rows(
-        q(
-            conn,
-            f"""
+    if latest is None:
+        latest = _latest_scan_id(conn)
+    unique_ids = list(dict.fromkeys(resource_ids))
+    for offset in range(0, len(unique_ids), 400):
+        chunk = unique_ids[offset:offset + 400]
+        placeholders = ",".join("?" for _ in chunk)
+        sql = f"""
             SELECT a.resource_id AS rid, a.shared AS shared,
                    ap.slug AS slug, ap.name AS name
             FROM associations a
             JOIN applications ap ON ap.id = a.app_id
             WHERE a.excluded = 0 AND a.resource_id IN ({placeholders})
-            """,
-            tuple(resource_ids),
-        )
-    )
-    for r in rows:
-        entry = out.setdefault(r["rid"], {"apps": [], "shared": False})
-        if not any(a["slug"] == r["slug"] for a in entry["apps"]):
-            entry["apps"].append({"slug": r["slug"], "name": r["name"]})
-        if r["shared"]:
-            entry["shared"] = True
+        """
+        params = tuple(chunk)
+        if latest is not None:
+            sql += " AND ap.last_seen = ?"
+            params += (latest,)
+        for r in q(conn, sql, params):
+            entry = out.setdefault(r["rid"], {"apps": [], "shared": False})
+            if not any(a["slug"] == r["slug"] for a in entry["apps"]):
+                entry["apps"].append({"slug": r["slug"], "name": r["name"]})
+            if r["shared"]:
+                entry["shared"] = True
     return out
 
 

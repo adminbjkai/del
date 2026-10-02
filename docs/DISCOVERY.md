@@ -271,12 +271,40 @@ the freshly correlated set. It then deletes the associations of every applicatio
 whose `last_seen` is older than this scan.
 
 <a id="approvals-are-not-durable"></a>
-**Consequence, and it is important: per-resource `approve`, `exclude` and
-`mark-shared` do not survive a scan.** Those actions write `approved_by_user`,
-`excluded` and `shared` onto an association row, and the next scan replaces that
-row. Use them immediately before building a plan. For a correction that must
-persist, edit the app's manifest — `shared:` and `excluded:` are manifest fields
-precisely because correlation re-derives everything else from scratch.
+### Operator decisions across rescans
+
+Rescans preserve `approve`, `exclude`, and `mark-shared` for an app/resource pair
+that remains associated. `user_excluded` and `user_shared` distinguish operator
+protections from correlation-derived flags; inferred shared status is recomputed,
+so a departed owner does not leave a permanent shared flag. Approval survives
+only when confidence, ownership, effective shared status, data-loss risk, and
+removal eligibility are unchanged. A changed safety classification requires a
+fresh approval. An approval still does not promote a low-confidence association.
+
+Migration 004 conservatively carries existing exclusions into `user_excluded`
+because the old schema did not distinguish their origin. Old shared flags cannot
+be identified as manual; new `mark-shared` actions are recorded explicitly.
+Decisions are dropped when an app/resource association disappears. Use manifests
+for declarations that must persist through disappearance and rediscovery.
+
+The legacy anchor above remains for existing links.
+
+### Atomic publication and failures
+
+Discovery runs before the write transaction. Resources, applications, associations,
+stale-owner cleanup, and the `done` scan status commit together. A source that
+raises, an invalid manifest, a correlation failure, or a persistence failure marks
+the scan failed and leaves the previous inventory intact. Collectors still log and
+skip individual unreadable or transient artifacts internally; this is not a
+promise that every partial source failure is detected.
+
+A Linux advisory lock beside the DB (`del.scan.lock`) prevents simultaneous scans
+from the web worker and CLI; the existing thread lock also rejects concurrent calls
+inside a process. Startup recovery leaves an actively locked CLI scan alone.
+Inventory pages, removal-plan reads, and assistant context use SQLite read
+transactions so a scan completing between queries cannot mix two inventories.
+Resource persistence uses a batched SQLite upsert and three lookup queries instead
+of one lookup for each resource and app.
 
 The stale-owner purge exists because an app removed from the host used to keep its
 associations forever. Those rows point at resources that are still live, so they
@@ -311,7 +339,7 @@ Both extra conditions were added deliberately:
 
 The **Applications** list and an application's **detail page** only show
 applications/resources present as of the *most recent* scan by default (filtered
-on `last_seen`/`state` against the latest `scans.id`) — a resource or app removed
+on `last_seen` against the latest scan with `status = 'done'`) — a resource or app removed
 in an earlier scan does not linger in the UI forever. Add `?show=removed` to the
 Applications URL to see history including apps no longer present. An app's detail
 page shows a "not present in the latest scan" banner instead of hiding it
@@ -357,8 +385,8 @@ finds).
 A manifest entry is the only way to make a `probable` or `possible` association
 removable — correlation never promotes them on its own, and neither does the
 per-row *approve* button (see "What 'requires approval' actually means"). It is
-also the only correction that survives a rescan, since a scan rewrites every
-association row it touches.
+the way to retain a declaration even if the association disappears and is
+rediscovered later; per-row review decisions survive while the pair remains associated.
 
 ## Adding a new detector
 

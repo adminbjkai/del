@@ -76,7 +76,7 @@ def apps_list(
     status: str = "",
 ) -> HTMLResponse:
     show_removed = request.query_params.get("show") == "removed"
-    conn = get_db()
+    conn = get_db(read_snapshot=True)
     try:
         latest = _latest_scan_id(conn)
         scan_times = _scan_started_map(conn)
@@ -210,7 +210,7 @@ def apps_list(
 def app_detail(
     slug: str, request: Request, response: Response, user: User = Depends(auth.require_user)
 ) -> HTMLResponse:
-    conn = get_db()
+    conn = get_db(read_snapshot=True)
     try:
         rows = q(conn, "SELECT * FROM applications WHERE slug = ?", (slug,))
         found = _rows(rows)
@@ -248,7 +248,7 @@ def app_detail(
         # to one of this app's resources — used for the shared-resource
         # callout's "other apps" links and the Overview "Related apps" list.
         resource_ids = [a["resource_id"] for a in assoc_rows if a.get("resource_id") is not None]
-        owner_map = _owner_map(conn, resource_ids)
+        owner_map = _owner_map(conn, resource_ids, latest=assoc_scan)
     finally:
         conn.close()
 
@@ -356,9 +356,9 @@ def rescan_approve(
     # An unrecognised action used to fall through silently: nothing was
     # updated, yet an audit record was written and the UI flashed success.
     setters = {
-        "approve": "approved_by_user = 1, excluded = 0",
-        "exclude": "excluded = 1",
-        "mark-shared": "shared = 1",
+        "approve": "approved_by_user = 1, excluded = 0, user_excluded = 0",
+        "exclude": "excluded = 1, user_excluded = 1",
+        "mark-shared": "shared = 1, user_shared = 1",
     }
     if action not in setters:
         return JSONResponse({"error": f"unknown action: {action}"}, status_code=400)
@@ -383,6 +383,9 @@ def rescan_approve(
             status_code=303,
         )
 
+    from del_app.web.orphans import invalidate_orphan_count
+
+    invalidate_orphan_count()
     auditlog.audit(user.id, f"association.{action}", f"{slug}#{association_id}", {})
     labels = {"approve": "approved", "exclude": "excluded", "mark-shared": "marked+shared"}
     return RedirectResponse(
@@ -394,29 +397,18 @@ def rescan_approve(
 def palette_json(user: User = Depends(auth.require_user)) -> JSONResponse:
     """Command-palette data feed: known apps (from the latest completed scan)
     plus the sidebar's static page list."""
-    conn = get_db()
+    conn = get_db(read_snapshot=True)
     try:
         latest = _latest_scan_id(conn)
-        apps_sql = "SELECT slug, name, status FROM applications"
+        apps_sql = "SELECT id, slug, name, status FROM applications"
         params: tuple = ()
         if latest is not None:
             apps_sql += " WHERE last_seen = ?"
             params = (latest,)
         apps_sql += " ORDER BY name COLLATE NOCASE"
         app_rows = _rows(q(conn, apps_sql, params))
-        app_ids = []
-        slug_to_id = {}
-        if app_rows:
-            id_rows = _rows(q(
-                conn,
-                "SELECT id, slug FROM applications WHERE slug IN ({})".format(
-                    ",".join("?" for _ in app_rows)
-                ),
-                tuple(a["slug"] for a in app_rows),
-            ))
-            for r in id_rows:
-                slug_to_id[r["slug"]] = r["id"]
-            app_ids = list(slug_to_id.values())
+        slug_to_id = {a["slug"]: a["id"] for a in app_rows}
+        app_ids = list(slug_to_id.values())
 
         domains_by_app: dict[int, set] = {}
         if app_ids and latest is not None:

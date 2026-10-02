@@ -91,7 +91,7 @@ def ask(
         target = None
 
     cfg = get_settings().assistant
-    conn = get_db()
+    conn = get_db(read_snapshot=True)
     try:
         bundle = build_context(conn, scope, target, cfg.context_budget_chars)
     finally:

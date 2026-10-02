@@ -26,14 +26,16 @@ jobs:
         working-directory: backend
         run: python -m pytest ../tests/ -q -W error
 
-  docs:
+  javascript:
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    timeout-minutes: 5
     steps:
       - uses: actions/checkout@v5
       - uses: actions/setup-node@v5
         with:
           node-version: "22"
-      - name: Check Fern links
-        working-directory: fern
-        run: npx --yes fern-api docs broken-links
+      - name: Check application JavaScript syntax
+        run: |
+          node --check backend/del_app/web/static/app.js
+          node --check backend/del_app/web/static/assistant.js
+          node --check backend/del_app/web/static/theme-init.js

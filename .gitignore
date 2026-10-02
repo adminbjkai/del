@@ -8,7 +8,6 @@ data/audit/raw-*.txt
 config/secret.key
 config/*-password.txt
 config/*-api-key.txt
-fern/node_modules/
 .pytest_cache/
 data/
 docs/server-audit.md

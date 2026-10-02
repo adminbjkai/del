@@ -64,7 +64,7 @@ def resources_view(
     filter: str = "",
 ) -> HTMLResponse:
     db_type = _normalize_type(res_type)
-    conn = get_db()
+    conn = get_db(read_snapshot=True)
     try:
         latest = _latest_scan_id(conn)
         type_counts = _type_counts(conn, latest)

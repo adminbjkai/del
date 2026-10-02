@@ -1,17 +1,20 @@
 """Top-level discovery+correlation orchestrator: collects from every discovery
-source (each independently try/except'd so one failing source doesn't abort
-the scan), correlates into apps/associations, and persists everything into the
+source, rejects scans with failed sources, correlates into apps/associations,
+and atomically publishes everything into the
 scans/applications/resources/associations tables described in
 docs/ARCHITECTURE.md. Returns the new scan id.
 """
 from __future__ import annotations
 
+import fcntl
 import json
 import logging
 import threading
 import time
+from pathlib import Path
 
 from del_app import db
+from del_app.config import get_settings
 from del_app.correlate import build_apps
 from del_app.discovery import (
     compose_src, cron_src, docker_src, fs_src, nginx_src, proc_src, systemd_src,
@@ -41,16 +44,14 @@ class ScanInProgressError(RuntimeError):
 
 
 def scan_state() -> dict:
-    """Return the state of the currently in-process running scan, if any.
+    """Return the current scan state for the web worker or admin CLI.
 
-    Uses the same in-process lock as run_scan(): if it's held, a scan is
-    running in this process and the newest 'running' row in the scans table
-    describes it. Returns {"running": False, "scan_id": None, "started": None}
+    Reports scans started by either the web worker or the admin CLI. The
+    in-process lock also covers the brief interval before a scan row exists.
+    Returns {"running": False, "scan_id": None, "started": None}
     when no scan is running.
     """
     running = _scan_lock.locked()
-    if not running:
-        return {"running": False, "scan_id": None, "started": None}
     conn = db.get_db()
     try:
         rows = db.q(
@@ -60,8 +61,33 @@ def scan_state() -> dict:
     finally:
         conn.close()
     if not rows:
-        return {"running": True, "scan_id": None, "started": None}
+        return {"running": running, "scan_id": None, "started": None}
+    if not running:
+        try:
+            handle = _lock_scan_file()
+        except ScanInProgressError:
+            pass
+        else:
+            handle.close()
+            # A crashed CLI can leave a running row without an active worker.
+            return {"running": False, "scan_id": None, "started": None}
     return {"running": True, "scan_id": rows[0]["id"], "started": rows[0]["started"]}
+
+
+def _lock_scan_file():
+    """Linux advisory lock shared by the web worker and admin CLI."""
+    path = Path(get_settings().db_path).with_suffix(".scan.lock")
+    path.parent.mkdir(parents=True, exist_ok=True)
+    handle = path.open("a")
+    try:
+        fcntl.flock(handle, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except BlockingIOError:
+        handle.close()
+        raise ScanInProgressError("a scan is already in progress") from None
+    except BaseException:
+        handle.close()
+        raise
+    return handle
 
 
 def abandon_stale_scans(reason: str = "abandoned: process restart or crash mid-scan") -> int:
@@ -72,8 +98,13 @@ def abandon_stale_scans(reason: str = "abandoned: process restart or crash mid-s
     startup so Settings/dashboard never show ghost in-progress scans.
     Returns the number of rows updated.
     """
-    conn = db.get_db()
     try:
+        scan_file = _lock_scan_file()
+    except ScanInProgressError:
+        return 0  # another process is actively scanning, not abandoned
+    conn = None
+    try:
+        conn = db.get_db()
         stats = json.dumps({"abandoned": True, "reason": reason})
         cur = conn.execute(
             "UPDATE scans SET status = 'failed', finished = datetime('now'), "
@@ -86,20 +117,26 @@ def abandon_stale_scans(reason: str = "abandoned: process restart or crash mid-s
             logger.warning("scanner: abandoned %s stale running scan(s): %s", n, reason)
         return n
     finally:
-        conn.close()
+        if conn is not None:
+            conn.close()
+        scan_file.close()
 
 
 def _collect_all() -> tuple[list[Resource], dict[str, int]]:
     resources: list[Resource] = []
     per_source_counts: dict[str, int] = {}
+    failed: list[str] = []
     for name, collect_fn in SOURCES:
         try:
             found = collect_fn()
         except Exception:
             logger.exception("scanner: source %s failed entirely", name)
+            failed.append(name)
             found = []
         per_source_counts[name] = len(found)
         resources.extend(found)
+    if failed:
+        raise RuntimeError("discovery sources failed: " + ", ".join(failed))
     return resources, per_source_counts
 
 
@@ -112,10 +149,13 @@ def run_scan() -> int:
     if not _scan_lock.acquire(blocking=False):
         raise ScanInProgressError("a scan is already in progress")
 
-    started = time.time()
+    started = time.monotonic()
     scan_id: int | None = None
-    conn = db.get_db()
+    conn = None
+    scan_file = None
     try:
+        scan_file = _lock_scan_file()
+        conn = db.get_db()
         # Safety: any leftover 'running' rows from a prior crash block clarity
         # in the UI even though inventory uses status='done' only.
         conn.execute(
@@ -131,46 +171,47 @@ def run_scan() -> int:
 
         resources, per_source_counts = _collect_all()
 
-        manifests = {}
-        try:
-            manifests = load_all()
-        except Exception:
-            logger.exception("scanner: load_all manifests failed")
+        # Fail closed: correlation/manifest failures must never publish an
+        # empty inventory and mark real apps removed.
+        manifests = load_all(strict=True)
+        apps = build_apps(resources, manifests)
 
-        try:
-            apps = build_apps(resources, manifests)
-        except Exception:
-            logger.exception("scanner: build_apps failed")
-            apps = []
+        # Acquire the write lock only after host discovery. WAL readers keep
+        # seeing the complete previous inventory until this transaction commits.
+        conn.execute("BEGIN IMMEDIATE")
+        conn.executemany(
+            "INSERT INTO resources (type, key, display, path, state, data_json, first_seen, last_seen) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?) "
+            "ON CONFLICT(type, key) DO UPDATE SET display=excluded.display, path=excluded.path, "
+            "state=excluded.state, data_json=excluded.data_json, last_seen=excluded.last_seen",
+            ((r.type, r.key, r.display, r.path, r.state, json.dumps(r.data, default=str), scan_id, scan_id)
+             for r in resources),
+        )
+        resource_ids = {
+            (row["type"], row["key"]): row["id"]
+            for row in conn.execute("SELECT id, type, key FROM resources WHERE last_seen=?", (scan_id,))
+        }
+        app_ids = {
+            row["slug"]: row["id"]
+            for row in conn.execute("SELECT id, slug FROM applications")
+        }
+        reviews = {
+            (row["app_id"], row["resource_id"]): dict(row)
+            for row in conn.execute(
+                "SELECT app_id, resource_id, approved_by_user, user_excluded, user_shared, "
+                "confidence, ownership, shared, data_loss_risk, removal_eligible "
+                "FROM associations WHERE approved_by_user = 1 OR user_excluded = 1 OR user_shared = 1"
+            )
+        }
 
-        resource_ids: dict[tuple[str, str], int] = {}
-        for r in resources:
-            existing = db.q(conn, "SELECT id FROM resources WHERE type=? AND key=?", (r.type, r.key))
-            data_json = json.dumps(r.data, default=str)
-            if existing:
-                rid = existing[0]["id"]
-                conn.execute(
-                    "UPDATE resources SET display=?, path=?, state=?, data_json=?, last_seen=? WHERE id=?",
-                    (r.display, r.path, r.state, data_json, scan_id, rid),
-                )
-            else:
-                cur = conn.execute(
-                    "INSERT INTO resources (type, key, display, path, state, data_json, first_seen, last_seen) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-                    (r.type, r.key, r.display, r.path, r.state, data_json, scan_id, scan_id),
-                )
-                rid = cur.lastrowid
-            resource_ids[(r.type, r.key)] = rid
-        conn.commit()
 
         app_count = 0
         assoc_count = 0
         for record, associations in apps:
             manifest = manifests.get(record.slug)
             manifest_path = manifest._source_path if manifest is not None else None
-            existing_app = db.q(conn, "SELECT id FROM applications WHERE slug=?", (record.slug,))
-            if existing_app:
-                app_id = existing_app[0]["id"]
+            app_id = app_ids.get(record.slug)
+            if app_id is not None:
                 conn.execute(
                     "UPDATE applications SET name=?, status=?, kind=?, protected=?, manifest_path=?, "
                     "last_seen=? WHERE id=?",
@@ -185,6 +226,7 @@ def run_scan() -> int:
                      manifest_path, scan_id, scan_id),
                 )
                 app_id = cur.lastrowid
+                app_ids[record.slug] = app_id
             app_count += 1
 
             # Replace this app's associations with the freshly correlated set.
@@ -193,15 +235,28 @@ def run_scan() -> int:
                 rid = resource_ids.get((a.resource_type, a.resource_key))
                 if rid is None:
                     continue
+                review = reviews.get((app_id, rid), {})
+                shared = int(a.shared or review.get("user_shared", 0))
+                # An approval is not permission to remove a newly shared or
+                # riskier resource. Keep it only while the safety classification
+                # is unchanged; exclusions/shared protections remain in force.
+                safety = (a.confidence, a.ownership, shared, a.data_loss_risk, a.removal_eligible)
+                prior_safety = tuple(review.get(field) for field in (
+                    "confidence", "ownership", "shared", "data_loss_risk", "removal_eligible",
+                ))
+                approved = int(bool(review.get("approved_by_user")) and safety == prior_safety)
                 conn.execute(
                     "INSERT INTO associations (app_id, resource_id, confidence, ownership, shared, "
-                    "data_loss_risk, removal_eligible, recommended_action, evidence_json, source, excluded) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                    "data_loss_risk, removal_eligible, recommended_action, evidence_json, source, excluded, "
+                    "approved_by_user, user_excluded, user_shared) "
+                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
                     (
-                        app_id, rid, a.confidence, a.ownership, int(a.shared),
+                        app_id, rid, a.confidence, a.ownership, shared,
                         a.data_loss_risk, a.removal_eligible, a.recommended_action,
                         json.dumps([e.model_dump() for e in a.evidence]),
-                        "correlate", int(a.excluded),
+                        "correlate", int(a.excluded or review.get("user_excluded", 0)),
+                        approved, review.get("user_excluded", 0),
+                        review.get("user_shared", 0),
                     ),
                 )
                 assoc_count += 1
@@ -224,10 +279,9 @@ def run_scan() -> int:
             "UPDATE applications SET status='removed' WHERE last_seen < ? AND status != 'removed'",
             (scan_id,),
         )
-        conn.commit()
 
         stats = {
-            "duration_seconds": round(time.time() - started, 1),
+            "duration_seconds": round(time.monotonic() - started, 1),
             "resources_total": len(resources),
             "resources_by_source": per_source_counts,
             "apps_total": app_count,
@@ -240,14 +294,18 @@ def run_scan() -> int:
         )
         conn.commit()
         return int(scan_id)
-    except Exception:
+    except ScanInProgressError:
+        raise
+    except Exception as exc:
         logger.exception("scanner: run_scan failed")
+        if conn is not None:
+            conn.rollback()
         if scan_id is not None:
             try:
                 conn.execute(
                     "UPDATE scans SET finished=datetime('now'), status='failed', "
                     "stats_json=? WHERE id=?",
-                    (json.dumps({"error": "run_scan raised", "duration_seconds": round(time.time() - started, 1)}),
+                    (json.dumps({"error": str(exc), "duration_seconds": round(time.monotonic() - started, 1)}),
                      scan_id),
                 )
                 conn.commit()
@@ -259,4 +317,6 @@ def run_scan() -> int:
             conn.close()
         except Exception:
             pass
+        if scan_file is not None:
+            scan_file.close()
         _scan_lock.release()

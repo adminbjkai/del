@@ -613,8 +613,8 @@ def _seed_resources(settings_env):
         scan_id = x(conn, "INSERT INTO scans (status) VALUES ('done')")
         app_id = x(
             conn,
-            "INSERT INTO applications (slug, name, status, kind) VALUES (?,?,?,?)",
-            ("web-owner", "Web Owner", "running", "compose"),
+            "INSERT INTO applications (slug, name, status, kind, last_seen) VALUES (?,?,?,?,?)",
+            ("web-owner", "Web Owner", "running", "compose", scan_id),
         )
         cont_id = x(
             conn,
@@ -2465,3 +2465,92 @@ def test_scan_records_manifest_path(settings_env):
     loaded = manifests.load_all()["mfapp"]
     assert loaded._source_path and loaded._source_path.endswith("mfapp.yaml")
     assert "_source_path" not in loaded.model_dump()
+
+
+def test_healthz_checks_schema_and_returns_unavailable(settings_env):
+    from del_app.db import get_db
+    from del_app.main import create_app
+    # Avoid startup recovery touching this deliberately broken schema.
+    client = TestClient(create_app())
+    assert client.get("/healthz").json() == {"ok": True, "scan": None}
+    conn = get_db()
+    try:
+        conn.execute("DROP TABLE associations")
+        conn.commit()
+    finally:
+        conn.close()
+    response = client.get("/healthz")
+    assert response.status_code == 503
+    assert response.json() == {"ok": False, "scan": None}
+    assert "associations" not in response.text
+
+
+def test_review_invalidates_dashboard_orphan_count(authed_client, settings_env):
+    from del_app.db import get_db, x
+    from del_app.web.orphans import _actionable_orphan_count, invalidate_orphan_count
+    conn = get_db()
+    try:
+        scan = x(conn, "INSERT INTO scans (status) VALUES ('done')")
+        app = x(conn, "INSERT INTO applications (slug, name, last_seen) VALUES ('review-app', 'Review', ?)", (scan,))
+        resource = x(conn, "INSERT INTO resources (type, key, display, data_json, last_seen) "
+                          "VALUES ('directory', '/apps/review-app', 'Review', '{}', ?)", (scan,))
+        association = x(conn, "INSERT INTO associations (app_id, resource_id, confidence) VALUES (?, ?, 95)", (app, resource))
+        invalidate_orphan_count()
+        assert _actionable_orphan_count(conn, scan) == 0
+        csrf = _with_csrf(authed_client)
+        response = authed_client.post('/apps/review-app/rescan-approve', data={
+            'csrf_token': csrf, 'association_id': association, 'action': 'exclude',
+        }, follow_redirects=False)
+        assert response.status_code == 303
+        assert _actionable_orphan_count(conn, scan) == 1
+        assert conn.execute('SELECT user_excluded FROM associations').fetchone()[0] == 1
+    finally:
+        conn.close()
+
+
+def test_owner_map_handles_large_inventory_and_ignores_stale_owners(settings_env):
+    from del_app.db import get_db, x
+    from del_app.web.queries import _owner_map
+    conn = get_db()
+    try:
+        old = x(conn, "INSERT INTO scans (status) VALUES ('done')")
+        latest = x(conn, "INSERT INTO scans (status) VALUES ('done')")
+        stale = x(conn, "INSERT INTO applications (slug, name, last_seen) VALUES ('gone', 'Gone', ?)", (old,))
+        current = x(conn, "INSERT INTO applications (slug, name, last_seen) VALUES ('here', 'Here', ?)", (latest,))
+        ids = []
+        for i in range(1100):
+            ids.append(conn.execute("INSERT INTO resources (type, key, last_seen) VALUES ('process', ?, ?)", (str(i), latest)).lastrowid)
+        conn.executemany("INSERT INTO associations (app_id, resource_id, confidence) VALUES (?, ?, 95)", [(current, rid) for rid in ids])
+        conn.execute("INSERT INTO associations (app_id, resource_id, confidence, shared) VALUES (?, ?, 95, 1)", (stale, ids[0]))
+        conn.commit()
+        owners = _owner_map(conn, ids + ids)
+        assert len(owners) == 1100
+        assert owners[ids[0]] == {'apps': [{'slug': 'here', 'name': 'Here'}], 'shared': False}
+        assert _owner_map(conn, [ids[0]], latest=old)[ids[0]]['apps'][0]['slug'] == 'gone'
+    finally:
+        conn.close()
+
+
+def test_dashboard_keeps_completed_scan_after_many_failed_attempts(authed_client, settings_env):
+    from del_app.db import get_db, x
+    conn = get_db()
+    try:
+        done = x(conn, "INSERT INTO scans (status) VALUES ('done')")
+        for _ in range(6):
+            x(conn, "INSERT INTO scans (status) VALUES ('failed')")
+    finally:
+        conn.close()
+    response = authed_client.get('/')
+    assert f'#{done} done' in response.text
+
+
+def test_settings_shows_scan_failure_reason(authed_client, settings_env):
+    from del_app.db import get_db, x
+    conn = get_db()
+    try:
+        x(conn, "INSERT INTO scans (status, stats_json) VALUES ('failed', ?)", (json.dumps({'error': 'discovery sources failed: docker'}),))
+    finally:
+        conn.close()
+    response = authed_client.get('/settings')
+    assert 'discovery sources failed: docker' in response.text
+    assert 'id="scan-strip"' in response.text

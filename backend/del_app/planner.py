@@ -319,7 +319,7 @@ def build_plan(app_slug: str, options: dict) -> Plan:
     """Build a removal plan for app_slug. Raises PlanError for protected
     apps or if the app cannot be found."""
     settings = get_settings()
-    conn = get_db()
+    conn = get_db(read_snapshot=True)
     try:
         app_rows = q(conn, "SELECT * FROM applications WHERE slug = ?", (app_slug,))
         if not app_rows:

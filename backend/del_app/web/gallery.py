@@ -553,7 +553,7 @@ def view_apps(
     enabled Nginx site in the latest completed scan. A short cached HTTPS probe
     then removes stale, broken, or otherwise unreachable endpoints.
     """
-    conn = get_db()
+    conn = get_db(read_snapshot=True)
     try:
         latest = _latest_scan_id(conn)
         rows: list[dict] = []
@@ -701,7 +701,7 @@ def app_icon(
     if not normalized:
         return Response(status_code=404)
 
-    conn = get_db()
+    conn = get_db(read_snapshot=True)
     try:
         latest = _latest_scan_id(conn)
         known = False

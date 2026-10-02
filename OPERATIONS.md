@@ -62,7 +62,7 @@ dirty worktree.
    ```
 2. **Run tests before restarting anything:**
    ```bash
-   cd /apps/del/backend && ../.venv/bin/python -m pytest ../tests/ -q
+   cd /apps/del/backend && ../.venv/bin/python -m pytest ../tests/ -q -W error
    ```
 3. If a migration was added, apply it from the project root:
    `./scripts/del-admin migrate`.
@@ -85,6 +85,8 @@ dirty worktree.
 6. Confirm health: `curl -fsS http://127.0.0.1:8075/healthz`, and
    `journalctl -u del-web -n 20` — a broken import now makes `del-web` fail to
    start rather than serving 404 for the whole UI with a green `/healthz`.
+   The health endpoint also returns HTTP 503 if the DB or required schema is
+   unavailable; it does not check the helper or external providers.
 7. If `config/nginx-del.bjk.ai.conf` changed, back it up, copy it over the installed
    site file, `sudo nginx -t`, then `sudo systemctl reload nginx` (never reload
    before `nginx -t` passes). Edit the `sites-available` copy only and leave the
@@ -130,7 +132,14 @@ Either:
   ```
 Both call `del_app.scanner.run_scan()`, which re-runs all discovery sources
 (docker, compose, nginx, systemd, proc, cron, fs), re-correlates, and persists a new
-scan row plus refreshed `applications`/`resources`/`associations`. Scanning is
+scan row plus refreshed `applications`/`resources`/`associations`. The inventory and
+completed marker publish in one transaction; scan failures retain the previous
+inventory. Settings shows scan outcomes and live progress, including scans started
+from the CLI. A Linux file lock beside the DB prevents CLI/web overlap. Per-row
+review decisions survive while the app/resource pair remains associated; approvals
+are revoked if the safety classification changes. Invalid manifests now fail scans
+instead of silently omitting their safety rules. Collectors still log and skip some
+individual unreadable artifacts internally. Scanning is
 entirely read-only against the host — it does not stop, start, or modify anything.
 
 ## Regenerating the port registry

@@ -10,11 +10,12 @@ from del_app.config import get_settings
 MIGRATIONS_DIR = Path(__file__).parent / "migrations"
 
 
-def get_db(db_path: str | None = None) -> sqlite3.Connection:
+def get_db(db_path: str | None = None, *, read_snapshot: bool = False) -> sqlite3.Connection:
     """Return a new per-call sqlite3 connection with Row factory, WAL mode,
-    busy_timeout and foreign_keys enabled."""
+    busy_timeout and foreign_keys enabled. read_snapshot pins multi-query
+    inventory reads to one consistent view until the connection is closed."""
     path = db_path or get_settings().db_path
-    os.makedirs(os.path.dirname(path), exist_ok=True)
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
@@ -24,6 +25,8 @@ def get_db(db_path: str | None = None) -> sqlite3.Connection:
     # matters because x() commits per statement (create_job writes one row per
     # plan step, auditlog writes one row per step transition).
     conn.execute("PRAGMA synchronous=NORMAL")
+    if read_snapshot:
+        conn.execute("BEGIN")
     return conn
 
 
@@ -60,7 +63,7 @@ def run_migrations(db_path: str | None = None) -> None:
             if path.name in applied:
                 continue
             sql = path.read_text()
-            conn.executescript(sql)
+            conn.executescript("BEGIN IMMEDIATE;\n" + sql)
             conn.execute(
                 "INSERT INTO schema_migrations (name) VALUES (?)", (path.name,)
             )

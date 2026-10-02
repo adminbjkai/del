@@ -28,8 +28,18 @@ _ORPHAN_COUNT_LOCK = threading.Lock()
 
 # The dashboard needs one integer — the actionable-orphan count — but deriving
 # it means fetching every unassociated resource and classifying it in Python.
-# The inputs only change when a scan completes, so memoise on the scan id.
+# Memoise on scan id and invalidate on operator review changes.
 _ORPHAN_COUNT_CACHE: dict = {"scan": None, "count": 0}
+_ORPHAN_COUNT_REVISION = 0
+
+
+def invalidate_orphan_count() -> None:
+    """Review changes can alter ownership without a new scan."""
+    global _ORPHAN_COUNT_REVISION
+    with _ORPHAN_COUNT_LOCK:
+        _ORPHAN_COUNT_REVISION += 1
+        _ORPHAN_COUNT_CACHE["scan"] = None
+
 
 # Per-type default explanation for *actionable* orphan candidates.
 ORPHAN_REASONS = {
@@ -630,15 +640,17 @@ def classify_orphans(conn, latest: int | None) -> tuple[list[dict], dict[str, in
 
 def _actionable_orphan_count(conn, latest: int | None) -> int:
     with _ORPHAN_COUNT_LOCK:
-        if _ORPHAN_COUNT_CACHE["scan"] == latest:
+        revision = _ORPHAN_COUNT_REVISION
+        if latest is not None and _ORPHAN_COUNT_CACHE["scan"] == latest:
             return _ORPHAN_COUNT_CACHE["count"]
 
     _classified, counts = classify_orphans(conn, latest)
     count = counts["actionable"]
 
     with _ORPHAN_COUNT_LOCK:
-        _ORPHAN_COUNT_CACHE["scan"] = latest
-        _ORPHAN_COUNT_CACHE["count"] = count
+        if revision == _ORPHAN_COUNT_REVISION:
+            _ORPHAN_COUNT_CACHE["scan"] = latest
+            _ORPHAN_COUNT_CACHE["count"] = count
     return count
 
 
@@ -654,7 +666,7 @@ def orphans_view(
     abandoned apps.
     """
     show_all = request.query_params.get("show") == "all"
-    conn = get_db()
+    conn = get_db(read_snapshot=True)
     try:
         latest = _latest_scan_id(conn)
         all_classified, counts = classify_orphans(conn, latest)

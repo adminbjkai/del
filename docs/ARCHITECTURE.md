@@ -150,7 +150,7 @@ being uncompromised.
 │   │   ├── proc_src.py    ss/ps/tmux/screen
 │   │   ├── cron_src.py    crontabs/cron.d
 │   │   └── fs_src.py      project dirs, git repos, du
-│   ├── scanner.py         run_scan() orchestration + scan_state() (in-process lock state: running/scan_id/started, for polling)
+│   ├── scanner.py         run_scan() orchestration + scan_state() (web/CLI scan state: running/scan_id/started, for polling)
   ├── correlate.py       evidence-based association + confidence scoring
 │   ├── manifests.py       YAML manifests read/write/validate
 │   ├── planner.py         removal plan generation (dry-run), impact/risk report, HMAC
@@ -230,7 +230,7 @@ unconditionally on every page:
   current-step line, and per-stage step tables; polls every 2s, backing off
   ×1.5 up to a 10s ceiling, pauses entirely while the tab is hidden (resuming
   immediately on visibility), and stops once the job reaches a terminal status.
-- The dashboard scan-status poller (`GET /scan/status`) — shows an elapsed-time
+- The dashboard and Settings scan-status poller (`GET /scan/status`) — shows an elapsed-time
   strip and disables "Run scan now" while a scan is running, then reloads the
   page once when it flips back to idle.
 - A shared focus-trap helper (`makeFocusTrap`) used by the four modal-ish
@@ -259,7 +259,8 @@ unconditionally on every page:
   nginx sites add `file_birthtime`/`file_mtime`; containers include Docker `created`.
 
 - associations(app_id, resource_id, confidence, ownership, shared, data_loss_risk,
-  removal_eligible, recommended_action, evidence_json, source, approved_by_user, excluded)
+  removal_eligible, recommended_action, evidence_json, source, approved_by_user, excluded,
+  user_excluded, user_shared)
 - plans(id, app_id, created, options_json, steps_json, status, hmac)
 - jobs(id, plan_id, mode dry_run|live, started, finished, status, user_id)
 - job_steps(id, job_id, seq, stage, operation, args_json, state, exit_code, output_sanitized, started, finished, reversible)
@@ -437,6 +438,31 @@ are currently disabled/inactive (not just ones `systemctl list-units` reports as
 loaded), so a stopped non-Docker service (e.g. `htmls`, `ppv`) is still
 discovered and correlated instead of being invisible. See docs/DISCOVERY.md
 "Correlation rules" for the full attachment-order detail.
+
+## Scan publication and review persistence
+
+The scanner gathers host data before opening a SQLite write transaction. A batched
+resource upsert, app updates, association replacement, stale-owner cleanup, and the
+completed scan marker commit atomically. Discovery exceptions, invalid manifests,
+correlation errors, or write failures retain the previous inventory and record a
+failed scan with an outcome shown in Settings. Individual collectors still handle
+some partial failures internally by logging and skipping an artifact.
+
+`database/del.scan.lock` uses Linux `flock` to serialize web and CLI scans. The
+thread lock prevents concurrent calls within a process. Startup cleanup checks
+the file lock before abandoning a running scan, and a crashed CLI's stale row does
+not block a new scan. Inventory routes, planner reads, and assistant context open
+read transactions to keep multiple queries on the same published inventory.
+
+Migration 004 adds explicit operator exclusion/shared flags. Review decisions
+survive for a still-associated app/resource pair; approval is revoked when its
+safety classification changes. Correlation-derived shared flags are recomputed.
+Resource owner lookups omit stale apps and batch IDs in groups of 400. The
+orphan-count cache is invalidated when an operator reviews an association.
+
+`GET /healthz` returns HTTP 503 with `ok: false` when the database cannot be opened
+or required tables/review columns are unavailable. It does not test host discovery,
+the privileged helper, Nginx routing, or the assistant provider.
 
 ## Removal job engine
 

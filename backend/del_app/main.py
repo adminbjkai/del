@@ -8,7 +8,7 @@ from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse, RedirectResponse
 
 from del_app.auth import NeedsLogin
-from del_app.db import get_db, q
+from del_app.db import get_db, latest_done_scan_id
 
 logger = logging.getLogger("del_app.main")
 
@@ -44,21 +44,21 @@ def create_app() -> FastAPI:
 
     @app.get("/healthz")
     def healthz() -> JSONResponse:
-        # Report latest *completed* scan (not a mid-flight / abandoned row).
-        scan_id = None
-        conn = get_db()
+        # Monitoring must detect a missing/broken schema, not just a live process.
+        conn = None
         try:
-            rows = q(
-                conn,
-                "SELECT id FROM scans WHERE status = 'done' ORDER BY id DESC LIMIT 1",
-            )
-            if rows:
-                scan_id = rows[0]["id"]
+            conn = get_db()
+            scan_id = latest_done_scan_id(conn)
+            for table in ("applications", "resources", "associations", "jobs", "sessions"):
+                conn.execute(f"SELECT 1 FROM {table} LIMIT 1")
+            conn.execute("SELECT user_excluded, user_shared FROM associations LIMIT 1")
+            return JSONResponse({"ok": True, "scan": scan_id})
         except Exception:
-            scan_id = None
+            logger.exception("healthz: database unavailable or schema incomplete")
+            return JSONResponse({"ok": False, "scan": None}, status_code=503)
         finally:
-            conn.close()
-        return JSONResponse({"ok": True, "scan": scan_id})
+            if conn is not None:
+                conn.close()
 
     # Deliberately NOT guarded: a broken import here used to be swallowed,
     # producing a process that started cleanly, answered /healthz green (it is

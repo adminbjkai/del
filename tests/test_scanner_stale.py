@@ -86,7 +86,7 @@ def test_run_scan_rejects_concurrent(settings_env, monkeypatch):
         return []
 
     monkeypatch.setattr(scanner, "_collect_all", lambda: (slow_collect(), {}))
-    monkeypatch.setattr(scanner, "load_all", lambda: {})
+    monkeypatch.setattr(scanner, "load_all", lambda **kwargs: {})
     monkeypatch.setattr(scanner, "build_apps", lambda resources, manifests: [])
 
     errors: list[BaseException] = []
@@ -122,7 +122,7 @@ def test_scan_state_reports_running_and_idle(settings_env, monkeypatch):
         return []
 
     monkeypatch.setattr(scanner, "_collect_all", lambda: (slow_collect(), {}))
-    monkeypatch.setattr(scanner, "load_all", lambda: {})
+    monkeypatch.setattr(scanner, "load_all", lambda **kwargs: {})
     monkeypatch.setattr(scanner, "build_apps", lambda resources, manifests: [])
 
     result_ids: list[int] = []
@@ -148,7 +148,7 @@ def test_scan_state_reports_running_and_idle(settings_env, monkeypatch):
 
 def test_run_scan_abandons_prior_running_before_insert(settings_env, monkeypatch):
     monkeypatch.setattr(scanner, "_collect_all", lambda: ([], {}))
-    monkeypatch.setattr(scanner, "load_all", lambda: {})
+    monkeypatch.setattr(scanner, "load_all", lambda **kwargs: {})
     monkeypatch.setattr(scanner, "build_apps", lambda resources, manifests: [])
 
     conn = get_db()
@@ -171,7 +171,7 @@ def test_run_scan_abandons_prior_running_before_insert(settings_env, monkeypatch
 
 def test_run_scan_marks_unseen_apps_removed(settings_env, monkeypatch):
     monkeypatch.setattr(scanner, "_collect_all", lambda: ([], {}))
-    monkeypatch.setattr(scanner, "load_all", lambda: {})
+    monkeypatch.setattr(scanner, "load_all", lambda **kwargs: {})
     monkeypatch.setattr(scanner, "build_apps", lambda resources, manifests: [])
 
     conn = get_db()
@@ -195,3 +195,219 @@ def test_run_scan_marks_unseen_apps_removed(settings_env, monkeypatch):
         conn.close()
     assert row["status"] == "removed"
     assert row["last_seen"] == 1
+
+
+def _inventory_fixture(monkeypatch):
+    from del_app.models import AppRecord, Association, Resource
+
+    resources = [Resource(type="directory", key="/apps/example", display="Example", state="found")]
+    association = Association(
+        resource_type="directory", resource_key="/apps/example", confidence=95,
+        level="high", ownership="exclusive", data_loss_risk="data",
+        removal_eligible="safe", recommended_action="review",
+    )
+    apps = [(AppRecord(slug="example", name="Example", status="running", kind="native"), [association])]
+    monkeypatch.setattr(scanner, "_collect_all", lambda: (resources, {"fs": len(resources)}))
+    monkeypatch.setattr(scanner, "load_all", lambda **kwargs: {})
+    monkeypatch.setattr(scanner, "build_apps", lambda resources, manifests: apps)
+    return resources, apps
+
+
+def _inventory_snapshot():
+    conn = get_db()
+    try:
+        return {
+            table: [dict(r) for r in conn.execute(f"SELECT * FROM {table} ORDER BY id")]
+            for table in ("resources", "applications", "associations")
+        }
+    finally:
+        conn.close()
+
+
+@pytest.mark.parametrize("failure", ["collection", "manifest", "correlation", "persistence"])
+def test_failed_scan_preserves_entire_previous_inventory(settings_env, monkeypatch, failure):
+    resources, apps = _inventory_fixture(monkeypatch)
+    prior = scanner.run_scan()
+    before = _inventory_snapshot()
+
+    def fail(*args, **kwargs):
+        raise RuntimeError("injected scan failure")
+
+    if failure == "collection":
+        monkeypatch.setattr(scanner, "_collect_all", fail)
+    elif failure == "manifest":
+        monkeypatch.setattr(scanner, "load_all", fail)
+    elif failure == "correlation":
+        monkeypatch.setattr(scanner, "build_apps", fail)
+    else:
+        # Fails after the resources and applications have already been updated.
+        resources[0].display = "Changed"
+        apps[0][0].name = "Changed"
+        conn = get_db()
+        try:
+            conn.execute("CREATE TRIGGER reject_association BEFORE INSERT ON associations "
+                         "BEGIN SELECT RAISE(ABORT, 'injected persistence failure'); END")
+            conn.commit()
+        finally:
+            conn.close()
+
+    with pytest.raises(Exception, match="injected"):
+        scanner.run_scan()
+    assert _inventory_snapshot() == before
+    conn = get_db()
+    try:
+        assert scanner.db.latest_done_scan_id(conn) == prior
+        last = conn.execute("SELECT * FROM scans ORDER BY id DESC LIMIT 1").fetchone()
+        assert last["status"] == "failed" and last["finished"]
+        assert "injected" in json.loads(last["stats_json"])["error"]
+    finally:
+        conn.close()
+    assert not scanner._scan_lock.locked()
+
+
+def test_collection_rejects_failed_source_but_checks_remaining_sources(monkeypatch):
+    checked = []
+
+    def bad():
+        raise RuntimeError("docker unavailable")
+
+    def good():
+        checked.append(True)
+        return []
+
+    monkeypatch.setattr(scanner, "SOURCES", [("docker", bad), ("fs", good)])
+    with pytest.raises(RuntimeError, match="discovery sources failed: docker"):
+        scanner._collect_all()
+    assert checked == [True]
+
+
+def test_scan_connection_failure_releases_lock(settings_env, monkeypatch):
+    def unavailable():
+        raise RuntimeError("database unavailable")
+
+    with monkeypatch.context() as mp:
+        mp.setattr(scanner.db, "get_db", unavailable)
+        with pytest.raises(RuntimeError, match="database unavailable"):
+            scanner.run_scan()
+    assert not scanner._scan_lock.locked()
+    _inventory_fixture(monkeypatch)
+    assert scanner.run_scan() > 0
+
+
+def test_scan_file_lock_guards_cli_and_startup(settings_env, monkeypatch):
+    _inventory_fixture(monkeypatch)
+    conn = get_db()
+    try:
+        active = x(conn, "INSERT INTO scans (status) VALUES ('running')")
+    finally:
+        conn.close()
+    # A separate file descriptor is enough to exercise Linux's flock conflict,
+    # just as a separate CLI process would; do not hold the Python thread lock.
+    handle = scanner._lock_scan_file()
+    try:
+        assert scanner.scan_state()["scan_id"] == active
+        assert scanner.abandon_stale_scans() == 0
+        with pytest.raises(scanner.ScanInProgressError):
+            scanner.run_scan()
+        assert not scanner._scan_lock.locked()
+    finally:
+        handle.close()
+    assert scanner.run_scan() > active
+
+
+@pytest.mark.parametrize("review", ["approve", "exclude", "mark-shared"])
+def test_scan_preserves_operator_review(settings_env, monkeypatch, review):
+    _inventory_fixture(monkeypatch)
+    scanner.run_scan()
+    conn = get_db()
+    try:
+        setters = {
+            "approve": "approved_by_user=1",
+            "exclude": "excluded=1, user_excluded=1",
+            "mark-shared": "shared=1, user_shared=1",
+        }
+        conn.execute(f"UPDATE associations SET {setters[review]}")
+        conn.commit()
+    finally:
+        conn.close()
+    scanner.run_scan()
+    row = _inventory_snapshot()["associations"][0]
+    if review == "approve":
+        assert row["approved_by_user"] == 1
+    elif review == "exclude":
+        assert row["excluded"] == row["user_excluded"] == 1
+    else:
+        assert row["shared"] == row["user_shared"] == 1
+
+
+def test_scan_recomputes_inferred_shared_flag(settings_env, monkeypatch):
+    _, apps = _inventory_fixture(monkeypatch)
+    apps[0][1][0].shared = True
+    scanner.run_scan()
+    apps[0][1][0].shared = False
+    scanner.run_scan()
+    assert _inventory_snapshot()["associations"][0]["shared"] == 0
+
+
+def test_readers_see_previous_inventory_until_publication(settings_env, monkeypatch):
+    resources, apps = _inventory_fixture(monkeypatch)
+    scanner.run_scan()
+    before = _inventory_snapshot()
+    resources[0].display = "New display"
+    apps[0][0].name = "New name"
+    original_dump = apps[0][1][0].model_dump
+    # Evidence serialization occurs after writes have begun. Observe from a
+    # separate reader while the writer's transaction is still open.
+    from del_app.models import Evidence
+    evidence = Evidence(source="test", statement="observed", weight=95)
+    apps[0][1][0].evidence = [evidence]
+    dump = Evidence.model_dump
+
+    def observe(self, *args, **kwargs):
+        assert _inventory_snapshot() == before
+        return dump(self, *args, **kwargs)
+
+    monkeypatch.setattr(Evidence, "model_dump", observe)
+    assert original_dump()  # model remains valid
+    scanner.run_scan()
+    assert _inventory_snapshot()["applications"][0]["name"] == "New name"
+
+
+def test_invalid_manifest_cannot_publish_scan(settings_env, monkeypatch):
+    _inventory_fixture(monkeypatch)
+    scanner.run_scan()
+    before = _inventory_snapshot()
+    from pathlib import Path
+    from del_app.manifests import load_all
+    root = Path(settings_env.manifests_dir)
+    root.mkdir()
+    (root / "example.yaml").write_text("id: ../unsafe\n")
+    monkeypatch.setattr(scanner, "load_all", load_all)
+    with pytest.raises(ValueError, match="invalid manifest: example.yaml"):
+        scanner.run_scan()
+    assert _inventory_snapshot() == before
+
+
+def test_scan_state_does_not_block_new_scan_after_cli_crash(settings_env):
+    conn = get_db()
+    try:
+        x(conn, "INSERT INTO scans (status) VALUES ('running')")
+    finally:
+        conn.close()
+    assert scanner.scan_state()["running"] is False
+
+
+@pytest.mark.parametrize("changed", ["shared", "confidence", "data_loss_risk", "removal_eligible"])
+def test_scan_revokes_approval_if_safety_classification_changes(settings_env, monkeypatch, changed):
+    _, apps = _inventory_fixture(monkeypatch)
+    scanner.run_scan()
+    conn = get_db()
+    try:
+        conn.execute("UPDATE associations SET approved_by_user=1")
+        conn.commit()
+    finally:
+        conn.close()
+    values = {"shared": True, "confidence": 60, "data_loss_risk": "none", "removal_eligible": "blocked"}
+    setattr(apps[0][1][0], changed, values[changed])
+    scanner.run_scan()
+    assert _inventory_snapshot()["associations"][0]["approved_by_user"] == 0

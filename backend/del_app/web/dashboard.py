@@ -32,7 +32,7 @@ def _attention_apps(conn, latest: int | None) -> list[dict[str, Any]]:
         FROM associations a
         JOIN applications ap ON ap.id = a.app_id
         JOIN resources r ON r.id = a.resource_id
-        WHERE a.removal_eligible = 'uncertain'
+        WHERE a.removal_eligible = 'uncertain' AND a.excluded = 0
     """
     params: list[Any] = []
     if latest is not None:
@@ -56,7 +56,7 @@ def _attention_apps(conn, latest: int | None) -> list[dict[str, Any]]:
 def dashboard(
     request: Request, response: Response, user: User = Depends(auth.require_user)
 ) -> HTMLResponse:
-    conn = get_db()
+    conn = get_db(read_snapshot=True)
     try:
         latest = _latest_scan_id(conn)
         # Dashboard stat cards must match the counts on the pages they link
@@ -76,7 +76,7 @@ def dashboard(
         # once sqlite_stat1 exists (it flips to a skip-scan and degrades ~10x).
         uncertain_sql = """
                 SELECT COUNT(*) AS n FROM associations a
-                WHERE a.removal_eligible = 'uncertain'
+                WHERE a.removal_eligible = 'uncertain' AND a.excluded = 0
                   AND EXISTS (SELECT 1 FROM resources r
                               WHERE r.id = a.resource_id
                 """
@@ -118,21 +118,16 @@ def dashboard(
         recent_scans = _rows(
             q(conn, "SELECT * FROM scans ORDER BY id DESC LIMIT 5")
         )
+        last_scan_rows = _rows(q(conn, "SELECT * FROM scans WHERE id = ?", (latest,))) if latest is not None else []
         recent_jobs = _rows(q(conn, "SELECT * FROM jobs ORDER BY id DESC LIMIT 5"))
         disk_usage_bytes = _disk_usage_bytes(conn, latest)
         attention = _attention_apps(conn, latest)
     finally:
         conn.close()
 
-    # Last completed scan summary for the dashboard header strip.
-    last_scan = None
-    if recent_scans:
-        for s in recent_scans:
-            if s.get("status") == "done":
-                last_scan = s
-                break
-        if last_scan is None:
-            last_scan = recent_scans[0]
+    # Never label a failed/in-progress scan as the inventory's completed scan,
+    # even when the most recent five scan attempts all failed.
+    last_scan = last_scan_rows[0] if last_scan_rows else None
 
     stats = {
         "apps": len(apps),

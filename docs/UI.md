@@ -115,3 +115,12 @@ enhanced; add class `table-plain` (or `job-steps`) to keep plain HTML.
 Skip link, landmark roles, `aria-current="page"` on active nav, focus-visible
 rings, keyboard-operable resize separators, focus traps on the mobile drawer
 and sheets, `prefers-reduced-motion` honoured, text ≥ 4.5:1 in both themes.
+
+## Scan feedback
+
+Dashboard and Settings show live scan status and disable their scan button while
+web or CLI discovery is active. The elapsed time treats database timestamps as
+UTC, then the date formatter displays Eastern time. Settings' Outcome column shows
+completed app/resource counts and duration, or the recorded failure reason.
+Failed scans retain the previous inventory. The dashboard's last-scan strip always
+names the inventory's completed scan, even after more than five failed attempts.

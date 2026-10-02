@@ -122,3 +122,49 @@ def test_csrf_token_check(settings_env):
 def test_helper_client_raises_helper_error_when_socket_absent(settings_env):
     with pytest.raises(HelperError):
         helper_call("ping", {})
+
+
+def test_migration_failure_rolls_back_schema_and_can_retry(tmp_path, monkeypatch):
+    from del_app import db
+    root = tmp_path / "migrations"
+    root.mkdir()
+    migration = root / "001_example.sql"
+    migration.write_text("CREATE TABLE example (id INTEGER); INSERT INTO missing VALUES (1);")
+    monkeypatch.setattr(db, "MIGRATIONS_DIR", root)
+    path = str(tmp_path / "migration.db")
+    with pytest.raises(Exception):
+        db.run_migrations(path)
+    conn = db.get_db(path)
+    try:
+        assert not conn.execute("SELECT 1 FROM sqlite_master WHERE name='example'").fetchall()
+        assert not conn.execute("SELECT * FROM schema_migrations").fetchall()
+    finally:
+        conn.close()
+    migration.write_text("CREATE TABLE example (id INTEGER);")
+    db.run_migrations(path)
+    db.run_migrations(path)
+    conn = db.get_db(path)
+    try:
+        assert conn.execute("SELECT name FROM schema_migrations").fetchone()[0] == migration.name
+    finally:
+        conn.close()
+
+
+def test_read_snapshot_stays_consistent_while_scan_publishes(settings_env):
+    from del_app.db import get_db, latest_done_scan_id, x
+    writer = get_db()
+    reader = get_db(read_snapshot=True)
+    try:
+        first = x(writer, "INSERT INTO scans (status) VALUES ('done')")
+        x(writer, "INSERT INTO applications (slug, name, last_seen) VALUES ('snapshot', 'Before', ?)", (first,))
+        assert latest_done_scan_id(reader) == first
+        next_scan = x(writer, "INSERT INTO scans (status) VALUES ('done')")
+        writer.execute("UPDATE applications SET name='After', last_seen=?", (next_scan,))
+        writer.commit()
+        assert latest_done_scan_id(reader) == first
+        assert reader.execute("SELECT name FROM applications WHERE last_seen=?", (first,)).fetchone()[0] == 'Before'
+        reader.rollback()
+        assert latest_done_scan_id(reader) == next_scan
+    finally:
+        reader.close()
+        writer.close()

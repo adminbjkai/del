@@ -95,6 +95,7 @@ live under `reports/<date>/`:
 | [reports/2026-08-13/](reports/2026-08-13/) | Recovery of DEL job 191 (netdata live removal that touched foreign units) |
 | [reports/2026-08-24/](reports/2026-08-24/) | Frontend/accessibility audit fixes |
 | [reports/2026-09-13/](reports/2026-09-13/) | Read-only Nginx alias audit of scan 249's confidence-60 site associations |
+| [reports/2026-10-02/](reports/2026-10-02/) | Scan integrity, review persistence, CI cleanup, performance measurement, and live validation |
 
 ### Local-only files this repo references but does not contain
 
@@ -122,5 +123,13 @@ cd /apps/del/backend && ../.venv/bin/python -m pytest ../tests/ -q -W error
 ```
 
 Every change must leave this at zero failures with warnings treated as errors.
+GitHub CI also runs Pyflakes and syntax checks for the three application JavaScript
+files. Dependency pins in `requirements*.txt` are shared by CI and production.
+
+Scans publish inventory atomically and keep the previous inventory on failure.
+Web and CLI scans share a file lock. Settings shows scan progress and outcomes;
+manual exclusions and shared flags survive for still-associated resources, and
+approvals survive only while the safety classification is unchanged. See
+[scan persistence](docs/DISCOVERY.md#operator-decisions-across-rescans).
 The pass/skip counts change with nearly every commit, so they are not pinned
 here; each pass records its own count in `CHANGELOG.md`.

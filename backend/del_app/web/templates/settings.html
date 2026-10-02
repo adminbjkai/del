@@ -50,18 +50,27 @@
 <details class="section" id="scan-now" data-remember open>
   <summary><h2>Scanning</h2><span class="section-hint">Re-inventory this host; the dashboard uses the latest completed scan.</span></summary>
   <div class="section-body">
-    <form method="post" action="/scan" data-submit-guard="Starting scan…">
+    <form method="post" action="/scan" class="scan-run-form" data-submit-guard="Starting scan…">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <button type="submit" class="btn btn-primary">Run scan now</button>
+      <button type="submit" class="btn btn-primary" id="run-scan-btn">Run scan now</button>
     </form>
+    <div class="meta-row" id="scan-strip" role="status" aria-live="polite">
+      <span class="scan-strip-live" id="scan-strip-live" hidden>
+        <span class="scan-strip-bar" aria-hidden="true"></span>
+        <span id="scan-strip-elapsed">scanning…</span>
+      </span>
+    </div>
     <p class="muted text-sm mt-2">
+      A failed scan keeps the previous inventory. Approvals, exclusions, and manual
+      shared flags survive rescans for the same app and resource while its safety
+      classification stays unchanged.
       Inventory uses the latest <strong>done</strong> scan only. Rows stuck at
       <span class="badge status-running">running</span> after a restart are
       auto-marked <span class="badge status-failed">failed</span> on service start.
     </p>
     <table class="table" data-enhanced data-empty="No scans yet." data-page-size="25">
       <caption class="sr-only">The most recent inventory scans and their outcome.</caption>
-      <thead><tr><th scope="col">ID</th><th scope="col">Started</th><th scope="col">Finished</th><th scope="col">Status</th></tr></thead>
+      <thead><tr><th scope="col">ID</th><th scope="col">Started</th><th scope="col">Finished</th><th scope="col">Status</th><th scope="col">Outcome</th></tr></thead>
       <tbody>
         {% for s in recent_scans %}
         <tr>
@@ -69,6 +78,7 @@
           <td data-sort-value="{{ iso_sort(s.get('started')) }}"><span class="dt">{{ format_dt(s.get('started')) }}</span></td>
           <td data-sort-value="{{ iso_sort(s.get('finished')) }}"><span class="dt">{{ format_dt(s.get('finished')) }}</span></td>
           <td data-filter-value="{{ s.get('status') }}"><span class="badge status-{{ s.get('status') }}">{{ s.get('status') }}</span></td>
+          <td>{% set stats = s.get('stats') or {} %}{% if stats.get('error') or stats.get('reason') %}<span class="text-sm">{{ stats.get('error') or stats.get('reason') }}</span>{% elif s.get('status') == 'done' %}{{ stats.get('apps_total', '—') }} apps · {{ stats.get('resources_total', '—') }} resources{% if stats.get('duration_seconds') is not none %} · {{ stats.get('duration_seconds') }}s{% endif %}{% else %}—{% endif %}</td>
         </tr>
         {% endfor %}
       </tbody>

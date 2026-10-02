@@ -1,5 +1,36 @@
 # Changelog
 
+## 2026.10.02
+
+Inventory integrity and scan performance:
+- Publish resources, apps, associations, stale-owner cleanup, and the completed
+  scan marker in one transaction. A failed source, invalid manifest, correlation
+  error, or persistence error retains the prior inventory.
+- Serialize CLI/web scans using a Linux advisory file lock. Release locks on DB
+  failures; leave active CLI scans alone during startup recovery; allow a new scan
+  after a crashed CLI leaves a stale running row.
+- Use batched resource upserts and three lookup queries instead of a SELECT for
+  every resource and app. Inventory routes, planner reads, and assistant context
+  use consistent SQLite read snapshots.
+- Migration 004 records operator exclusion/shared flags separately. Reviews
+  survive for still-associated pairs; approval is revoked if safety changes.
+  Inferred shared flags are recomputed. Existing exclusions migrate conservatively.
+- Resource owners omit stale apps and handle large ID sets in bounded batches.
+  Operator reviews invalidate cached orphan counts. Excluded mappings no longer
+  inflate the dashboard's uncertain count.
+
+Convenience and maintenance:
+- Settings shows live scan feedback and scan outcomes/counts/duration. Scan
+  elapsed times correctly parse SQLite UTC timestamps.
+- Dashboard keeps the true completed-scan summary after repeated failed attempts.
+- Health checks return 503 for an unavailable DB or incomplete required schema;
+  migrations roll back schema changes and bookkeeping together on failure.
+- Remove the obsolete Fern CI job/ignore entry and obsolete optional-module
+  fallbacks in Settings. CI checks application JavaScript syntax.
+- Update README, operations, architecture, discovery, and UI documentation.
+
+Validation details and measured performance: [audit report](reports/2026-10-02/validation.md).
+
 ## 2026.9.30
 
 Accurate install dates. *Installed* used the earliest of the app folder's ctime

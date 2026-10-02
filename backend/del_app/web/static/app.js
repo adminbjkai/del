@@ -2429,7 +2429,7 @@
           var running = !!data.running;
           if (running) {
             if (!scanStartedAt) {
-              scanStartedAt = data.started ? Date.parse(data.started) : Date.now();
+              scanStartedAt = data.started ? Date.parse(data.started.replace(" ", "T") + (/Z$|[+-]\d{2}:\d{2}$/.test(data.started) ? "" : "Z")) : Date.now();
               if (isNaN(scanStartedAt)) scanStartedAt = Date.now();
             }
             if (scanLive) scanLive.hidden = false;
