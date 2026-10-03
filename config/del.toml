@@ -6,6 +6,8 @@ logs_dir = "/apps/del/logs"
 scan_roots = ["/apps", "/data/apps", "/opt", "/srv", "/var/www"]
 helper_socket = "/run/del/helper.sock"
 protected_apps = ["del", "agyinstall"]
+# Rescan when the latest completed scan is older than this (0 = never).
+scan_interval_hours = 6
 
 [assistant]
 enabled = true

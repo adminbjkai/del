@@ -4,25 +4,15 @@ from __future__ import annotations
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, Response
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse
 
-from del_app import auditlog, auth
+from del_app import auditlog, auth, jobs, planner
 from del_app.auth import User
 from del_app.db import get_db, q
 from del_app.web.formatting import _duration
 from del_app.web.queries import _rows
 from del_app.web.render import _csrf_response, _render, _require_csrf
 
-# Lazy/defensive imports of sibling lanes' modules. Accessed as
-# `<name>.<func>` at call time so tests can monkeypatch these module
-# references directly on this module.
-try:
-    from del_app import planner
-except ImportError:  # pragma: no cover - lane not landed yet
-    planner = None  # type: ignore[assignment]
-
-try:
-    from del_app import jobs
-except ImportError:  # pragma: no cover
-    jobs = None  # type: ignore[assignment]
+# planner / jobs are used as `<module>.<func>` at call time so tests can
+# monkeypatch them on this module.
 
 router = APIRouter()
 
@@ -78,8 +68,6 @@ def plan_build(
 ) -> Response:
     if not _require_csrf(request, csrf_token):
         return _csrf_response()
-    if planner is None:  # pragma: no cover
-        return JSONResponse({"error": "planner unavailable"}, status_code=503)
 
     options = {
         "remove_named_volumes": bool(remove_named_volumes),
@@ -109,8 +97,6 @@ def app_remove_now(
     browser shows a single native confirm before submitting."""
     if not _require_csrf(request, csrf_token):
         return _csrf_response()
-    if jobs is None or planner is None:  # pragma: no cover
-        return JSONResponse({"error": "jobs engine unavailable"}, status_code=503)
 
     conn = get_db()
     try:
@@ -196,14 +182,20 @@ def _load_plan_dict(plan_id: int) -> dict | None:
     """Load a persisted, HMAC-verified plan for display, via planner's
     load_plan (best-effort verification: falls back to the unverified
     load if the integrity check fails, but flags it in the rendered plan)."""
-    if planner is None:  # pragma: no cover
-        return None
     try:
         plan, stored_hmac, recomputed_hmac = planner.load_plan(plan_id)
     except Exception:
         return None
     tampered = bool(stored_hmac) and stored_hmac != recomputed_hmac
     row = plan.model_dump() if hasattr(plan, "model_dump") else dict(plan)
+    # The plan model has no timestamp; the row does.
+    conn = get_db()
+    try:
+        created = q(conn, "SELECT created FROM plans WHERE id = ?", (plan_id,))
+    finally:
+        conn.close()
+    if created:
+        row["created"] = created[0]["created"]
     stages: dict[str, list] = {}
     for step in row.get("steps", []):
         stages.setdefault(step.get("stage", "other"), []).append(step)
@@ -227,7 +219,7 @@ def _plan_run_summary(plan_jobs: list[dict]) -> tuple[str, str, dict | None]:
     live_jobs = [j for j in plan_jobs if j.get("mode") == "live"]
     if live_jobs:
         latest_live = live_jobs[0]  # plan_jobs is ordered newest-first
-        return f"ran live · {latest_live.get('status')}", f"status-{latest_live.get('status')}", latest_live
+        return f"ran live, {latest_live.get('status')}", f"status-{latest_live.get('status')}", latest_live
     return "dry-run only", "status-draft", None
 
 
@@ -277,8 +269,6 @@ def plan_execute(
 ) -> Response:
     if not _require_csrf(request, csrf_token):
         return _csrf_response()
-    if jobs is None or planner is None:  # pragma: no cover
-        return JSONResponse({"error": "jobs engine unavailable"}, status_code=503)
 
     try:
         plan = planner.verify_plan(plan_id)
@@ -395,8 +385,6 @@ def job_detail(
 
 @router.get("/jobs/{job_id}/status")
 def job_status(job_id: int, user: User = Depends(auth.require_user)) -> JSONResponse:
-    if jobs is None:  # pragma: no cover
-        return JSONResponse({"error": "jobs engine unavailable"}, status_code=503)
     try:
         status = jobs.job_status(job_id)
     except Exception as exc:

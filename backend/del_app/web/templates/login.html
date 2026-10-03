@@ -3,18 +3,19 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <meta name="theme-color" content="#1b2021" media="(prefers-color-scheme: dark)" data-theme-color>
-  <meta name="theme-color" content="#f3f2ee" media="(prefers-color-scheme: light)" data-theme-color>
+  <meta name="theme-color" content="#0f1f30" media="(prefers-color-scheme: dark)" data-theme-color>
+  <meta name="theme-color" content="#edf1f4" media="(prefers-color-scheme: light)" data-theme-color>
   <title>Log in · DEL</title>
-  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/app.css">
-  <script src="/static/theme-init.js"></script>
+  <link rel="icon" href="{{ asset('favicon.svg') }}" type="image/svg+xml">
+  <link rel="stylesheet" href="{{ asset('app.css') }}">
+  <script src="{{ asset('theme-init.js') }}"></script>
 </head>
+{% import "_icons.html" as i %}
 <body class="login-body">
-  <div class="login-card">
-    <div class="login-mark" aria-hidden="true">DEL</div>
+  <main class="login-card">
+    <div class="login-mark" aria-hidden="true">{{ i.icon('marker') }}<span>DEL</span></div>
     <h1 class="login-title">Sign in</h1>
-    <p class="muted mt-0">Sign in to this host's application inventory.</p>
+    <p class="muted">Application inventory and safe removal for {{ host_name }}.</p>
     {% if error %}<div class="flash flash-error" role="alert">{{ error }}</div>{% endif %}
     <form method="post" action="/login" class="stacked-form">
       <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -22,8 +23,8 @@
       <input type="text" id="username" name="username" autocomplete="username" required autofocus>
       <label for="password">Password</label>
       <input type="password" id="password" name="password" autocomplete="current-password" required>
-      <button type="submit" class="btn btn-primary">Log in</button>
+      <button type="submit" class="btn btn-primary">Sign in</button>
     </form>
-  </div>
+  </main>
 </body>
 </html>

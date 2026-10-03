@@ -1,85 +1,68 @@
 {% extends "base.html" %}
 {% import "_macros.html" as m %}
+{% import "_icons.html" as i %}
 {% block title %}{{ app.get('name', app.get('slug')) }}{% endblock %}
 {% block content %}
 {% set name = app.get('name', app.get('slug')) %}
 <nav class="crumbs" aria-label="Breadcrumb">
-  <a href="/apps">Applications</a><span class="sep">›</span><span aria-current="page">{{ name }}</span>
+  <a href="/apps">Applications</a><span class="sep">/</span><span aria-current="page">{{ name }}</span>
 </nav>
 <div class="page-header">
-  <h1>{{ name }} <span class="badge status-{{ app.get('status') }}">{{ app.get('status') }}</span></h1>
+  <h1>{{ name }} {{ m.state(app.get('status')) }}{% if app.get('protected') %} <span class="badge badge-blue" title="DEL will not build a removal plan">{{ i.icon('shield') }}protected</span>{% endif %}</h1>
+  <div class="page-actions">
+    <a class="btn btn-sm btn-ghost" href="/manifests/{{ app.get('slug') }}">Edit manifest</a>
+    {% if assistant_on %}
+    <a class="btn btn-sm btn-ghost" href="/assistant?scope=app&amp;target={{ app.get('slug') | urlencode }}" data-ask-scope="app" data-ask-target="{{ app.get('slug') }}" title="Ask the read-only assistant about this application">Ask the assistant</a>
+    {% endif %}
+  </div>
 </div>
 <div class="meta-row">
-  <span class="meta"><span class="meta-k">Kind</span> <span class="meta-v">{{ app.get('kind') or '—' }}</span></span>
+  <span class="meta"><span class="meta-k">Kind</span> <span class="meta-v">{{ (app.get('kind') or '—') | replace('_', ' ') }}</span></span>
   <span class="meta"><span class="meta-k">Domains</span> <span class="meta-v">{{ m.domain_links(app.get('domains')) }}</span></span>
   <span class="meta" title="{{ app.get('installed_source') or 'No creation time on the host' }}"><span class="meta-k">Installed</span> <span class="meta-v">{% if app.get('installed_bound') %}by {% endif %}<span class="dt">{{ format_dt(app.get('installed_at')) }}</span></span></span>
   <span class="meta" title="{{ app.get('last_changed_source') or 'No change time on the host' }}"><span class="meta-k">Last changed</span> <span class="meta-v"><span class="dt">{{ format_dt(app.get('last_changed_at')) }}</span></span></span>
-  <span class="meta"><span class="meta-k">First seen</span> <span class="meta-v"><span class="dt">{{ format_dt(app.get('first_seen_at')) }}</span></span></span>
-  <span class="meta"><span class="meta-k">Last seen</span> <span class="meta-v"><span class="dt">{{ format_dt(app.get('last_seen_at')) }}</span></span></span>
-  <span class="meta"><span class="meta-k">Resources</span> <span class="meta-v">{{ app.res_count }}{% if app.excluded_count %} <span class="muted">+{{ app.excluded_count }} excluded</span>{% endif %}</span></span>
-  <span class="meta"><span class="meta-k">Manifest</span> <span class="meta-v">{{ app.get('manifest_path') or '—' }}</span></span>
+  <span class="meta"><span class="meta-k">Resources</span> <span class="meta-v">{{ app.res_count }}{% if app.excluded_count %} <span class="faint">+{{ app.excluded_count }} excluded</span>{% endif %}</span></span>
 </div>
-<p class="page-lede">This app's resources and their name relatedness — shared, probable owner, or possible (weak).</p>
-<details class="explain">
-  <summary>How rows relate</summary>
-  <div class="explain-body legend-row" aria-label="How rows relate">
-    <span class="chip" title="More than one current application owns it">shared = 2+ current apps</span>
-    <span class="chip" title="Confidence ≥ 60 counts as an owner">probable = strong owner</span>
-    <span class="chip" title="Confidence 30–59; review, do not treat as owner">possible = weak</span>
-    <span class="chip" title="No probable (≥60) current owner; review-only, no delete. Unassigned chips are no association rows.">no probable owner → Orphans</span>
-  </div>
-</details>
 
 {% if app.get('protected') %}
 <div class="callout callout-info">
   <span class="callout-title">Protected</span>
-  This application is protected — DEL will not build a removal plan for it.
+  DEL will not build a removal plan for this application.
 </div>
 {% elif removed %}
 <div class="callout callout-warn">
   <span class="callout-title">Removed from inventory</span>
-  This application was not present in the latest scan, so removal is disabled. This page shows its
-  last-known state for history/audit; resources listed here no longer exist unless marked preserved
-  in its final removal job.
+  This application is not present in the latest scan, so removal is disabled. The page shows its last known
+  state for history; its resources no longer exist unless its final removal job preserved them.
+</div>
+{% else %}
+<div class="action-bar">
+  <a class="btn btn-primary" href="/apps/{{ app.get('slug') }}/plan" title="Choose what to remove and review the plan before running it">Plan removal</a>
+  <form method="post" action="/apps/{{ app.get('slug') }}/remove" class="inline-form">
+    <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+    <button type="submit" class="btn btn-danger-quiet"
+            data-confirm="Remove {{ name }} completely right now? This immediately builds a complete-removal plan (containers, images, named volumes, bind-mounted data, the project directory, and app networks) and runs it live — no review step. Resources shared with other apps are kept. This cannot be undone."
+            title="Skip planning and permanently remove this app's containers, volumes, files and networks right now">{{ i.icon('trash') }}Remove app now</button>
+  </form>
+  <span class="action-note">Plan removal lets you review every step and dry-run first. Remove app now skips that review and runs live; its confirmation lists what it deletes. Shared resources are always kept.</span>
 </div>
 {% endif %}
-
-<div class="action-bar">
-  {% if not app.get('protected') and not removed %}
-    <a class="btn btn-primary" href="/apps/{{ app.get('slug') }}/plan" title="Choose what to remove and review the plan before running it">Plan removal</a>
-    <form method="post" action="/apps/{{ app.get('slug') }}/remove" class="inline-form">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <button type="submit" class="btn btn-danger-quiet"
-              data-confirm="Remove {{ name }} completely right now? This immediately builds a complete-removal plan (containers, images, named volumes, bind-mounted data, the project directory, and app networks) and runs it live — no review step. Resources shared with other apps are kept. This cannot be undone."
-              title="Skip planning and permanently remove this app's containers, volumes, files and networks right now">Remove app now (skips review)</button>
-    </form>
-  {% endif %}
-  <span class="spacer"></span>
-  <a class="btn btn-ghost" href="/manifests/{{ app.get('slug') }}">Edit manifest</a>
-  {% if assistant_enabled() %}
-  <a class="btn btn-ghost" href="/assistant?scope=app&amp;target={{ app.get('slug') | urlencode }}" data-ask-scope="app" data-ask-target="{{ app.get('slug') }}" title="Ask the read-only assistant about this application">Ask the assistant</a>
-  {% endif %}
-  {% if not app.get('protected') and not removed %}
-  <span class="action-note">“Remove app now” runs live immediately with no review step — the confirmation dialog lists exactly what it removes. Plan removal lets you review and dry-run first.</span>
-  {% endif %}
-</div>
 
 {% set shared_items = sections.get('shared', []) %}
 {% if shared_items %}
 <div class="callout callout-warn">
-  <span class="callout-title">{{ shared_items | length }} shared resource(s)</span>
-  Shared means more than one current app uses them. They stay if you plan or remove this app — do not treat them as exclusive.
+  <span class="callout-title">{{ shared_items | length }} shared resource{{ 's' if shared_items | length != 1 else '' }}</span>
+  Used by more than one current app, or a system path. Kept when you plan or remove this app.
   <ul class="relation-list mt-2">
     {% for a in shared_items %}
     <li>
-      <span class="relation-type">{{ a.get('resource_type') }}</span>
+      <span class="relation-type">{{ resource_type_label(a.get('resource_type')) }}</span>
       <a class="relation-name" href="/resources/{{ a.get('resource_type') }}" title="{{ a.get('resource_type') }} {{ a.get('resource_key') }}">{{ a.get('resource_display') or a.get('resource_key') }}</a>
-      <span class="relation-arrow">→</span>
       <span class="relation-aside">
         {% if a.co_owners %}
           {% for o in a.co_owners %}<a class="chip owner-chip" href="/apps/{{ o.slug }}">{{ o.name }}</a>{% endfor %}
         {% else %}
-          <span class="muted text-sm">no other current owner</span>
+          <span class="faint text-sm">no other current owner</span>
         {% endif %}
       </span>
     </li>
@@ -104,30 +87,25 @@
   </div>
 
   <div class="tabpanel panel" id="panel-overview" role="tabpanel" aria-labelledby="tab-overview" hidden>
-    <h2>Overview</h2>
     <dl class="kv">
-      <dt>Kind</dt><dd>{{ app.get('kind') or '—' }}</dd>
+      <dt>Kind</dt><dd>{{ (app.get('kind') or '—') | replace('_', ' ') }}</dd>
       <dt>Domains</dt><dd>{{ m.domain_links(app.get('domains')) }}</dd>
       <dt>Installed</dt>
       <dd>
         {% if app.get('installed_bound') %}on or before {% endif %}<span class="dt">{{ format_dt(app.get('installed_at')) }}</span>
-        {% if app.get('installed_source') %}<span class="muted text-sm">({{ app.get('installed_source') }})</span>{% endif %}
+        {% if app.get('installed_source') %}<span class="faint text-sm">({{ app.get('installed_source') }})</span>{% endif %}
       </dd>
       <dt>Last changed</dt>
       <dd>
         <span class="dt">{{ format_dt(app.get('last_changed_at')) }}</span>
-        {% if app.get('last_changed_source') %}<span class="muted text-sm">({{ app.get('last_changed_source') }})</span>{% endif %}
+        {% if app.get('last_changed_source') %}<span class="faint text-sm">({{ app.get('last_changed_source') }})</span>{% endif %}
       </dd>
       <dt>First seen by DEL</dt>
-      <dd title="Scan #{{ app.get('first_seen') or '—' }}">
-        <span class="dt">{{ format_dt(app.get('first_seen_at')) }}</span>
-      </dd>
+      <dd title="Scan #{{ app.get('first_seen') or '—' }}"><span class="dt">{{ format_dt(app.get('first_seen_at')) }}</span> <span class="faint text-sm">scan #{{ app.get('first_seen') or '—' }}</span></dd>
       <dt>Last seen by DEL</dt>
-      <dd title="Scan #{{ app.get('last_seen') or '—' }}">
-        <span class="dt">{{ format_dt(app.get('last_seen_at')) }}</span>
-      </dd>
-      <dt>Manifest</dt><dd>{{ app.get('manifest_path') or '—' }}</dd>
-      <dt>Resources</dt><dd>{{ app.res_count }}{% if app.excluded_count %} <span class="muted">(+{{ app.excluded_count }} excluded, listed for review)</span>{% endif %}</dd>
+      <dd title="Scan #{{ app.get('last_seen') or '—' }}"><span class="dt">{{ format_dt(app.get('last_seen_at')) }}</span> <span class="faint text-sm">scan #{{ app.get('last_seen') or '—' }}</span></dd>
+      <dt>Manifest</dt><dd>{% if app.get('manifest_path') %}<span class="mono">{{ app.get('manifest_path') }}</span>{% else %}—{% endif %}</dd>
+      <dt>Resources</dt><dd>{{ app.res_count }}{% if app.excluded_count %} <span class="faint">(+{{ app.excluded_count }} excluded, listed for review)</span>{% endif %}</dd>
     </dl>
 
     {% if resources_by_type %}
@@ -144,7 +122,7 @@
 
     {% if related_apps %}
     <div class="section-group-label">Related apps</div>
-    <p class="muted text-sm mb-1">Apps that share at least one resource with this one.</p>
+    <p class="faint text-sm mb-1">Apps that share at least one resource with this one.</p>
     <div class="cluster owner-cluster">
       {% for ra in related_apps %}<a class="chip owner-chip" href="/apps/{{ ra.slug }}">{{ ra.name }}</a>{% endfor %}
     </div>
@@ -154,18 +132,18 @@
   {% for section_key, section_title in section_defs %}
   {% set items = sections.get(section_key, []) %}
   {% if items %}
-  <div class="tabpanel panel" id="panel-{{ section_key }}" role="tabpanel" aria-labelledby="tab-{{ section_key }}" hidden>
-    <h2>{{ section_title }} <span class="count-pill">{{ items | length }}</span></h2>
-    <table class="table" data-enhanced data-empty="No resources in this section. Primary: run a scan if inventory is stale. Secondary: open Overview." data-page-size="25">
+  <div class="tabpanel" id="panel-{{ section_key }}" role="tabpanel" aria-labelledby="tab-{{ section_key }}" hidden>
+    <table class="table" id="app-{{ section_key }}-table" data-empty="No resources in this section." data-page-size="25">
       <caption class="sr-only">{{ section_title }} resources associated with this application.</caption>
-      <thead><tr><th scope="col">Resource</th>{% if section_key == 'docker' %}<th scope="col">Host port(s)</th><th scope="col">Container port(s)</th>{% endif %}<th scope="col">Confidence</th><th scope="col">Risk</th><th scope="col">Removal</th><th scope="col" data-nosort>Actions</th></tr></thead>
+      <thead><tr><th scope="col">Resource</th>{% if section_key in ('shared', 'files', 'processes', 'docker', 'systemd') %}<th scope="col">Type</th>{% endif %}{% if section_key == 'docker' %}<th scope="col">Host port(s)</th><th scope="col">Container port(s)</th>{% endif %}<th scope="col">Confidence</th><th scope="col">Risk</th><th scope="col">Removal</th><th scope="col" data-nosort>Review</th></tr></thead>
       <tbody>
         {% for a in items %}
         <tr>
-          <td>{{ a.get('resource_display') or a.get('resource_key') }}{% if a.get('shared') %} <span class="badge badge-amber">shared</span>{% endif %}
+          <td>{{ a.get('resource_display') or a.get('resource_key') }}{% if a.get('shared') %} <span class="badge badge-amber">shared</span>{% endif %}{% if a.get('excluded') %} <span class="badge badge-grey" title="Excluded: listed for review, never removed with this app">excluded</span>{% endif %}
             {% set rk = a.get('resource_key') %}
-            {% if rk and rk.startswith('/') and rk != a.get('resource_display') %}<div class="muted mono text-xs">{{ rk }}</div>{% endif %}
+            {% if rk and rk.startswith('/') and rk != a.get('resource_display') %}<div class="faint mono text-xs">{{ rk }}</div>{% endif %}
           </td>
+          {% if section_key in ('shared', 'files', 'processes', 'docker', 'systemd') %}<td data-filter-value="{{ a.get('resource_type') }}">{{ resource_type_label(a.get('resource_type'), singular=true) }}</td>{% endif %}
           {% if section_key == 'docker' %}
           {% set mappings = a.get('port_mappings') %}
           <td>{{ mappings | map(attribute='host') | list | join(', ') if mappings else '—' }}</td>
@@ -178,9 +156,9 @@
             <form method="post" action="/apps/{{ app.get('slug') }}/rescan-approve" class="inline-form" data-submit-guard="saving…">
               <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
               <input type="hidden" name="association_id" value="{{ a.get('id') }}">
-              <button type="submit" name="action" value="approve" class="link-button">approve</button>
-              <button type="submit" name="action" value="exclude" class="link-button danger">exclude</button>
-              <button type="submit" name="action" value="mark-shared" class="link-button">mark shared</button>
+              <button type="submit" name="action" value="approve" class="link-button" title="Approve this mapping for removal while its safety classification stays the same">approve</button>
+              <button type="submit" name="action" value="exclude" class="link-button danger" title="Never remove this resource with this app">exclude</button>
+              <button type="submit" name="action" value="mark-shared" class="link-button" title="Treat as shared: kept on removal">mark shared</button>
             </form>
           </td>
         </tr>
@@ -192,18 +170,18 @@
   {% endfor %}
 
   {% if associations %}
-  <div class="tabpanel panel" id="panel-readiness" role="tabpanel" aria-labelledby="tab-readiness" hidden>
-    <h2>Removal readiness <span class="count-pill">{{ associations | length }}</span></h2>
-    <table class="table" data-enhanced data-empty="No associated resources. Primary: run a scan, then return to this app." data-page-size="25">
+  <div class="tabpanel" id="panel-readiness" role="tabpanel" aria-labelledby="tab-readiness" hidden>
+    <table class="table" id="app-readiness-table" data-empty="No associated resources." data-page-size="25">
       <caption class="sr-only">Every associated resource with its confidence, data-loss risk and removal eligibility.</caption>
-      <thead><tr><th scope="col">Resource</th><th scope="col">Confidence</th><th scope="col">Risk</th><th scope="col">Removal</th></tr></thead>
+      <thead><tr><th scope="col">Resource</th><th scope="col">Type</th><th scope="col">Confidence</th><th scope="col">Risk</th><th scope="col">Removal</th></tr></thead>
       <tbody>
         {% for a in associations %}
         <tr class="{% if a.get('data_loss_risk') == 'data' %}row-danger{% endif %}">
-          <td><span class="badge badge-sm align-middle">{{ a.get('resource_type') }}</span> {{ a.get('resource_display') or a.get('resource_key') }}
+          <td>{{ a.get('resource_display') or a.get('resource_key') }}
             {% set rk = a.get('resource_key') %}
-            {% if rk and rk.startswith('/') and rk != a.get('resource_display') %}<div class="muted mono text-xs">{{ rk }}</div>{% endif %}
+            {% if rk and rk.startswith('/') and rk != a.get('resource_display') %}<div class="faint mono text-xs">{{ rk }}</div>{% endif %}
           </td>
+          <td data-filter-value="{{ a.get('resource_type') }}">{{ resource_type_label(a.get('resource_type'), singular=true) }}</td>
           <td data-filter-value="{{ a.get('level') }}" data-sort-value="{{ a.get('confidence') }}">{{ m.confidence(a) }}</td>
           <td data-filter-value="{{ a.get('data_loss_risk') }}">{{ a.get('data_loss_risk') or '—' }}</td>
           <td data-filter-value="{{ a.get('removal_eligible') }}">{{ a.get('removal_eligible') or '—' }}</td>

@@ -18,7 +18,7 @@ def collect() -> list[Resource]   # read-only, never raises on partial failure (
 | `systemd_src.py` | units, timers | `systemctl show` / `list-units` / `list-timers`, plus reads custom unit files and their birth/modify times |
 | `proc_src.py` | listening sockets, processes, sessions | `ss -lntp`, `ps`, `tmux ls` |
 | `cron_src.py` | cron entries | `/etc/cron.d` files, user crontabs via the helper's read-only `read_crontab` |
-| `fs_src.py` | project directories, git repos | scans `scan_roots`, fast `du` estimate, git info (incl. last commit time), folder birth time (`stat -c %W`, `file_times.py`), `.env` variable **names only** |
+| `fs_src.py` | project directories, git repos | scans `scan_roots`, fast `du` estimate, git info (incl. last commit time), folder birth time (`stat -c %W`, `file_times.py`, one batched call), `.env` variable **names only**; directories are probed by 4 worker threads, output order unchanged |
 
 `scan_roots` (from `del.toml`): `/apps`, `/data/apps`, `/opt`, `/srv`, `/var/www`.
 
@@ -249,7 +249,11 @@ def build_apps(resources: list[Resource], manifests: dict[str, Manifest]) -> lis
   app (so `/apps/immich-app` belongs to the `immich` project).
 - **Status and kind come from the host (Step 14)**: from the app's own non-shared,
   non-excluded runtime resources at confidence ≥ 80 — any running container or
-  `active` unit → `running`; owned runtime resources, none running → `stopped`;
+  `active` unit that is still running → `running`; owned runtime resources, none
+  running → `stopped`. A oneshot unit that ran and exited (`active (exited)`,
+  kept active by `RemainAfterExit`) does not count as running when the app has a
+  daemon that is down (freeze-watch's setup unit no longer hides its stopped
+  recorder); an app made only of such finished oneshots is `running`.
   a manifest app with nothing left on the host → `absent`; otherwise the manifest `status` (`active` → `running`) or `unknown`. A
   `compose_stopped` app that owns a systemd unit and no containers is `kind=systemd`.
 

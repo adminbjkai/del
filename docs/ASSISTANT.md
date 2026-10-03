@@ -37,7 +37,7 @@ Non-goals
 backend/del_app/
   config.py                  Settings.assistant: AssistantSettings (new nested model)
   assistant/                 NEW package — everything provider/prompt/context related
-    __init__.py              re-exports AssistantError, ask(), status(), prompt_library()
+    __init__.py              re-exports AssistantError, ask(), status(), prompt_library(), store
     errors.py                AssistantError(kind, message, status) and subclasses
     provider.py              OllamaCloudClient — urllib, NDJSON streaming, think="low"
     context.py               scope-aware context builders (read-only SQL) + budgeting
@@ -49,12 +49,12 @@ backend/del_app/
   web/
     assistant.py             NEW router: /assistant page + JSON/stream endpoints
     routes.py                aggregator gains `assistant`
-    static_routes.py         serves assistant.js and assistant.css (unauthenticated,
+    static_routes.py         serves assistant.js (unauthenticated, content-hashed,
                              same as the other static assets)
     templates/assistant.html NEW page
     templates/base.html      Help|Ask right rail; csrf-token meta; loads assistant.js on every authenticated page
     static/assistant.js      DEL.assistant module (page + right-rail dock)
-    static/assistant.css     assistant-only styles (tokens from app.css)
+    static/app.css           the assistant's styles live in the one stylesheet
 tests/
   test_assistant.py          provider parsing, context builders, prompt library, store,
                              service (provider faked)
@@ -63,8 +63,10 @@ tests/
 ```
 
 Layering: `assistant/context.py` may import the query helpers in
-`web/queries.py` and `classify_orphan_candidate` from `web/orphans.py` (they are
-DEL's read-model). `web/assistant.py` imports only `del_app.assistant`. Nothing in
+`web/queries.py`, `classify_orphans` from `web/orphans.py` and the image-ref
+normalizer from `discovery/docker_src.py` (they are DEL's read-model).
+`web/assistant.py` imports `del_app.assistant` and `del_app.auth` plus the web
+layer's own render/query helpers. Nothing in
 `assistant/` imports `helper_client`, `planner` or `jobs`.
 
 ## Configuration

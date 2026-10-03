@@ -4,56 +4,32 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <meta name="description" content="DEL — application inventory and safe uninstall for this host: discover apps, map their resources, and remove them with an auditable plan.">
-  <meta name="theme-color" content="#1b2021" media="(prefers-color-scheme: dark)" data-theme-color>
-  <meta name="theme-color" content="#f3f2ee" media="(prefers-color-scheme: light)" data-theme-color>
+  <meta name="theme-color" content="#0f1f30" media="(prefers-color-scheme: dark)" data-theme-color>
+  <meta name="theme-color" content="#edf1f4" media="(prefers-color-scheme: light)" data-theme-color>
   <title>{% block title %}DEL{% endblock %} · DEL</title>
-  <link rel="icon" href="/static/favicon.svg" type="image/svg+xml">
-  <link rel="stylesheet" href="/static/vendor/ag-grid.css">
-  <link rel="stylesheet" href="/static/vendor/ag-theme-quartz.css">
-  <link rel="stylesheet" href="/static/app.css">
-  <link rel="stylesheet" href="/static/assistant.css">
-  <script src="/static/theme-init.js"></script>
+  <link rel="icon" href="{{ asset('favicon.svg') }}" type="image/svg+xml">
+  <link rel="preload" href="{{ asset('fonts/BarlowSemiCondensed-Regular.woff2') }}" as="font" type="font/woff2" crossorigin>
+  <link rel="preload" href="{{ asset('fonts/BarlowSemiCondensed-SemiBold.woff2') }}" as="font" type="font/woff2" crossorigin>
+  <link rel="stylesheet" href="{{ asset('app.css') }}">
+  <script src="{{ asset('theme-init.js') }}"></script>
   <meta name="csrf-token" content="{{ csrf_token }}">
   {% block head %}{% endblock %}
 </head>
 {% import "_icons.html" as i %}
 {% set path = request.url.path %}
-{% if path == '/' %}
-  {% set glossary_ctx = 'general' %}
-{% elif path.startswith('/view-apps') %}
-  {% set glossary_ctx = 'view-apps' %}
-{% elif path == '/apps' or path.startswith('/apps?') %}
-  {% set glossary_ctx = 'apps' %}
-{% elif path.startswith('/apps/') and '/plan' in path %}
-  {% set glossary_ctx = 'jobs' %}
-{% elif path.startswith('/apps/') %}
-  {% set glossary_ctx = 'app-detail' %}
-{% elif path.startswith('/resources/') %}
-  {% set glossary_ctx = 'resources-' + path.split('/')[2].split('?')[0] %}
-{% elif path.startswith('/resources') %}
-  {% set glossary_ctx = 'resources' %}
-{% elif path.startswith('/orphans') %}
-  {% set glossary_ctx = 'orphans' %}
-{% elif path.startswith('/assistant') %}
-  {% set glossary_ctx = 'assistant' %}
-{% elif path.startswith('/jobs/') %}
-  {% set glossary_ctx = 'job-detail' %}
-{% elif path.startswith('/jobs') %}
-  {% set glossary_ctx = 'jobs' %}
-{% elif path.startswith('/settings') %}
-  {% set glossary_ctx = 'general' %}
-{% else %}
-  {% set glossary_ctx = 'general' %}
-{% endif %}
-<body data-glossary="{{ glossary_ctx }}">
+{% set on_assistant = path.startswith('/assistant') %}
+<body data-glossary="{{ glossary_ctx(path) }}">
   <a class="skip-link" href="#main-content">Skip to main content</a>
   <div class="layout glossary-collapsed" id="app-layout">
     <nav class="sidebar" id="sidebar" aria-label="Main">
       <div class="sidebar-top">
-        <a href="/" class="brand" title="Dashboard"><span class="brand-mark" aria-hidden="true">D</span><span class="brand-text">DEL</span></a>
+        <a href="/" class="brand" title="Dashboard">
+          <span class="brand-mark" aria-hidden="true">{{ i.icon('marker') }}</span>
+          <span class="brand-text"><span class="brand-name">DEL</span><span class="brand-host" title="Host this DEL inventories">{{ host_name }}</span></span>
+        </a>
         <div class="sidebar-controls">
           <button type="button" id="theme-toggle" class="icon-btn"
-                  aria-label="Switch to light theme" aria-pressed="false" title="Toggle light / dark">{{ i.icon('theme') }}</button>
+                  aria-label="Switch to light theme" aria-pressed="false" title="Light / dark (t)">{{ i.icon('theme') }}</button>
           <button type="button" id="sidebar-collapse" class="icon-btn sidebar-collapse-btn"
                   aria-label="Collapse sidebar" title="Collapse sidebar">{{ i.icon('chevron-left') }}</button>
           <button type="button" id="nav-toggle" class="icon-btn nav-toggle"
@@ -61,43 +37,75 @@
         </div>
       </div>
       <div class="nav-drawer" id="nav-drawer">
-        <button type="button" id="cmdk-open" class="cmdk-trigger" title="Search pages and applications (Ctrl K)">
+        <button type="button" id="cmdk-open" class="cmdk-trigger" title="Search pages, apps and actions (Ctrl K)">
           {{ i.icon('search') }}<span class="nav-label">Search</span>
           <kbd class="cmdk-hint" aria-hidden="true">Ctrl K</kbd>
         </button>
-        {% macro nav_item(href, label, ico, active, external=false) -%}
-          <li><a href="{{ href }}" title="{{ label }}"{% if active %} class="active" aria-current="page"{% endif %}{% if external %} target="_blank" rel="noopener"{% endif %}><span class="nav-ico">{{ i.icon(ico) }}</span><span class="nav-label">{{ label }}</span>{% if external %}<span class="nav-ext">{{ i.icon('external') }}</span>{% endif %}</a></li>
+        {% macro nav_item(href, label, ico, active, key) -%}
+          <li><a href="{{ href }}" title="{{ label }} (g {{ key }})" data-nav-key="{{ key }}"{% if active %} class="active" aria-current="page"{% endif %}><span class="nav-ico">{{ i.icon(ico) }}</span><span class="nav-label">{{ label }}</span></a></li>
         {%- endmacro %}
-        <div class="nav-section-label">Inventory</div>
-        <ul class="nav-links">
-          {{ nav_item('/', 'Dashboard', 'home', path == '/') }}
-          {{ nav_item('/view-apps', 'View Apps', 'grid', path.startswith('/view-apps')) }}
-          {{ nav_item('/apps', 'Applications', 'apps', path.startswith('/apps') or path.startswith('/manifests')) }}
-          {{ nav_item('/resources/container', 'Resources', 'layers', path.startswith('/resources')) }}
-          {{ nav_item('/orphans', 'Orphans', 'orphan', path.startswith('/orphans')) }}
-        </ul>
-        <div class="nav-section-label">Removal</div>
-        <ul class="nav-links">
-          {{ nav_item('/jobs', 'Jobs', 'jobs', path.startswith('/jobs') or path.startswith('/plans')) }}
-        </ul>
-        <div class="nav-section-label">Help</div>
-        <ul class="nav-links">
-          {{ nav_item('/assistant', 'Assistant', 'chat', path.startswith('/assistant')) }}
-        </ul>
-        <div class="sidebar-foot">
+        <div class="nav-group">
+          <div class="nav-section-label">Inventory</div>
           <ul class="nav-links">
-            {{ nav_item('/settings', 'Settings', 'settings', path.startswith('/settings')) }}
+            {{ nav_item('/', 'Dashboard', 'home', path == '/', 'd') }}
+            {{ nav_item('/view-apps', 'View Apps', 'grid', path.startswith('/view-apps'), 'v') }}
+            {{ nav_item('/apps', 'Applications', 'apps', path.startswith('/apps') or path.startswith('/manifests'), 'a') }}
+            {{ nav_item('/resources/container', 'Resources', 'layers', path.startswith('/resources'), 'r') }}
+            {{ nav_item('/orphans', 'Orphans', 'orphan', path.startswith('/orphans'), 'o') }}
+          </ul>
+        </div>
+        <div class="nav-group">
+          <div class="nav-section-label">Removal</div>
+          <ul class="nav-links">
+            {{ nav_item('/jobs', 'Jobs', 'jobs', path.startswith('/jobs') or path.startswith('/plans'), 'j') }}
+          </ul>
+        </div>
+        <div class="nav-group">
+          <div class="nav-section-label">Help</div>
+          <ul class="nav-links">
+            {{ nav_item('/assistant', 'Assistant', 'chat', on_assistant, 'k') }}
+          </ul>
+        </div>
+        <div class="sidebar-foot">
+          {% set sb = scan_block or {} %}
+          <div class="scan-block{% if sb.get('running') %} is-running{% endif %}" id="scan-block"
+               data-running="{{ 'true' if sb.get('running') else 'false' }}"
+               data-started="{{ sb.get('started') or '' }}" role="status" aria-live="polite">
+            <div class="scan-block-head">
+              <a class="scan-block-title" href="/settings#scan-now" title="Scan history and settings">
+                <span class="dot dot-{{ 'info' if sb.get('running') else ('ok' if sb.get('id') else 'idle') }}" aria-hidden="true"></span>
+                <span class="nav-label">{% if sb.get('id') %}Scan #{{ sb.get('id') }}{% else %}No scan yet{% endif %}</span>
+              </a>
+              <form method="post" action="/scan" class="scan-run-form" data-submit-guard="">
+                <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+                <button type="submit" class="icon-btn scan-block-run" id="scan-block-run" title="Run a new scan"
+                        aria-label="Run a new scan"{% if sb.get('running') %} disabled{% endif %}>{{ i.icon('scan') }}</button>
+              </form>
+            </div>
+            <div class="scan-block-meta nav-label" id="scan-block-meta">
+              {% if sb.get('running') %}
+                <span id="scan-block-elapsed">Scanning…</span>
+              {% elif sb.get('id') %}
+                <span title="{{ format_dt(sb.get('finished')) }}">{{ sb.get('age') }}</span><span>{{ sb.get('duration') }}</span>
+              {% else %}
+                <span>Run one to fill the inventory</span>
+              {% endif %}
+            </div>
+            <div class="scan-block-bar" aria-hidden="true"></div>
+          </div>
+          <ul class="nav-links">
+            {{ nav_item('/settings', 'Settings', 'settings', path.startswith('/settings'), 's') }}
           </ul>
           <form method="post" action="/logout" class="logout-form">
             <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-            <button type="submit" class="btn btn-ghost btn-sm logout-btn" title="Log out">{{ i.icon('logout') }}<span class="logout-label">Log out</span></button>
+            <button type="submit" class="nav-button logout-btn" title="Log out"><span class="nav-ico">{{ i.icon('logout') }}</span><span class="nav-label">Log out</span></button>
           </form>
         </div>
       </div>
     </nav>
     <div class="panel-resizer sidebar-resizer" id="sidebar-resizer" role="separator"
          aria-label="Resize navigation panel" aria-orientation="vertical"
-         aria-valuemin="184" aria-valuemax="320" aria-valuenow="212" tabindex="0"
+         aria-valuemin="188" aria-valuemax="320" aria-valuenow="220" tabindex="0"
          title="Drag or use arrow keys to resize; double-click to reset"></div>
 
     <div class="main-wrap">
@@ -112,22 +120,22 @@
 
       <div class="panel-resizer rail-resizer" id="rail-resizer" role="separator"
            aria-label="Resize Help and Ask panel" aria-orientation="vertical"
-           aria-valuemin="280" aria-valuemax="520" aria-valuenow="300" tabindex="0"
+           aria-valuemin="280" aria-valuemax="520" aria-valuenow="320" tabindex="0"
            title="Drag or use arrow keys to resize; double-click to reset"></div>
       <aside class="glossary-rail" id="glossary-rail" aria-label="Help and assistant">
         <button type="button" id="glossary-collapse" class="icon-btn glossary-collapse-btn"
                 aria-label="Hide help panel" title="Hide help panel">{{ i.icon('chevron-right') }}</button>
-        <button type="button" class="rail-collapsed-label" data-rail-expand title="Show the help panel">Help{% if not path.startswith('/assistant') %} · Ask{% endif %}</button>
+        <button type="button" class="rail-collapsed-label" data-rail-expand title="Show the help panel (?)">{{ i.icon('help') }}<span>Help{% if not on_assistant %} / Ask{% endif %}</span></button>
         <div class="rail-tabs" role="tablist" aria-label="Right panel">
           <button type="button" class="rail-tab is-active" id="rail-tab-help" data-rail-tab="help" role="tab" aria-selected="true" aria-controls="rail-panel-help">{{ i.icon('help') }}Help</button>
-          {% if not path.startswith('/assistant') %}
+          {% if not on_assistant %}
           <button type="button" class="rail-tab" id="rail-tab-ask" data-rail-tab="ask" role="tab" aria-selected="false" aria-controls="rail-panel-ask">{{ i.icon('chat') }}Ask</button>
           {% endif %}
         </div>
         <div class="rail-panel" id="rail-panel-help" data-rail-panel="help" role="tabpanel" aria-labelledby="rail-tab-help">
           {% include "_glossary.html" %}
         </div>
-        {% if not path.startswith('/assistant') %}
+        {% if not on_assistant %}
         <div class="rail-panel" id="rail-panel-ask" data-rail-panel="ask" role="tabpanel" aria-labelledby="rail-tab-ask" hidden>
           {% include "_assistant_dock.html" %}
         </div>
@@ -136,11 +144,11 @@
     </div>
   </div>
 
-  {# Mobile glossary FAB + bottom sheet #}
+  {# Narrow screens: Help and Ask become floating buttons. #}
   <button type="button" class="glossary-fab" id="glossary-fab" aria-controls="glossary-sheet" aria-expanded="false">
     {{ i.icon('help') }}Help
   </button>
-  {% if not path.startswith('/assistant') %}
+  {% if not on_assistant %}
   <button type="button" class="glossary-fab assistant-fab" id="assistant-fab" aria-controls="glossary-rail" title="Ask about this screen — suggestions fill the box; Enter sends">
     {{ i.icon('chat') }}Ask
   </button>
@@ -164,16 +172,35 @@
 
   <dialog id="cmdk" class="cmdk-dialog" aria-label="Command palette">
     <div class="cmdk-box">
-      <input type="text" id="cmdk-input" class="cmdk-input" placeholder="Search pages and applications…"
-             aria-label="Search pages and applications" autocomplete="off">
+      <div class="cmdk-field">
+        {{ i.icon('search') }}
+        <input type="text" id="cmdk-input" class="cmdk-input" placeholder="Jump to a page or app, or run an action…"
+               aria-label="Search pages, apps and actions" autocomplete="off">
+        <kbd>Esc</kbd>
+      </div>
       <div id="cmdk-results" class="cmdk-results" role="listbox" aria-label="Results"></div>
-      <div id="cmdk-empty" class="empty-state" hidden><div class="empty-state-msg">No matches.</div></div>
+      <div id="cmdk-empty" class="cmdk-empty" hidden>No matches.</div>
     </div>
   </dialog>
 
-  <script src="/static/vendor/ag-grid-community.min.js"></script>
-  <script src="/static/app.js"></script>
-  <script src="/static/assistant.js"></script>
+  <dialog id="shortcuts" class="sheet-dialog" aria-labelledby="shortcuts-title">
+    <div class="sheet-dialog-head">
+      <h2 id="shortcuts-title">Keyboard shortcuts</h2>
+      <button type="button" class="icon-btn" data-dialog-close aria-label="Close">{{ i.icon('close') }}</button>
+    </div>
+    <dl class="shortcut-list">
+      <dt><kbd>Ctrl</kbd> <kbd>K</kbd></dt><dd>Search pages, apps and actions</dd>
+      <dt><kbd>/</kbd></dt><dd>Filter the table on this page</dd>
+      <dt><kbd>g</kbd> then <kbd>d</kbd> <kbd>v</kbd> <kbd>a</kbd> <kbd>r</kbd> <kbd>o</kbd> <kbd>j</kbd> <kbd>k</kbd> <kbd>s</kbd></dt>
+      <dd>Go to Dashboard, View Apps, Applications, Resources, Orphans, Jobs, Assistant, Settings</dd>
+      <dt><kbd>t</kbd></dt><dd>Switch light / dark</dd>
+      <dt><kbd>?</kbd></dt><dd>Show this list</dd>
+      <dt><kbd>Esc</kbd></dt><dd>Close a dialog, menu or panel</dd>
+    </dl>
+  </dialog>
+
+  <script src="{{ asset('app.js') }}"></script>
+  <script src="{{ asset('assistant.js') }}"></script>
   {% block scripts %}{% endblock %}
 </body>
 </html>

@@ -2,12 +2,12 @@
 {% block title %}Manifest · {{ slug }}{% endblock %}
 {% block content %}
 <nav class="crumbs" aria-label="Breadcrumb">
-  <a href="/apps">Applications</a><span class="sep">›</span><a href="/apps/{{ slug }}">{{ slug }}</a><span class="sep">›</span><span aria-current="page">Manifest</span>
+  <a href="/apps">Applications</a><span class="sep">/</span><a href="/apps/{{ slug }}">{{ slug }}</a><span class="sep">/</span><span aria-current="page">Manifest</span>
 </nav>
 <div class="page-header">
-  <h1>Manifest <span class="muted">· {{ slug }}</span></h1>
+  <h1>Manifest <span class="muted">{{ slug }}</span></h1>
 </div>
-<p class="page-lede">Edit this app's manifest YAML directly. Saved changes take effect on the next scan.</p>
+<p class="page-lede">This app's manifest: what DEL should always count as the app's (or never remove). Saved changes take effect on the next scan.</p>
 {% if validation_errors %}
 <div class="callout callout-warn">
   <span class="callout-title">Validation errors</span>

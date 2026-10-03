@@ -1,5 +1,62 @@
 # Changelog
 
+## 2026.10.03
+
+A lighter, calmer, more accurate UI ("survey sheet"), with the same features.
+
+Leaner:
+- AG Grid is gone. One vanilla table engine (search, sort on parsed values,
+  per-column filters, quick chips, column chooser, compact rows, column resize,
+  pagination, CSV export, clickable rows) replaces it and its fallback. The
+  stylesheet and scripts a page loads fell from about 2.2 MB to about 240 KB
+  including fonts, and every asset URL now carries a content hash and is cached
+  as immutable, so later page views download only the HTML. Plan/job and
+  gallery code load only on their pages (`removal.js`, `gallery.js`);
+  `assistant.css` merged into the one stylesheet.
+- Filesystem discovery probes directories with four workers (same output;
+  about 4x faster warm). The gallery icon route no longer re-reads every nginx
+  row per request, and its cache evicts oldest-first instead of clearing.
+- Removed dead code: unused assistant/planner/jobs import shims, a palette page
+  list, a settings-table read, five unused functions/parameters, a duplicated
+  image-ref helper, the test-only re-exports in `web/routes.py`, an AG Grid test
+  fixture, unused icons and CSS rules.
+
+New look and convenience:
+- Dark cyanotype / light drafting-film themes on a faint grid, self-hosted
+  Barlow Semi Condensed + IBM Plex Mono, status as dot + word, and a hazard
+  stripe only where something is deleted for real (LIVE tags, live execute).
+- Dashboard: a site plan of every app (by kind or status), figures, what
+  changed since the previous scan, apps needing review, recent jobs.
+- Sidebar scan stamp on every page: which completed scan you are reading, its
+  age, and a button that rescans in place and reloads when it is published.
+- Optional automatic scans (`scan_interval_hours`; this host uses 6).
+- Command palette gains actions and "Open site" entries; `g`+letter page
+  jumps, `/` table search, `t` theme, `?` shortcuts dialog.
+- Tables remember sort, page size, hidden columns and column widths, but
+  always open unfiltered, so a forgotten filter can no longer hide rows.
+
+Accuracy:
+- View Apps no longer calls an app "Online" when nginx answers a basic-auth
+  401 while nothing listens on the upstream; failed domains are listed under
+  **Unavailable** with the reason instead of vanishing.
+- App status: a oneshot unit that ran and exited no longer masks a stopped
+  daemon (freeze-watch showed running while its recorder was down).
+- Disk usage now includes Docker volumes (it claimed to and did not); the
+  Docker figures show "measuring" instead of 0 B before the first measurement.
+- Shared is described as "used by 2+ apps or a system path"; published ports of
+  stopped containers are shown as idle; systemd rows without a unit file are
+  labelled; the plan page shows its real creation time (it always showed "—").
+- Fixed: on phones the main column was wider than the screen; app pages
+  scrolled themselves down on load; the font preload fetched each face twice;
+  each resource-type table shared one saved layout; a finished job showed a
+  "Job done" toast on every visit; a resized sidebar or rail ignored
+  "collapse"; a malformed `data:` favicon made `/app-icon` fail with an
+  uncached 500; a docker failure showed as "0 B reclaimable".
+
+Docs: UI.md rewritten; README, ARCHITECTURE, OPERATIONS, DISCOVERY, SECURITY,
+INSTALL and ASSISTANT updated. CI syntax-checks every static script.
+Tests: 459 passed, 2 skipped (`-W error`); pyflakes clean.
+
 ## 2026.10.02
 
 Inventory integrity and scan performance:

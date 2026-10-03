@@ -2,6 +2,7 @@
 The web layer imports only this package."""
 from __future__ import annotations
 
+from del_app.assistant import store
 from del_app.assistant.context import RESOURCE_TYPE_TARGETS, SCOPES, list_targets
 from del_app.assistant.errors import AssistantError
 from del_app.assistant.prompts import PROMPT_LIBRARY, prompt_library
@@ -16,5 +17,6 @@ __all__ = [
     "list_targets",
     "prompt_library",
     "status",
+    "store",
     "test_connection",
 ]

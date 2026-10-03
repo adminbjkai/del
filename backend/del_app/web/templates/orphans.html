@@ -3,28 +3,24 @@
 {% block title %}Orphans{% endblock %}
 {% block content %}
 <div class="page-header">
-  <h1>Orphan candidate rows <span class="count-pill">{{ total }}</span></h1>
+  <h1>Orphans <span class="count-pill">{{ total }}</span></h1>
   <div class="page-actions">
     {% if show_all %}
-      <a class="btn btn-sm btn-ghost" href="/orphans">Actionable only</a>
       <span class="badge badge-amber">showing all unassociated</span>
+      <a class="btn btn-sm btn-ghost" href="/orphans">Actionable only</a>
     {% else %}
       <a class="btn btn-sm btn-ghost" href="/orphans?show=all">Show system &amp; expected too</a>
     {% endif %}
-    {% if assistant_enabled() %}
+    {% if assistant_on %}
     <a class="btn btn-sm btn-ghost" href="/assistant?scope=orphans" data-ask-scope="orphans" data-ask-target="" title="Ask the read-only assistant to review the orphan list">Ask the assistant</a>
     {% endif %}
   </div>
 </div>
 
-<p class="page-lede">These are resource rows with no probable owner (≥60) in the latest scan—not necessarily separate apps. Possible/weak claims may still exist; protected-tree rows are suppressed, and shared/probable owners live on Apps and Resources. Unassigned chips mean no association rows at all.</p>
-<div class="callout callout-info">
-  <span class="callout-title">Review only</span>
-  Nothing on this page can be deleted from here — decide per app on its own page.
-</div>
+<p class="page-lede">Resource rows with no probable owner (confidence 60 or more) in the latest scan. They are not necessarily separate apps: weak claims may still exist, and rows inside protected trees are left out. This page is review only; nothing is deleted from here.</p>
 
 <div class="stat-grid">
-  <a class="stat-card{% if not show_all %} is-warn{% endif %}" href="/orphans">
+  <a class="stat-card{% if not show_all and counts.get('actionable', 0) %} is-warn{% endif %}" href="/orphans">
     <span class="stat-value">{{ counts.get('actionable', 0) }}</span>
     <span class="stat-label">Actionable</span>
     <span class="stat-hint">Real review/cleanup candidates</span>
@@ -46,12 +42,15 @@
   </span>
 </div>
 
-<div class="legend-row" aria-label="How rows relate">
-  <span class="chip" title="More than one current application owns it">shared = 2+ current apps</span>
-  <span class="chip" title="Confidence ≥ 60 counts as an owner">probable = strong owner</span>
-  <span class="chip" title="Confidence 30–59; review, do not treat as owner">possible = weak</span>
-  <span class="chip" title="No probable (≥60) current owner; review-only, no delete. Unassigned chips are no association rows.">no probable owner → Orphans</span>
-</div>
+<details class="explain">
+  <summary>How rows relate</summary>
+  <div class="explain-body legend-row" aria-label="How rows relate">
+    <span class="chip" title="More than one current application owns it">shared = 2+ current apps</span>
+    <span class="chip" title="Confidence ≥ 60 counts as an owner">probable = strong owner</span>
+    <span class="chip" title="Confidence 30–59; review, do not treat as owner">possible = weak</span>
+    <span class="chip" title="No probable (≥60) current owner; review-only, no delete. Unassigned chips are no association rows.">no probable owner → Orphans</span>
+  </div>
+</details>
 
 {% if grouped %}
 <nav class="jump-nav" aria-label="Jump to resource type">
@@ -64,7 +63,7 @@
   {% endfor %}
 </nav>
 
-<div class="cluster mb-3">
+<div class="cluster mb-2">
   <button type="button" class="btn btn-sm btn-ghost" data-expand-all="open">Expand all</button>
   <button type="button" class="btn btn-sm btn-ghost" data-expand-all="close">Collapse all</button>
 </div>
@@ -76,12 +75,10 @@
     <h2><a href="/resources/{{ g.type }}">{{ g.label }}</a></h2>
     <span class="count-pill">{{ g.rows | length }}</span>
     <span class="section-hint">{{ g.explainer }}</span>
-    <span class="section-aside">
-      <button type="button" class="btn btn-sm btn-ghost" data-export-table="orphans-{{ g.type }}-table" title="Export the currently filtered rows as CSV">Export CSV</button>
-    </span>
   </summary>
   <div class="section-body">
-    <table id="orphans-{{ g.type }}-table" class="table" data-enhanced data-empty="No orphaned {{ g.label|lower }} in this view. Primary: run a scan. Secondary: show system and expected too." data-page-size="25">
+    <button type="button" class="btn btn-sm btn-ghost" data-export-table="orphans-{{ g.type }}-table" title="Export the filtered rows as CSV">Export CSV</button>
+    <table id="orphans-{{ g.type }}-table" class="table" data-empty="No orphaned {{ g.label|lower }} in this view. Primary: run a scan. Secondary: show system and expected too." data-page-size="25">
       <caption class="sr-only">Unassociated {{ g.label|lower }} from the latest scan, with why each one is listed.</caption>
       <thead>
         <tr>
@@ -91,7 +88,7 @@
           <th scope="col">State</th>
           <th scope="col">Class</th>
           <th scope="col">Why listed</th>
-          {% if g.type in ('container', 'image', 'volume', 'network') and assistant_enabled() %}
+          {% if g.type in ('container', 'image', 'volume', 'network') and assistant_on %}
           <th scope="col" data-nosort>Ask</th>
           {% endif %}
         </tr>
@@ -108,7 +105,7 @@
           </td>
           <td>{{ m.trunc(r.key) }}</td>
           <td>{{ m.trunc(r.path, 50) }}</td>
-          <td data-filter-value="{{ r.state }}"><span class="badge">{{ r.state or '—' }}</span></td>
+          <td data-filter-value="{{ r.state }}">{{ r.state or '—' }}</td>
           <td data-filter-value="{{ r.bucket_label }}">
             {% if r.bucket == 'actionable' %}
               <span class="badge badge-amber">{{ r.bucket_label }}</span>
@@ -119,7 +116,7 @@
             {% endif %}
           </td>
           <td class="muted text-sm">{{ r.reason }}</td>
-          {% if g.type in ('container', 'image', 'volume', 'network') and assistant_enabled() %}
+          {% if g.type in ('container', 'image', 'volume', 'network') and assistant_on %}
           {{ m.ask_link(g.type, r.key) }}
           {% endif %}
         </tr>

@@ -11,20 +11,32 @@ a one-click "Remove app now" button on each app's detail page instead builds
 a complete-removal plan and runs it live immediately, behind a single confirm
 dialog. DEL cannot remove itself.
 
+The **dashboard** draws the host as a site plan: every application is a tile
+grouped by kind or status, next to figures (orphans, shared resources, disk
+usage including Docker volumes, Docker's reclaimable space), what changed since
+the previous scan, apps that need review, and recent jobs. A **scan stamp** in
+the sidebar shows which completed scan every page is reading, how old it is,
+and runs a new scan in place; optional automatic scans keep it fresh
+(`scan_interval_hours` in `config/del.toml`, off by default).
+
 The authenticated **View Apps** tab at `/view-apps` is a homelab-style launcher
 for current, enabled domains that pass a live HTTPS check. It supports search,
 categories, favorites, grid/list layouts, card sizing, density, hiding, and drag
 ordering; personal layout preferences stay in browser local storage and do not
-change DEL inventory or removal data. Card icons are proxied through DEL's own
-`/app-icon/{domain}` route rather than loaded from each app's origin, so an app
-behind HTTP basic auth cannot pop a credential prompt over the gallery.
+change DEL inventory or removal data. Domains that fail the check — or show only
+a login page while nothing listens behind it — are listed under **Unavailable**
+with the reason. Card icons are proxied through DEL's own `/app-icon/{domain}`
+route rather than loaded from each app's origin, so an app behind HTTP basic
+auth cannot pop a credential prompt over the gallery.
 
-The admin UI's theme follows `localStorage["del.theme"]` if set, else the OS
-`prefers-color-scheme`, else dark, with a header toggle for light/dark
-(persisted in browser local storage) and a `Ctrl`/`Cmd`+`K` command palette for
-jumping to any sidebar page or application. On desktop, the navigation and
-Help/Ask panels can be resized by dragging their dividers or using arrow keys;
-each width is remembered locally and can be reset with a double-click.
+The UI is self-contained (no third-party code, fonts self-hosted, content-hashed
+assets cached as immutable) in a dark cyanotype or light drafting-film theme
+(`localStorage["del.theme"]`, else the OS `prefers-color-scheme`, else dark).
+Every inventory table has search, sorting, per-column filters, quick filter
+chips, a column chooser, pagination and CSV export. `Ctrl`/`Cmd`+`K` opens a
+command palette for pages, applications, their sites and actions; `g` then a
+letter jumps between pages, `/` focuses the table search, `t` toggles the theme
+and `?` lists every shortcut. See [docs/UI.md](docs/UI.md).
 
 The **Assistant** is a read-only Q&A over the latest inventory (Ollama Cloud
 `glm-5.3-flash`): a dedicated page at `/assistant` plus an **Ask** tab in the
@@ -53,7 +65,7 @@ still uses the planner. See [docs/ASSISTANT.md](docs/ASSISTANT.md).
 | TLS | Nginx, existing `bjk.ai` wildcard cert |
 | Protection | DEL is flagged `protected=1`; the planner refuses to build a removal plan for it |
 | Inventory export | Self-contained, whole-server inventory dump (`/apps/del/miscwork/`, gitignored) served at `https://del.bjk.ai/miscwork.html` (and aliased at `/inventory`), the only basic-auth-protected location in the vhost (`auth_basic_user_file /etc/nginx/.del-docs-htpasswd`) |
-| Unauthenticated routes | `/login`, `/healthz`, `/favicon.ico`, and `/static/*` (`app.css`, `app.js`, `theme-init.js`, `favicon.svg`, `assistant.css`, `assistant.js`, plus `/static/vendor/` AG Grid Community 32.3.3: `ag-grid.css`, `ag-theme-quartz.css`, `ag-grid-community.min.js`). Login (`login.html`) loads only `app.css` + `theme-init.js` + favicon — not AG Grid or assistant scripts. Everything else — including `/app-icon/{domain}` and `/palette.json` — requires a session |
+| Unauthenticated routes | `/login`, `/healthz`, `/favicon.ico`, and `/static/*` (`app.css`, `app.js`, `assistant.js`, `removal.js`, `gallery.js`, `theme-init.js`, `favicon.svg`, and `fonts/`). Login (`login.html`) loads only `app.css`, `theme-init.js`, the fonts and the favicon. Everything else — including `/app-icon/{domain}` and `/palette.json` — requires a session |
 
 ## Quick start
 
@@ -62,7 +74,7 @@ cd /apps/del
 ./scripts/install.sh                       # deploys the helper, installs del-web/del-helper, nginx site, checks health
 ./scripts/del-admin create-admin           # create the one admin account
 ```
-Then open https://del.bjk.ai, log in, and run a scan from Settings (or `POST /scan`).
+Then open https://del.bjk.ai, log in, and run a scan from the sidebar scan stamp or Settings.
 
 `install.sh` installs `del-web.service` and `del-helper.service` only. It does
 **not** create `/etc/nginx/.del-docs-htpasswd`, which `/miscwork.html` needs — see
@@ -79,6 +91,7 @@ INSTALL.md.
 | [UNINSTALL.md](UNINSTALL.md) | Manual steps to remove DEL itself (DEL cannot do this to itself) |
 | [docs/ASSISTANT.md](docs/ASSISTANT.md) | Read-only inventory assistant (Ollama Cloud, scopes, prompts, security) |
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Stack, process/privilege model, component layout, data model |
+| [docs/UI.md](docs/UI.md) | Visual language, shell, components, table contract, keyboard shortcuts, stored preferences |
 | [docs/DISCOVERY.md](docs/DISCOVERY.md) | Discovery sources, confidence scoring, correlation rules, manifest format |
 | [docs/REMOVAL-LIFECYCLE.md](docs/REMOVAL-LIFECYCLE.md) | The six removal-job stages and the safety gates around them |
 | [docs/DEPLOYMENT-CONVENTION.md](docs/DEPLOYMENT-CONVENTION.md) | The house standard every app on this server follows (layout, ports, nginx, manifests, decommissioning) |
@@ -123,8 +136,8 @@ cd /apps/del/backend && ../.venv/bin/python -m pytest ../tests/ -q -W error
 ```
 
 Every change must leave this at zero failures with warnings treated as errors.
-GitHub CI also runs Pyflakes and syntax checks for the three application JavaScript
-files. Dependency pins in `requirements*.txt` are shared by CI and production.
+GitHub CI also runs Pyflakes and `node --check` on every application JavaScript
+file. Dependency pins in `requirements*.txt` are shared by CI and production.
 
 Scans publish inventory atomically and keep the previous inventory on failure.
 Web and CLI scans share a file lock. Settings shows scan progress and outcomes;

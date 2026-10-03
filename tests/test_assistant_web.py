@@ -228,9 +228,9 @@ def test_page_enabled_renders_composer_and_preselects(authed_client, fake_on):
     assert 'data-target="testapp"' in html
     assert 'id="assistant-form"' in html
     assert '<meta name="csrf-token"' in html
-    assert '<link rel="stylesheet" href="/static/assistant.css">' in html
-    assert html.count('<link rel="stylesheet" href="/static/assistant.css">') == 1
-    assert '<script src="/static/assistant.js"></script>' in html
+    assert '<link rel="stylesheet" href="/static/app.css?v=' in html
+    assert html.count('rel="stylesheet"') == 1
+    assert '<script src="/static/assistant.js?v=' in html
     assert 'id="assistant-fab"' not in html
     assert 'id="rail-tab-ask"' not in html
     assert 'data-scope="general" aria-pressed="false"' in html
@@ -251,16 +251,6 @@ def test_page_disabled_shows_steps_and_no_composer(authed_client, fake_off):
     assert "no API key configured" in html
     assert 'id="assistant-form"' not in html
     assert 'id="assistant-page"' not in html
-
-
-def test_page_when_lane_missing(authed_client, monkeypatch):
-    monkeypatch.setattr(assistant_web, "assistant", None)
-    resp = authed_client.get("/assistant")
-    assert resp.status_code == 200
-    assert 'id="assistant-disabled"' in resp.text
-    resp = authed_client.get("/assistant/prompts?scope=general")
-    assert resp.status_code == 503
-    assert resp.json() == {"error": "Assistant unavailable", "kind": "disabled"}
 
 
 def test_page_unknown_scope_falls_back_to_general(authed_client, fake_on):
@@ -532,9 +522,9 @@ def test_deep_links_absent_when_disabled(authed_client, fake_off):
 
 def test_nav_and_palette(authed_client, fake_on):
     html = authed_client.get("/").text
-    assert 'href="/assistant" title="Assistant"' in html
-    pages = authed_client.get("/palette.json").json()["pages"]
-    assert {"title": "Assistant", "url": "/assistant"} in pages
+    # The palette lists pages from this sidebar nav; g+k is its shortcut.
+    assert 'href="/assistant" title="Assistant (g k)" data-nav-key="k"' in html
+    assert "apps" in authed_client.get("/palette.json").json()
 
 
 def test_base_blocks_present():
@@ -544,7 +534,7 @@ def test_base_blocks_present():
     assert "{% block head %}{% endblock %}" in text
     assert "{% block scripts %}{% endblock %}" in text
     assert text.index("{% block head %}") < text.index("</head>")
-    assert text.index("/static/app.js") < text.index("{% block scripts %}")
+    assert text.index("asset('app.js')") < text.index("{% block scripts %}")
 
 
 def test_static_assets_served(anon_client):
@@ -552,9 +542,12 @@ def test_static_assets_served(anon_client):
     assert js.status_code == 200
     assert js.headers["content-type"].startswith("application/javascript")
     assert "window.DEL.assistant" in js.text
-    css = anon_client.get("/static/assistant.css")
+    # The assistant's styles live in app.css (one stylesheet for every page).
+    css = anon_client.get("/static/app.css")
     assert css.status_code == 200
     assert css.headers["content-type"].startswith("text/css")
+    assert ".assistant-dock" in css.text
+    assert anon_client.get("/static/assistant.css").status_code == 404
 
 
 _INLINE_SCRIPT = re.compile(r"<script(?![^>]*\bsrc=)[^>]*>", re.I)

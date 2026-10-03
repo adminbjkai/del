@@ -1,4 +1,4 @@
-"""Tests for the DEL web UI layer (del_app.web.routes).
+"""Tests for the DEL web UI layer (del_app.web.*).
 
 Builds a throwaway FastAPI app around `router`, points settings at a tmp
 config/db (mirroring test_core.py's pattern), and monkeypatches the
@@ -7,6 +7,9 @@ planner/jobs sibling-lane modules with simple fakes.
 from __future__ import annotations
 
 import json
+import re
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 import pytest
@@ -19,7 +22,7 @@ from del_app import auth
 from del_app.auth import NeedsLogin, User
 from del_app.config import get_settings
 from del_app.db import run_migrations
-from del_app.web import gallery, plans_jobs, routes
+from del_app.web import formatting, gallery, orphans, plans_jobs, routes
 
 
 @pytest.fixture()
@@ -147,7 +150,7 @@ def test_dashboard_app_count_excludes_stale_scan_apps(authed_client, settings_en
     resp = authed_client.get("/")
     assert resp.status_code == 200
     # exactly one app (current-app) counted, not both
-    assert '<div class="stat-value">1</div>' in resp.text
+    assert '<span class="figure-value">1</span>' in resp.text
 
 
 def test_apps_list_200(authed_client):
@@ -161,10 +164,10 @@ def test_apps_list_with_search_filter_200(authed_client):
     assert resp.status_code == 200
 
 
-def test_apps_list_has_enhanced_table(authed_client):
+def test_apps_list_has_table(authed_client):
     resp = authed_client.get("/apps")
     assert resp.status_code == 200
-    assert "data-enhanced" in resp.text
+    assert 'class="table"' in resp.text
 
 
 def test_view_apps_only_renders_current_enabled_healthy_domains(
@@ -246,10 +249,12 @@ def test_view_apps_only_renders_current_enabled_healthy_domains(
     assert "good-app.bjk.ai" in resp.text
     assert "HTTP 200" in resp.text
     assert "42 ms" in resp.text
-    assert "Bad App" not in resp.text
+    # Unhealthy domains get no launch card; they are listed with the reason.
+    assert 'data-domain="bad-app.bjk.ai"' not in resp.text
+    assert "<td>HTTP 502</td>" in resp.text
     assert "disabled.bjk.ai" not in resp.text
     assert "stale-app.bjk.ai" not in resp.text
-    assert "1 unavailable hidden" in resp.text
+    assert "1 unavailable" in resp.text
     assert 'id="gallery-layout-toggle"' in resp.text
     assert 'data-gallery-view="grid"' in resp.text
     assert 'class="gallery-section-toggle"' in resp.text
@@ -258,14 +263,116 @@ def test_view_apps_only_renders_current_enabled_healthy_domains(
     assert 'href="/view-apps"' in resp.text
 
 
+def test_icon_with_malformed_data_uri_is_a_cached_miss(monkeypatch):
+    """A page whose <link rel=icon> holds a broken data: URI must not turn
+    /app-icon into a 500 that is retried on every gallery view."""
+    calls = []
+
+    def fake_get(url, accept, limit):
+        calls.append(url)
+        if url.endswith("/"):
+            return 200, "text/html", b'<link rel="icon" href="data:image/png;base64,abc">'
+        return None
+
+    monkeypatch.setattr(gallery, "_http_get", fake_get)
+    gallery._ICON_CACHE.clear()
+    assert gallery._cached_icon("sloppy.bjk.ai") is None
+    first = len(calls)
+    assert gallery._cached_icon("sloppy.bjk.ai") is None
+    assert len(calls) == first  # the miss was cached
+    gallery._ICON_CACHE.clear()
+
+
+def test_docker_df_failure_is_unavailable_not_zero(monkeypatch):
+    from del_app.web import docker_df
+
+    monkeypatch.setattr(docker_df, "_CACHE", {
+        "ts": 0.0, "refreshing": False,
+        "value": {"reclaimable": None, "volumes": None, "state": "measuring"},
+    })
+    monkeypatch.setattr(docker_df, "_compute", lambda: None)
+    docker_df._refresh()
+    assert docker_df._CACHE["value"] == {"reclaimable": None, "volumes": None, "state": "unavailable"}
+    # A later failure keeps the last real figures instead of reporting 0 B.
+    monkeypatch.setattr(docker_df, "_compute", lambda: {"reclaimable": 5, "volumes": 7})
+    docker_df._refresh()
+    monkeypatch.setattr(docker_df, "_compute", lambda: None)
+    docker_df._refresh()
+    assert docker_df._CACHE["value"] == {"reclaimable": 5, "volumes": 7, "state": "ok"}
+
+
+def test_view_apps_lists_auth_wall_with_dead_upstream_as_unavailable(
+    authed_client, settings_env, monkeypatch
+):
+    """nginx answers a basic-auth 401 itself, so a 401 only means "online"
+    when something listens on the site's loopback upstream."""
+    import json
+    import socket
+
+    from del_app.db import get_db, x
+
+    live = socket.socket()
+    live.bind(("127.0.0.1", 0))
+    live.listen(1)
+    live_port = live.getsockname()[1]
+    probe = socket.socket()
+    probe.bind(("127.0.0.1", 0))
+    dead_port = probe.getsockname()[1]
+    probe.close()  # nothing listens here now
+
+    conn = get_db()
+    try:
+        scan_id = x(conn, "INSERT INTO scans (status) VALUES ('done')")
+        for slug, port in (("walled-live", live_port), ("walled-dead", dead_port)):
+            app_id = x(
+                conn,
+                "INSERT INTO applications (slug, name, status, kind, first_seen, last_seen) "
+                "VALUES (?,?,?,?,?,?)",
+                (slug, slug, "stopped", "compose", scan_id, scan_id),
+            )
+            site_id = x(
+                conn,
+                "INSERT INTO resources (type, key, display, state, data_json, first_seen, last_seen) "
+                "VALUES ('nginx_site',?,?,'enabled',?,?,?)",
+                (slug, slug, json.dumps({
+                    "enabled": True, "server_names": [f"{slug}.bjk.ai"],
+                    "upstreams": [{"proxy_pass": f"http://127.0.0.1:{port}"}],
+                }), scan_id, scan_id),
+            )
+            x(
+                conn,
+                "INSERT INTO associations (app_id, resource_id, confidence, ownership, shared) "
+                "VALUES (?,?,90,'exclusive',0)",
+                (app_id, site_id),
+            )
+        conn.commit()
+    finally:
+        conn.close()
+
+    def fake_probes(domains, force=False):
+        return {d: {"healthy": True, "status": 401, "latency_ms": 5,
+                    "checked_at": "2026-10-03T12:00:00+00:00"} for d in domains}
+
+    monkeypatch.setattr(gallery, "_probe_domains", fake_probes)
+    try:
+        resp = authed_client.get("/view-apps")
+    finally:
+        live.close()
+    assert resp.status_code == 200
+    assert 'data-domain="walled-live.bjk.ai"' in resp.text
+    assert 'data-domain="walled-dead.bjk.ai"' not in resp.text
+    assert f"login page only: nothing listens on port {dead_port}" in resp.text
+    assert "1 unavailable" in resp.text
+
+
 def test_view_apps_domain_validation_and_category_helpers():
-    assert routes._valid_gallery_domain("Example.BJK.AI.") == "example.bjk.ai"
-    assert routes._valid_gallery_domain("*.bjk.ai") is None
-    assert routes._valid_gallery_domain("192.168.1.164") is None
-    assert routes._valid_gallery_domain("localhost") is None
-    assert routes._gallery_category("jellyfin", "Jellyfin", "jellyfin.bjk.ai") == "Media & Streaming"
+    assert gallery._valid_gallery_domain("Example.BJK.AI.") == "example.bjk.ai"
+    assert gallery._valid_gallery_domain("*.bjk.ai") is None
+    assert gallery._valid_gallery_domain("192.168.1.164") is None
+    assert gallery._valid_gallery_domain("localhost") is None
+    assert gallery._gallery_category("jellyfin", "Jellyfin", "jellyfin.bjk.ai") == "Media & Streaming"
     # The .ai public suffix must not classify every app as AI.
-    assert routes._gallery_category("plainpad", "Plainpad", "plainpad.bjk.ai") != "AI & Automation"
+    assert gallery._gallery_category("plainpad", "Plainpad", "plainpad.bjk.ai") != "AI & Automation"
 
 
 def test_parse_and_format_dt_helpers():
@@ -274,21 +381,21 @@ def test_parse_and_format_dt_helpers():
     Offsets verified against zoneinfo America/New_York (EDT=UTC-4, EST=UTC-5).
     """
     # 2026-05-13 11:31 UTC = 7:31 AM EDT
-    assert routes._format_dt("2026-05-13T11:31:00.840175564Z", date_only=True) == "05-13-26"
-    assert routes._format_dt("2026-05-13T11:31:00.840175564Z") == "05-13-26 7:31 AM"
+    assert formatting._format_dt("2026-05-13T11:31:00.840175564Z", date_only=True) == "05-13-26"
+    assert formatting._format_dt("2026-05-13T11:31:00.840175564Z") == "05-13-26 7:31 AM"
     # sqlite-style naive UTC: 2026-07-26 19:04:30 UTC = 3:04 PM EDT
-    assert routes._format_dt("2026-07-26 19:04:30") == "07-26-26 3:04 PM"
+    assert formatting._format_dt("2026-07-26 19:04:30") == "07-26-26 3:04 PM"
     # day-boundary: UTC midnight → previous evening in Eastern (EST UTC-5 in Feb)
-    assert routes._format_dt("2026-02-01T00:00:00Z") == "01-31-26 7:00 PM"
-    assert routes._format_dt(None) == "—"
-    assert routes._format_dt("not-a-date") == "—"
-    assert "ET" not in routes._format_dt("2026-05-13T11:31:00Z")
-    assert routes._iso_sort_key("2026-05-13T11:31:00Z") == "2026-05-13T11:31:00Z"
+    assert formatting._format_dt("2026-02-01T00:00:00Z") == "01-31-26 7:00 PM"
+    assert formatting._format_dt(None) == "—"
+    assert formatting._format_dt("not-a-date") == "—"
+    assert "ET" not in formatting._format_dt("2026-05-13T11:31:00Z")
+    assert formatting._iso_sort_key("2026-05-13T11:31:00Z") == "2026-05-13T11:31:00Z"
     # Parse treats naive as UTC and returns aware UTC
-    parsed = routes._parse_dt("2026-07-26 19:04:30")
+    parsed = formatting._parse_dt("2026-07-26 19:04:30")
     assert parsed is not None and parsed.tzinfo is not None
     assert parsed.hour == 19
-    assert routes._app_dates([])["installed_at"] is None
+    assert formatting._app_dates([])["installed_at"] is None
 
 
 def test_app_dates_use_birth_times_not_folder_ctime():
@@ -310,7 +417,7 @@ def test_app_dates_use_birth_times_not_folder_ctime():
         {"type": "nginx_site", "data": {"enabled": False, "file_birthtime": "2020-01-01T00:00:00Z"}},
         {"type": "container", "shared": 1, "data": {"created": "2019-01-01T00:00:00Z"}},
     ]
-    out = routes._app_dates(rows, "2026-07-19 19:35:57")
+    out = formatting._app_dates(rows, "2026-07-19 19:35:57")
     assert out["installed_at"] == "2026-07-18T17:21:42Z"
     assert out["installed_source"] == "folder created"
     assert out["installed_bound"] is False
@@ -321,12 +428,12 @@ def test_app_dates_use_birth_times_not_folder_ctime():
 def test_app_dates_bounded_by_first_scan():
     """Files recreated after DEL first saw the app: Installed is 'by' the first scan."""
     rows = [{"type": "container", "data": {"created": "2026-09-01T00:00:00Z"}}]
-    out = routes._app_dates(rows, "2026-07-19 19:35:57")
+    out = formatting._app_dates(rows, "2026-07-19 19:35:57")
     assert out["installed_at"] == "2026-07-19T19:35:57Z"
     assert out["installed_bound"] is True
     assert out["last_changed_at"] == "2026-09-01T00:00:00Z"
     # No host creation time at all → first scan, still bounded.
-    out = routes._app_dates([{"type": "directory", "data": {"mtime": "2026-09-01T00:00:00Z"}}], "2026-07-19 19:35:57")
+    out = formatting._app_dates([{"type": "directory", "data": {"mtime": "2026-09-01T00:00:00Z"}}], "2026-07-19 19:35:57")
     assert out["installed_bound"] is True and out["installed_at"].startswith("2026-07-19")
 
 
@@ -377,53 +484,58 @@ def test_apps_list_shows_installed_column_and_container_date(authed_client, sett
     assert "03-15-26 4:00 AM" in resp.text
     assert "dated-app" in resp.text
     assert 'data-export-table="apps-table"' in resp.text
-    assert "Show removed too" in resp.text
+    assert "Include removed" in resp.text
 
 
-def test_table_engine_uses_fixed_row_layout():
-    """Inventory grids must keep a real body height and DEL colors after sort."""
+def test_table_engine_is_vanilla_and_sorts_on_parsed_values():
+    """One self-contained table engine: no vendored grid, sorting on the parsed
+    data-sort-value (ISO dates, sizes, durations), per-table remembered state,
+    and headers that stay in view while scrolling."""
     root = Path(__file__).resolve().parents[1]
-    js = (root / "backend/del_app/web/static/app.js").read_text()
-    css = (root / "backend/del_app/web/static/app.css").read_text()
+    static = root / "backend/del_app/web/static"
+    js = (static / "app.js").read_text()
+    css = (static / "app.css").read_text()
     base = (root / "backend/del_app/web/templates/base.html").read_text()
-    assert 'var RICH_SEL = "details, ul, ol, form, .confidence, .cluster, pre";' in js
-    assert ".cluster, div, pre, br" not in js
-    assert 'domLayout: "normal"' in js
-    assert "autoHeight: false" in js
-    assert "pinned: null" in js
-    assert "ensureDomOrder: true" in js
-    assert "suppressRowVirtualisation: true" in js
-    assert "position: relative !important" in css
-    assert "del.ag3.colstate." in js
-    assert "host.style.height" in js
-    assert "min-height: 0 !important" not in css
-    assert ".ag-center-cols-container { min-height: 0; }" not in css
-    assert "--ag-background-color: var(--bg);" in css
-    assert ".del-ag-grid.ag-theme-quartz-dark" in css
-    quartz = base.find('href="/static/vendor/ag-theme-quartz.css"')
-    app_css = base.find('href="/static/app.css"')
-    assert quartz != -1 and app_css != -1 and quartz < app_css
+    assert "agGrid" not in js and "ag-grid" not in base
+    assert not (static / "vendor").exists()
+    assert "compareValues(sortValue(cellSortRaw(a.cells[col])), sortValue(cellSortRaw(b.cells[col])), dir)" in js
+    assert 'return "del.table." + table.id;' in js
+    assert "position: sticky; top: 0; z-index: 2;" in css
 
 
-def test_grid_icon_font_is_csp_safe(authed_client):
-    """nginx sends font-src 'self': the quartz icon font must be a same-origin file,
-    not a data: URL, or every header icon (sort arrow, filter) renders as a box."""
+def test_fonts_are_same_origin_files(anon_client, authed_client):
+    """nginx sends font-src 'self': every face is a same-origin woff2, never data:."""
     root = Path(__file__).resolve().parents[1]
-    quartz = (root / "backend/del_app/web/static/vendor/ag-theme-quartz.css").read_text()
-    assert "data:font" not in quartz
-    assert 'url("ag-grid-quartz-icons.woff2")' in quartz
-    r = authed_client.get("/static/vendor/ag-grid-quartz-icons.woff2")
-    assert r.status_code == 200
-    assert r.headers["content-type"] == "font/woff2"
+    css = (root / "backend/del_app/web/static/app.css").read_text()
+    assert "data:font" not in css
+    faces = re.findall(r'url\("(fonts/[^"]+\.woff2)"\)', css)
+    assert len(faces) == 4
+    for face in faces:
+        r = anon_client.get("/static/" + face)
+        assert r.status_code == 200, face
+        assert r.headers["content-type"] == "font/woff2"
+        # The stylesheet asks for the bare path, so that is what is cached
+        # for good, and the preload in base.html must name the same URL.
+        assert r.headers["cache-control"] == "public, max-age=31536000, immutable"
+    preloads = re.findall(r'rel="preload" href="([^"]+)"', authed_client.get("/settings").text)
+    assert preloads
+    for href in preloads:
+        assert href.removeprefix("/static/") in faces
 
 
-def test_grid_sorts_by_parsed_sort_value():
-    """Date columns carry an ISO data-sort-value; the grid must sort on that
-    (via sortValue), not on the MM-DD-YY display text, and toggle asc/desc."""
-    root = Path(__file__).resolve().parents[1]
-    js = (root / "backend/del_app/web/static/app.js").read_text()
-    assert 'row["s" + idx] = sortValue(' in js
-    assert 'sortingOrder: ["asc", "desc"]' in js
+def test_static_assets_are_versioned_and_immutable(anon_client):
+    from del_app.web.static_routes import asset_url
+
+    url = asset_url("app.css")
+    assert url.startswith("/static/app.css?v=")
+    r = anon_client.get(url)
+    assert r.headers["cache-control"] == "public, max-age=31536000, immutable"
+    stale = anon_client.get("/static/app.css?v=old")
+    assert "immutable" not in stale.headers["cache-control"]
+    # Only top-level assets and fonts are public; the gallery's icon folder
+    # and anything outside static/ are not.
+    assert anon_client.get("/static/icons/tix.svg").status_code == 404
+    assert anon_client.get("/static/../static_routes.py").status_code == 404
 
 
 def test_apps_list_show_removed_toggle(authed_client, settings_env):
@@ -551,7 +663,9 @@ def test_dashboard_shows_last_scan_strip(authed_client, settings_env):
 
     resp = authed_client.get("/")
     assert resp.status_code == 200
-    assert "Last scan" in resp.text
+    # The sidebar's scan stamp names the completed scan on every page.
+    assert 'id="scan-block"' in resp.text
+    assert "Scan #1" in resp.text
 
 
 def test_shell_has_glossary_sidebar_and_collapse_controls(authed_client):
@@ -664,7 +778,7 @@ def test_resources_singular_type_renders(authed_client, settings_env):
     _seed_resources(settings_env)
     resp = authed_client.get("/resources/container")
     assert resp.status_code == 200
-    assert "data-enhanced" in resp.text
+    assert 'class="table"' in resp.text
     assert "mycontainer" in resp.text
     # grouped nav exposes every resource type with counts
     assert 'class="subnav"' in resp.text
@@ -799,7 +913,7 @@ def test_orphans_grouped_and_review_only(authed_client, settings_env):
 
 def test_orphan_classification_filters_system_noise():
     """Vendor systemd, docker builtins, and OS cron are System — not Actionable."""
-    from del_app.web.routes import classify_orphan_candidate
+    from del_app.web.orphans import classify_orphan_candidate
 
     nm = classify_orphan_candidate(
         "systemd_unit",
@@ -1122,7 +1236,7 @@ def test_orphan_image_referenced_by_compose_project_is_expected_not_default(auth
 def test_jobs_list_renders(authed_client, settings_env):
     resp = authed_client.get("/jobs")
     assert resp.status_code == 200
-    assert "data-enhanced" in resp.text
+    assert 'class="table"' in resp.text
 
 
 # ---------------------------------------------------------------------------
@@ -1366,16 +1480,14 @@ def test_app_icon_absorbs_upstream_basic_auth_challenge(
     browser can turn into a credential prompt."""
     _seed_enabled_site("protected.bjk.ai")
 
-    import urllib.error
-
     def raise_401(request, timeout=None):
         raise urllib.error.HTTPError(
             request.full_url, 401, "Unauthorized",
             {"WWW-Authenticate": 'Basic realm="WebNotepad++"'}, None,
         )
 
-    monkeypatch.setattr(routes.urllib.request, "urlopen", raise_401)
-    routes._ICON_CACHE.clear()
+    monkeypatch.setattr(urllib.request, "urlopen", raise_401)
+    gallery._ICON_CACHE.clear()
 
     resp = authed_client.get("/app-icon/protected.bjk.ai")
     assert resp.status_code == 204
@@ -1469,7 +1581,7 @@ def test_mixed_case_system_processes_are_not_actionable(comm):
     """The classifier lowercases the process name before matching, so the
     marker list must be lowercase too — these three never matched and were
     reported as abandoned apps."""
-    result = routes.classify_orphan_candidate("process", comm, comm, None, {"comm": comm})
+    result = orphans.classify_orphan_candidate("process", comm, comm, None, {"comm": comm})
     assert result["bucket"] == "system"
 
 
@@ -1479,7 +1591,7 @@ def test_mixed_case_system_processes_are_not_actionable(comm):
 def test_vendor_units_under_etc_systemd_are_not_actionable(unit):
     """snapd and friends write generated units into /etc/systemd/system, the
     very location the classifier uses to infer 'app-owned'."""
-    result = routes.classify_orphan_candidate(
+    result = orphans.classify_orphan_candidate(
         "systemd_unit", unit, unit, None,
         {"is_custom": True, "fragment_path": f"/etc/systemd/system/{unit}"},
     )
@@ -1487,14 +1599,14 @@ def test_vendor_units_under_etc_systemd_are_not_actionable(unit):
 
 
 def test_agent_and_runtime_processes_under_a_project_dir_are_not_actionable():
-    result = routes.classify_orphan_candidate(
+    result = orphans.classify_orphan_candidate(
         "process", "node", "node (pid 1)", None, {"comm": "node", "cwd": "/apps/del"},
     )
     assert result["bucket"] == "system"
 
 
 def test_default_catchall_vhost_is_not_an_actionable_orphan():
-    result = routes.classify_orphan_candidate(
+    result = orphans.classify_orphan_candidate(
         "nginx_site", "00-default", "00-default-reject-unknown.conf", None,
         {"enabled": True, "server_names": [], "upstreams": []},
     )
@@ -1503,7 +1615,7 @@ def test_default_catchall_vhost_is_not_an_actionable_orphan():
 
 def test_a_real_enabled_app_vhost_is_still_actionable():
     """The catch-all rule must not swallow genuine leftover sites."""
-    result = routes.classify_orphan_candidate(
+    result = orphans.classify_orphan_candidate(
         "nginx_site", "leftover", "leftover.bjk.ai", None,
         {"enabled": True, "server_names": ["leftover.bjk.ai"],
          "upstreams": [{"port": 9000}]},
@@ -1523,14 +1635,14 @@ def test_a_real_enabled_app_vhost_is_still_actionable():
     ("homepage", "homepage.bjk.ai", "Infrastructure"),
 ])
 def test_gallery_categories_for_previously_misfiled_apps(slug, domain, expected):
-    assert routes._gallery_category(slug, slug.title(), domain) == expected
+    assert gallery._gallery_category(slug, slug.title(), domain) == expected
 
 
 def test_gallery_category_ignores_the_public_suffix():
     """Every endpoint here is *.bjk.ai; the TLD must not put them all in AI."""
-    assert routes._gallery_category("wallos", "Wallos", "wallos.bjk.ai") != "AI & Automation"
+    assert gallery._gallery_category("wallos", "Wallos", "wallos.bjk.ai") != "AI & Automation"
     # but a real AI app still matches on a word-boundary hit
-    assert routes._gallery_category("ai-tools", "AI Tools", "ai-tools.bjk.ai") == "AI & Automation"
+    assert gallery._gallery_category("ai-tools", "AI Tools", "ai-tools.bjk.ai") == "AI & Automation"
 
 
 # ---------------------------------------------------------------------------
@@ -1543,8 +1655,8 @@ def test_stale_probes_are_served_immediately_and_refreshed_in_background(monkeyp
     served at once and refreshed off the request thread."""
     import time as _time
 
-    routes._APP_PROBE_CACHE.clear()
-    routes._PROBE_REFRESHING.clear()
+    gallery._APP_PROBE_CACHE.clear()
+    gallery._PROBE_REFRESHING.clear()
 
     calls = []
 
@@ -1558,21 +1670,21 @@ def test_stale_probes_are_served_immediately_and_refreshed_in_background(monkeyp
 
     # First call has nothing cached: it must block and actually probe.
     started = _time.perf_counter()
-    first = routes._probe_domains(["a.example.com", "b.example.com"])
+    first = gallery._probe_domains(["a.example.com", "b.example.com"])
     blocked_for = _time.perf_counter() - started
     assert set(first) == {"a.example.com", "b.example.com"}
     assert blocked_for >= 0.2, "an empty cache must block rather than render an empty gallery"
 
     # Force both entries stale.
-    with routes._APP_PROBE_LOCK:
-        for entry in routes._APP_PROBE_CACHE.values():
+    with gallery._APP_PROBE_LOCK:
+        for entry in gallery._APP_PROBE_CACHE.values():
             # Zero is not stale on a freshly booted CI runner whose monotonic
             # clock is still below the TTL. Express age relative to now.
             entry["cached_at"] = _time.monotonic() - gallery._APP_PROBE_TTL - 1
     calls.clear()
 
     started = _time.perf_counter()
-    second = routes._probe_domains(["a.example.com", "b.example.com"])
+    second = gallery._probe_domains(["a.example.com", "b.example.com"])
     served_in = _time.perf_counter() - started
     assert set(second) == {"a.example.com", "b.example.com"}, "stale data must still be served"
     assert served_in < 0.15, f"stale read blocked for {served_in:.3f}s; should be immediate"
@@ -1583,24 +1695,24 @@ def test_stale_probes_are_served_immediately_and_refreshed_in_background(monkeyp
         _time.sleep(0.05)
     assert calls, "no background refresh was started for the stale entries"
 
-    routes._APP_PROBE_CACHE.clear()
-    routes._PROBE_REFRESHING.clear()
+    gallery._APP_PROBE_CACHE.clear()
+    gallery._PROBE_REFRESHING.clear()
 
 
 def test_forced_refresh_still_blocks_and_reprobes(monkeypatch):
     """?refresh=1 is an explicit 'check again now' — it must not serve stale."""
-    routes._APP_PROBE_CACHE.clear()
-    routes._PROBE_REFRESHING.clear()
+    gallery._APP_PROBE_CACHE.clear()
+    gallery._PROBE_REFRESHING.clear()
     calls = []
     monkeypatch.setattr(gallery, "_probe_domain", lambda d: calls.append(d) or {
         "healthy": True, "status": 200, "latency_ms": 1, "error": "",
         "checked_at": "2026-08-24T00:00:00+00:00",
     })
-    routes._probe_domains(["x.example.com"])
+    gallery._probe_domains(["x.example.com"])
     calls.clear()
-    routes._probe_domains(["x.example.com"], force=True)
+    gallery._probe_domains(["x.example.com"], force=True)
     assert calls == ["x.example.com"], "forced refresh did not re-probe"
-    routes._APP_PROBE_CACHE.clear()
+    gallery._APP_PROBE_CACHE.clear()
 
 
 def test_rescan_approve_rejects_an_unknown_action(authed_client, settings_env):
@@ -1617,7 +1729,7 @@ def test_rescan_approve_rejects_an_unknown_action(authed_client, settings_env):
 
 def test_jobs_list_is_capped(authed_client, settings_env):
     """The page used to SELECT every job ever run with no LIMIT."""
-    assert routes.JOBS_PAGE_LIMIT > 0
+    assert plans_jobs.JOBS_PAGE_LIMIT > 0
     resp = authed_client.get("/jobs")
     assert resp.status_code == 200
 
@@ -1774,7 +1886,7 @@ def test_scan_status_merges_scan_state_and_last_scan(authed_client, monkeypatch,
 # B2: /palette.json
 # ---------------------------------------------------------------------------
 
-def test_palette_json_lists_apps_and_pages(authed_client, settings_env):
+def test_palette_json_lists_apps(authed_client, settings_env):
     from del_app.db import get_db, x
 
     conn = get_db()
@@ -1794,7 +1906,8 @@ def test_palette_json_lists_apps_and_pages(authed_client, settings_env):
     body = resp.json()
     slugs = [a["slug"] for a in body["apps"]]
     assert "paletteapp" in slugs
-    assert any(p["url"] == "/apps" for p in body["pages"])
+    # Pages come from the sidebar nav in the DOM, not this feed.
+    assert set(body) == {"apps"}
 
 
 def test_palette_json_requires_authentication(anon_client, settings_env):
@@ -2341,14 +2454,14 @@ def test_orphans_glossary_states_the_real_unassociated_rule(authed_client, setti
 
 
 def test_named_static_site_is_distinguished_from_a_catchall_vhost():
-    catchall = routes.classify_orphan_candidate(
+    catchall = orphans.classify_orphan_candidate(
         "nginx_site", "00-default", "_", None,
         {"enabled": True, "server_names": ["_"], "upstreams": []},
     )
     assert catchall["bucket"] == "system"
     assert "no server_name" in catchall["reason"]
 
-    static = routes.classify_orphan_candidate(
+    static = orphans.classify_orphan_candidate(
         "nginx_site", "/etc/nginx/sites-enabled/docs.example", "docs.example", None,
         {"enabled": True, "server_names": ["docs.example"], "upstreams": []},
     )
@@ -2360,7 +2473,7 @@ def test_named_static_site_is_distinguished_from_a_catchall_vhost():
 
 
 def test_port_reason_names_the_process_when_no_unit_is_known():
-    no_unit = routes.classify_orphan_candidate(
+    no_unit = orphans.classify_orphan_candidate(
         "port", "tcp:0.0.0.0:8123", "0.0.0.0:8123", None,
         {"proto": "tcp", "addr": "0.0.0.0", "port": 8123, "pid": 4242, "process": "streamer", "systemd_unit": None},
     )
@@ -2368,13 +2481,13 @@ def test_port_reason_names_the_process_when_no_unit_is_known():
     assert "process 'streamer', pid 4242" in no_unit["reason"]
     assert "no systemd unit known" in no_unit["reason"]
 
-    no_proc = routes.classify_orphan_candidate(
+    no_proc = orphans.classify_orphan_candidate(
         "port", "tcp:0.0.0.0:8124", "0.0.0.0:8124", None,
         {"proto": "tcp", "addr": "0.0.0.0", "port": 8124, "pid": None, "process": None, "systemd_unit": None},
     )
     assert "no owning process reported" in no_proc["reason"]
 
-    with_unit = routes.classify_orphan_candidate(
+    with_unit = orphans.classify_orphan_candidate(
         "port", "tcp:0.0.0.0:8125", "0.0.0.0:8125", None,
         {"proto": "tcp", "addr": "0.0.0.0", "port": 8125, "pid": 77, "process": "streamer",
          "systemd_unit": "streamer.service"},
@@ -2386,14 +2499,14 @@ def test_backup_copy_under_backups_dir_is_expected_not_actionable(authed_client,
     from del_app.db import get_db, x
 
     backup = f"{settings_env.backups_dir}/deck/compose_project"
-    result = routes.classify_orphan_candidate(
+    result = orphans.classify_orphan_candidate(
         "compose_project", backup, "compose_project", backup, {"working_dir": backup},
     )
     assert result["bucket"] == "expected"
     assert "backups_dir" in result["reason"]
     # A sibling path that merely starts with the same characters is not inside it.
     sibling = settings_env.backups_dir + "-old/deck"
-    assert routes.classify_orphan_candidate(
+    assert orphans.classify_orphan_candidate(
         "compose_project", sibling, "deck", sibling, {"working_dir": sibling},
     )["bucket"] == "actionable"
 
@@ -2411,9 +2524,9 @@ def test_backup_copy_under_backups_dir_is_expected_not_actionable(authed_client,
 
 def test_gallery_category_domain_suffix_slug_and_substrings():
     """tix-bjk-ai is not AI; gittodoc is not a todo app; an app's cards share one category."""
-    assert routes._gallery_category("tix-bjk-ai", "tix-bjk-ai", "tix.bjk.ai") != "AI & Automation"
-    assert routes._gallery_category("gittodoc", "gittodoc", "gittodoc.bjk.ai") == "Developer Tools"
-    assert routes._gallery_category("boxy", "boxy", "boxy.bjk.ai") == routes._gallery_category(
+    assert gallery._gallery_category("tix-bjk-ai", "tix-bjk-ai", "tix.bjk.ai") != "AI & Automation"
+    assert gallery._gallery_category("gittodoc", "gittodoc", "gittodoc.bjk.ai") == "Developer Tools"
+    assert gallery._gallery_category("boxy", "boxy", "boxy.bjk.ai") == gallery._gallery_category(
         "boxy", "boxy", "boxy.bjk.ai"
     )
 
@@ -2541,7 +2654,7 @@ def test_dashboard_keeps_completed_scan_after_many_failed_attempts(authed_client
     finally:
         conn.close()
     response = authed_client.get('/')
-    assert f'#{done} done' in response.text
+    assert f'Scan #{done}<' in response.text
 
 
 def test_settings_shows_scan_failure_reason(authed_client, settings_env):

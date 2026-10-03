@@ -1,34 +1,34 @@
 {% extends "base.html" %}
+{% import "_macros.html" as m %}
 {% block title %}Jobs{% endblock %}
 {% block content %}
 <div class="page-header">
   <h1>Jobs <span class="count-pill">{{ jobs | length }}</span></h1>
   <div class="page-actions">
-    <span class="muted text-sm">Export</span>
-    <button type="button" class="btn btn-sm btn-ghost" data-export-table="jobs-table" title="Export the currently filtered rows as CSV">Export CSV</button>
+    <button type="button" class="btn btn-sm btn-ghost" data-export-table="jobs-table" title="Export the filtered rows as CSV">Export CSV</button>
   </div>
 </div>
-<p class="page-lede">Removal jobs — dry-run simulates; LIVE executes with safety gates. Shared resources stay preserved; protected apps never produce a plan. Open a job to watch steps; refused means a gate blocked the run.</p>
-<table id="jobs-table" class="table" data-enhanced data-empty="No jobs yet. Primary: open an app, Plan removal, then execute dry-run or LIVE." data-search-placeholder="Filter jobs…">
+<p class="page-lede">Every run of a removal plan. A dry run simulates; a live run changes the host behind safety gates. Shared resources are always preserved, and refused means a gate blocked the run. Click a row to watch its steps.</p>
+<table id="jobs-table" class="table" data-empty="No jobs yet. Open an app, plan its removal, then run the plan." data-search-placeholder="Filter jobs…">
   <caption class="sr-only">Removal jobs with mode, status, duration and timestamps.</caption>
   <thead>
     <tr>
-      <th scope="col">ID</th><th scope="col">App</th><th scope="col" data-priority="low">Plan</th>
+      <th scope="col">Job</th><th scope="col">App</th><th scope="col" data-priority="low">Plan</th>
       <th scope="col">Mode</th><th scope="col">Status</th>
-      <th scope="col">Duration</th><th scope="col">Started</th><th scope="col">Finished</th>
+      <th scope="col">Duration</th><th scope="col">Started</th><th scope="col" data-priority="low">Finished</th>
     </tr>
   </thead>
   <tbody>
     {% for j in jobs %}
     <tr>
-      <td><a href="/jobs/{{ j.get('id') }}">{{ j.get('id') }}</a></td>
+      <td data-sort-value="{{ j.get('id') }}"><a href="/jobs/{{ j.get('id') }}">#{{ j.get('id') }}</a></td>
       <td>{% if j.get('app_slug') %}<a href="/apps/{{ j.get('app_slug') }}">{{ j.get('app_name') or j.get('app_slug') }}</a>{% else %}—{% endif %}</td>
-      <td data-priority="low"><a href="/plans/{{ j.get('plan_id') }}">#{{ j.get('plan_id') }}</a></td>
-      <td data-filter-value="{{ j.get('mode') }}"><span class="badge {{ 'badge-danger' if j.get('mode') == 'live' else 'badge-grey' }}">{{ 'LIVE' if j.get('mode') == 'live' else 'dry-run' }}</span></td>
-      <td data-filter-value="{{ j.get('status') }}"><span class="badge status-{{ j.get('status') }}">{{ j.get('status') }}</span></td>
+      <td data-priority="low" data-sort-value="{{ j.get('plan_id') }}"><a href="/plans/{{ j.get('plan_id') }}">#{{ j.get('plan_id') }}</a></td>
+      <td data-filter-value="{{ j.get('mode') }}">{{ m.mode_tag(j.get('mode')) }}</td>
+      <td data-filter-value="{{ j.get('status') }}">{{ m.state(j.get('status')) }}</td>
       <td>{{ j.get('duration') }}</td>
       <td data-sort-value="{{ iso_sort(j.get('started')) }}"><span class="dt">{{ format_dt(j.get('started')) }}</span></td>
-      <td data-sort-value="{{ iso_sort(j.get('finished')) }}"><span class="dt">{{ format_dt(j.get('finished')) }}</span></td>
+      <td data-priority="low" data-sort-value="{{ iso_sort(j.get('finished')) }}"><span class="dt">{{ format_dt(j.get('finished')) }}</span></td>
     </tr>
     {% endfor %}
   </tbody>

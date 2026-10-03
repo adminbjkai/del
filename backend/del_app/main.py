@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import logging
+import threading
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, Request
@@ -31,7 +32,16 @@ async def _lifespan(app: FastAPI):
         abandon_interrupted_jobs()
     except Exception:
         logger.exception("startup: abandon_interrupted_jobs failed")
+    stop = threading.Event()
+    try:
+        from del_app.config import get_settings
+        from del_app.scanner import start_scheduler
+
+        start_scheduler(get_settings().scan_interval_hours, stop)
+    except Exception:
+        logger.exception("startup: scan scheduler not started")
     yield
+    stop.set()
 
 
 def create_app() -> FastAPI:

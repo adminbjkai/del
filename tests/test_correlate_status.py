@@ -12,10 +12,11 @@ def _container(name, project, wd, state="running"):
     )
 
 
-def _unit(name, wd, state):
+def _unit(name, wd, state, sub=None):
     return Resource(
         type="systemd_unit", key=name, display=name, path=None, state=state,
-        data={"is_custom": True, "working_directory": wd, "exec_start": f"{wd}/run"},
+        data={"is_custom": True, "working_directory": wd, "exec_start": f"{wd}/run",
+              "active": state, "sub": sub or ("running" if state == "active" else "dead")},
     )
 
 
@@ -50,6 +51,23 @@ def test_active_unit_or_running_container_is_running():
     ], {}))
     assert apps["xtr"][0].status == "running"
     assert apps["web"][0].status == "running"
+
+
+def test_exited_oneshot_does_not_mask_a_stopped_daemon():
+    """freeze-watch: its oneshot idle tweak stays active/exited while the
+    recorder daemon is stopped. The app is stopped, not running."""
+    apps = _by_slug(build_apps([
+        _unit("freeze-watch-idle.service", "/apps/freeze-watch", "active", sub="exited"),
+        _unit("freeze-watch-recorder.service", "/apps/freeze-watch", "inactive"),
+    ], {}))
+    assert apps["freeze-watch"][0].status == "stopped"
+
+
+def test_app_made_only_of_exited_oneshots_is_running():
+    apps = _by_slug(build_apps([
+        _unit("tune.service", "/apps/tune", "active", sub="exited"),
+    ], {}))
+    assert apps["tune"][0].status == "running"
 
 
 def test_exited_container_makes_app_stopped():

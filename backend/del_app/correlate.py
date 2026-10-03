@@ -186,12 +186,16 @@ def _in_fixture_tree(working_dir: str) -> bool:
     return any(_slugify(part) in _FIXTURE_DIR_NAMES for part in rest.split("/") if part)
 
 
-def _is_runtime_running(r: Resource) -> bool:
+def _runtime_state(r: Resource) -> str:
+    """"running", "done" (a oneshot unit that ran and exited, still active
+    through RemainAfterExit) or "down"."""
     if r.type == "container":
-        return (r.data.get("state") or r.state or "").lower() == "running"
+        return "running" if (r.data.get("state") or r.state or "").lower() == "running" else "down"
     if r.type == "systemd_unit":
-        return (r.state or "").lower() == "active"
-    return False  # a compose file never runs by itself; its containers do
+        if (r.state or "").lower() != "active":
+            return "down"
+        return "done" if (r.data.get("sub") or "").lower() == "exited" else "running"
+    return "down"  # a compose file never runs by itself; its containers do
 
 
 def _level_for_confidence(confidence: int) -> str:
@@ -747,7 +751,7 @@ def build_apps(
         # An active systemd unit means the app is running, even if a stopped
         # compose file for the same dir made it look "compose_stopped" (e.g.
         # boxy runs via boxy.service, not its compose file).
-        if unit.state == "active":
+        if _runtime_state(unit) == "running":
             app.status = "running"
         app.dir_paths.add(app_dir)
         app.add(
@@ -1174,7 +1178,10 @@ def build_apps(
             assoc.removal_eligible = _removal_eligible(assoc.level, assoc.shared, assoc.excluded)
 
     # --- Step 14: status and kind from what the host actually runs ---------
-    # running: any owned container is running or owned unit is active.
+    # running: an owned container runs or an owned unit is active and running.
+    #   A oneshot that ran and exited (active/exited) counts only when it is
+    #   all the app has: freeze-watch-idle.service being "active" says nothing
+    #   about its stopped recorder daemon.
     # stopped: the app has owned runtime resources (non-shared, non-excluded,
     #   >=80 confidence containers/units/compose files) and none is running.
     # absent: declared by a manifest, but nothing it names is on the host.
@@ -1187,7 +1194,8 @@ def build_apps(
                     or assoc.shared or assoc.excluded or assoc.confidence < 80):
                 continue
             runtime.append(r)
-        if app.status == "running" or any(_is_runtime_running(r) for r in runtime):
+        states = {_runtime_state(r) for r in runtime}
+        if app.status == "running" or "running" in states or states == {"done"}:
             app.status = "running"
         elif runtime:
             app.status = "stopped"

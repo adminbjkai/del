@@ -7,15 +7,15 @@
   <h1>Applications <span class="count-pill">{{ apps | length }}</span></h1>
   <div class="page-actions">
     {% if show_removed %}
-      <a class="filter-chip" href="/apps{% if search %}?search={{ search }}{% endif %}">Show removed too</a>
       <span class="badge badge-amber">including removed</span>
+      <a class="btn btn-sm btn-ghost" href="/apps{% if search %}?search={{ search | urlencode }}{% endif %}">Current only</a>
     {% else %}
-      <a class="filter-chip" href="/apps?show=removed{% if search %}&amp;search={{ search }}{% endif %}">Show removed too</a>
+      <a class="btn btn-sm btn-ghost" href="/apps?show=removed{% if search %}&amp;search={{ search | urlencode }}{% endif %}" title="Also list apps removed from the host, for history">Include removed</a>
     {% endif %}
-    <button type="button" class="btn btn-sm btn-ghost" data-export-table="apps-table" title="Export the currently filtered rows as CSV">Export CSV</button>
+    <button type="button" class="btn btn-sm btn-ghost" data-export-table="apps-table" title="Export the filtered rows as CSV">Export CSV</button>
   </div>
 </div>
-<p class="page-lede">Every application DEL has discovered, with its status, ports, domains and how many resources it owns. Open one to drill into its resources and plan a removal.</p>
+<p class="page-lede">Every application DEL found, with status, dates, domains, ports and how many resources it owns. Click a row to open it.</p>
 <details class="explain">
   <summary>How rows relate</summary>
   <div class="explain-body legend-row" aria-label="How rows relate">
@@ -26,7 +26,7 @@
   </div>
 </details>
 
-<table id="apps-table" class="table" data-enhanced data-empty="No applications in this view. Primary: run a scan. Secondary: Show removed too for history, or clear filters." data-search-placeholder="Filter apps…"{% if search %} data-prefill="{{ search }}"{% endif %}>
+<table id="apps-table" class="table" data-empty="No applications match. Clear the filters, include removed apps, or run a scan." data-search-placeholder="Filter apps…"{% if search %} data-prefill="{{ search }}"{% endif %}>
   <caption class="sr-only">Applications discovered by the latest scan, with status, install date, last change, domains, ports and resource counts.</caption>
   <thead>
     <tr>
@@ -36,10 +36,10 @@
       <th scope="col" title="Earliest creation time of the app's own folder, service unit, nginx site or container on this host">Installed</th>
       <th scope="col" title="Newest change to the app's folder, git history, container, service unit or nginx site">Last changed</th>
       <th scope="col">Domains</th>
-      <th scope="col">Host ports</th>
+      <th scope="col" title="Ports something listens on now; faint ones are published by a stopped container">Host ports</th>
       <th scope="col">Resources</th>
       <th scope="col" data-priority="low" title="Possible or low-confidence associations to review">Warnings</th>
-      {% if assistant_enabled() %}<th scope="col" data-nosort>Ask</th>{% endif %}
+      {% if assistant_on %}<th scope="col" data-nosort>Ask</th>{% endif %}
     </tr>
   </thead>
   <tbody>
@@ -48,26 +48,26 @@
       <td>
         <a href="/apps/{{ app.slug }}">{{ app.name }}</a>
         {% if app.protected %}<span class="badge badge-blue app-shield" title="Protected: DEL will not build a removal plan">{{ i.icon('shield') }}protected</span>{% endif %}
+        {% if app.is_removed %}<span class="badge badge-grey">removed</span>{% endif %}
         {% if app.slug != app.name %}
-        <div class="muted mono text-xs">
-          <button type="button" class="copy" data-copy="{{ app.slug }}" title="Copy slug" aria-label="Copy slug {{ app.slug }} to clipboard">{{ app.slug }}<span class="copy-mark" aria-hidden="true">⧉</span></button>
+        <div class="faint mono text-xs">
+          <button type="button" class="copy" data-copy="{{ app.slug }}" title="Copy slug" aria-label="Copy slug {{ app.slug }} to clipboard">{{ app.slug }}<span class="copy-mark" aria-hidden="true">{{ i.icon('copy') }}</span></button>
         </div>
         {% endif %}
-        {% if app.is_removed %}<div><span class="badge badge-grey">removed</span></div>{% endif %}
       </td>
-      <td data-filter-value="{{ app.status }}"><span class="badge status-{{ app.status }}">{{ app.status }}</span></td>
-      <td data-priority="low" data-filter-value="{{ app.kind }}">{{ app.kind or '—' }}</td>
+      <td data-filter-value="{{ app.status }}">{{ m.state(app.status) }}</td>
+      <td data-priority="low" data-filter-value="{{ app.kind }}">{{ (app.kind or '—') | replace('_', ' ') }}</td>
       <td data-sort-value="{{ iso_sort(app.installed_at) }}" data-filter-value="{{ format_dt(app.installed_at) }}" title="{% if app.installed_at %}{% if app.installed_bound %}on or before {% endif %}{{ format_dt(app.installed_at) }} — {{ app.installed_source }}{% else %}No creation time on the host{% endif %}">
-        {% if app.installed_bound %}<span class="muted">by </span>{% endif %}<span class="dt">{{ format_dt(app.installed_at, date_only=True) }}</span>
+        {% if app.installed_bound %}<span class="faint">by </span>{% endif %}<span class="dt">{{ format_dt(app.installed_at, date_only=True) }}</span>
       </td>
       <td data-sort-value="{{ iso_sort(app.last_changed_at) }}" data-filter-value="{{ format_dt(app.last_changed_at) }}" title="{% if app.last_changed_at %}{{ format_dt(app.last_changed_at) }} — {{ app.last_changed_source }}{% else %}No change time on the host{% endif %}">
         <span class="dt">{{ format_dt(app.last_changed_at, date_only=True) }}</span>
       </td>
       <td>{{ m.domain_links(app.domains) }}</td>
-      <td>{{ m.joinlist(app.ports) }}</td>
+      <td data-sort-value="{{ (app.ports + app.idle_ports) | join(', ') }}">{% if app.ports or app.idle_ports %}{{ app.ports | join(', ') }}{% if app.ports and app.idle_ports %}, {% endif %}{% if app.idle_ports %}<span class="faint" title="Published by a container that is not running: nothing listens">{{ app.idle_ports | join(', ') }}</span>{% endif %}{% else %}—{% endif %}</td>
       <td data-sort-value="{{ app.res_count }}">{{ app.res_count }}</td>
       <td data-priority="low" data-sort-value="{{ app.warn_count }}">{% if app.warn_count %}<a class="badge badge-amber" href="/apps/{{ app.slug }}#tab-readiness" title="Review these on the app's Readiness tab">{{ app.warn_count }}</a>{% else %}0{% endif %}</td>
-      {% if assistant_enabled() %}
+      {% if assistant_on %}
       <td class="text-sm"><a class="chip assistant-ask-link" href="/assistant?scope=app&amp;target={{ app.slug | urlencode }}" data-ask-scope="app" data-ask-target="{{ app.slug }}" title="Ask the read-only assistant about this application">Ask</a></td>
       {% endif %}
     </tr>

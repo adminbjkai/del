@@ -90,6 +90,57 @@ def _lock_scan_file():
     return handle
 
 
+def _scan_ages() -> tuple[float | None, float | None]:
+    """(seconds since the latest completed scan finished, seconds since the
+    latest attempt of any status started); None when there is none. Both are
+    0 while a removal job runs, because a removal ends with its own rescan."""
+    conn = db.get_db()
+    try:
+        row = conn.execute(
+            "SELECT "
+            "(SELECT CAST(strftime('%s','now') AS INTEGER) - CAST(strftime('%s', finished) AS INTEGER) "
+            " FROM scans WHERE status = 'done' ORDER BY id DESC LIMIT 1) AS done_age, "
+            "(SELECT CAST(strftime('%s','now') AS INTEGER) - CAST(strftime('%s', started) AS INTEGER) "
+            " FROM scans ORDER BY id DESC LIMIT 1) AS attempt_age, "
+            "EXISTS (SELECT 1 FROM jobs WHERE status = 'running') AS busy"
+        ).fetchone()
+    finally:
+        conn.close()
+    if row["busy"]:
+        return 0.0, 0.0
+    as_float = lambda v: None if v is None else float(v)  # noqa: E731
+    return as_float(row["done_age"]), as_float(row["attempt_age"])
+
+
+def start_scheduler(interval_hours: float, stop: threading.Event, check_seconds: float = 600) -> threading.Thread | None:
+    """Keep the inventory fresh: every check_seconds, scan if the latest
+    completed scan is older than interval_hours. After a failed attempt it
+    waits min(interval, 1 h) before trying again. Off when interval_hours <= 0."""
+    if interval_hours <= 0:
+        return None
+    limit = interval_hours * 3600
+    retry = min(limit, 3600)
+
+    def _loop() -> None:
+        while not stop.wait(check_seconds):
+            try:
+                done_age, attempt_age = _scan_ages()
+                stale = done_age is None or done_age >= limit
+                cooling = attempt_age is not None and attempt_age < retry
+                if stale and not cooling and not scan_state().get("running"):
+                    logger.info("scheduler: inventory is %s old; scanning",
+                                "unknown" if done_age is None else f"{done_age:.0f}s")
+                    run_scan()
+            except ScanInProgressError:
+                pass
+            except Exception:
+                logger.exception("scheduler: scheduled scan failed; previous inventory retained")
+
+    thread = threading.Thread(target=_loop, name="del-scan-scheduler", daemon=True)
+    thread.start()
+    return thread
+
+
 def abandon_stale_scans(reason: str = "abandoned: process restart or crash mid-scan") -> int:
     """Mark every scan still status='running' as failed.
 
@@ -287,6 +338,8 @@ def run_scan() -> int:
             "apps_total": app_count,
             "associations_total": assoc_count,
             "stale_associations_removed": stale_assoc_removed,
+            # Lets the dashboard show status changes between two scans.
+            "app_status": {record.slug: record.status for record, _ in apps},
         }
         conn.execute(
             "UPDATE scans SET finished=datetime('now'), status='done', stats_json=? WHERE id=?",

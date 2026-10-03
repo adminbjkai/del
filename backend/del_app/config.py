@@ -37,6 +37,8 @@ class Settings(pydantic.BaseModel):
     session_hours: int = 12
     scan_roots: list[str]
     protected_apps: list[str] = ["del"]
+    # Rescan in the background when the inventory is older than this; 0 = off.
+    scan_interval_hours: float = 0
     assistant: AssistantSettings = AssistantSettings()
 
 

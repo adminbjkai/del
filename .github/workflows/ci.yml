@@ -36,6 +36,4 @@ jobs:
           node-version: "22"
       - name: Check application JavaScript syntax
         run: |
-          node --check backend/del_app/web/static/app.js
-          node --check backend/del_app/web/static/assistant.js
-          node --check backend/del_app/web/static/theme-init.js
+          for f in backend/del_app/web/static/*.js; do node --check "$f"; done

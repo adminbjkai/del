@@ -1,9 +1,8 @@
 """Assistant: the read-only advisory chat page plus its JSON / NDJSON-stream
 endpoints. See docs/ASSISTANT.md for the contract.
 
-Only `del_app.assistant` is imported here (lazily, so this package still
-boots — and the page degrades to its "disabled" panel — before that lane
-lands). Tests monkeypatch `del_app.web.assistant.assistant` with a fake.
+Handlers reach the engine as `assistant.<name>` at call time, so tests can
+monkeypatch `del_app.web.assistant.assistant` with a fake.
 """
 from __future__ import annotations
 
@@ -19,16 +18,11 @@ from fastapi.responses import (
     StreamingResponse,
 )
 
-from del_app import auth
+from del_app import assistant, auth
 from del_app.auth import User
 from del_app.db import get_db
 from del_app.web.queries import RESOURCE_TYPE_LABELS
 from del_app.web.render import _csrf_response, _render, _require_csrf
-
-try:
-    from del_app import assistant
-except ImportError:  # pragma: no cover - exercised until lane A lands
-    assistant = None  # type: ignore[assignment]
 
 router = APIRouter()
 
@@ -41,9 +35,6 @@ _SCOPE_LABELS = {
     "resource_type": "Resource type",
     "resource": "Resource",
 }
-_DEFAULT_SCOPES = list(_SCOPE_LABELS)
-_DEFAULT_RESOURCE_TYPES = ["container", "image", "network", "volume"]
-
 _UNAVAILABLE = {
     "enabled": False,
     "configured": False,
@@ -55,10 +46,6 @@ _UNAVAILABLE = {
 
 def _error(message: str, kind: str, status: int, headers: dict | None = None) -> JSONResponse:
     return JSONResponse({"error": message, "kind": kind}, status_code=status, headers=headers)
-
-
-def _unavailable() -> JSONResponse:
-    return _error("Assistant unavailable", "disabled", 503)
 
 
 def _from_exc(exc: Exception) -> JSONResponse:
@@ -75,8 +62,6 @@ def _from_exc(exc: Exception) -> JSONResponse:
 def current_status() -> dict:
     """`assistant.status()` guarded so a missing/broken lane never breaks a
     page render. Never contains the API key (status() does not expose it)."""
-    if assistant is None:
-        return dict(_UNAVAILABLE)
     try:
         st = dict(assistant.status())
     except Exception as exc:  # pragma: no cover - defensive
@@ -92,17 +77,15 @@ def is_enabled() -> bool:
 
 
 def _scopes() -> list[str]:
-    raw = getattr(assistant, "SCOPES", None) if assistant is not None else None
-    return list(raw) if raw else list(_DEFAULT_SCOPES)
+    return list(assistant.SCOPES)
 
 
 def _resource_types() -> list[str]:
-    raw = getattr(assistant, "RESOURCE_TYPE_TARGETS", None) if assistant is not None else None
-    return list(raw) if raw else list(_DEFAULT_RESOURCE_TYPES)
+    return list(assistant.RESOURCE_TYPE_TARGETS)
 
 
 def _store():
-    return getattr(assistant, "store", None) if assistant is not None else None
+    return assistant.store
 
 
 def _type_of(scope: str, target: str | None) -> str | None:
@@ -116,8 +99,6 @@ def _type_of(scope: str, target: str | None) -> str | None:
 
 
 def _prompts(scope: str, target: str | None) -> list[dict]:
-    if assistant is None:
-        return []
     try:
         items = assistant.prompt_library(scope)
     except Exception:
@@ -135,8 +116,6 @@ def _prompts(scope: str, target: str | None) -> list[dict]:
 
 
 def _targets(scope: str, resource_type: str | None = None) -> list[dict]:
-    if assistant is None:
-        return []
     if scope == "resource_type":
         return [
             {"value": t, "label": RESOURCE_TYPE_LABELS.get(t, t)} for t in _resource_types()
@@ -153,8 +132,6 @@ def _targets(scope: str, resource_type: str | None = None) -> list[dict]:
 
 def _conversations(user_id: int) -> list[dict]:
     store = _store()
-    if store is None:
-        return []
     conn = get_db()
     try:
         return [dict(c) for c in store.list_conversations(conn, user_id)]
@@ -164,8 +141,6 @@ def _conversations(user_id: int) -> list[dict]:
 
 def _conversation(conv_id: int, user_id: int) -> dict | None:
     store = _store()
-    if store is None:
-        return None
     conn = get_db()
     try:
         conv = store.get_conversation(conn, conv_id, user_id)
@@ -233,8 +208,6 @@ def assistant_status(user: User = Depends(auth.require_user)) -> JSONResponse:
 def assistant_prompts(
     user: User = Depends(auth.require_user), scope: str = "general", target: str = ""
 ) -> JSONResponse:
-    if assistant is None:
-        return _unavailable()
     if scope not in _scopes():
         return _error(f"unknown scope: {scope}", "scope", 400)
     return JSONResponse({"prompts": _prompts(scope, target or None)})
@@ -244,8 +217,6 @@ def assistant_prompts(
 def assistant_targets(
     user: User = Depends(auth.require_user), scope: str = "app", type: str = ""
 ) -> JSONResponse:
-    if assistant is None:
-        return _unavailable()
     if scope not in _scopes():
         return _error(f"unknown scope: {scope}", "scope", 400)
     if scope == "resource":
@@ -256,7 +227,7 @@ def assistant_targets(
     try:
         targets = _targets(scope, type or None)
     except Exception as exc:
-        if assistant is not None and isinstance(exc, getattr(assistant, "AssistantError", ())):
+        if isinstance(exc, assistant.AssistantError):
             return _from_exc(exc)
         raise
     return JSONResponse({"targets": targets})
@@ -264,8 +235,6 @@ def assistant_targets(
 
 @router.get("/assistant/conversations")
 def assistant_conversations(user: User = Depends(auth.require_user)) -> JSONResponse:
-    if assistant is None:
-        return _unavailable()
     return JSONResponse({"conversations": _conversations(user.id)})
 
 
@@ -273,8 +242,6 @@ def assistant_conversations(user: User = Depends(auth.require_user)) -> JSONResp
 def assistant_conversation(
     conv_id: int, user: User = Depends(auth.require_user)
 ) -> JSONResponse:
-    if assistant is None:
-        return _unavailable()
     conv = _conversation(conv_id, user.id)
     if conv is None:
         return _error("conversation not found", "not_found", 404)
@@ -291,8 +258,6 @@ def assistant_conversation_delete(
     if not _require_csrf(request, csrf_token):
         return _csrf_response()
     store = _store()
-    if store is None:
-        return RedirectResponse(url="/assistant?error=Assistant+unavailable", status_code=303)
     conn = get_db()
     try:
         deleted = store.delete_conversation(conn, conv_id, user.id)
@@ -311,8 +276,6 @@ def assistant_test(
 ) -> Response:
     if not _require_csrf(request, csrf_token):
         return _csrf_response()
-    if assistant is None:
-        return RedirectResponse(url="/settings?error=Assistant+unavailable", status_code=303)
     try:
         result = dict(assistant.test_connection())
     except Exception as exc:
@@ -353,8 +316,6 @@ def assistant_ask(
     header = request.headers.get("X-CSRF-Token", "")
     if not auth.check_csrf(request, header):
         return _error("invalid csrf token", "csrf", 403)
-    if assistant is None:
-        return _unavailable()
 
     scope = str(payload.get("scope") or "general")
     target = payload.get("target") or None

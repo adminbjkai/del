@@ -411,3 +411,62 @@ def test_scan_revokes_approval_if_safety_classification_changes(settings_env, mo
     setattr(apps[0][1][0], changed, values[changed])
     scanner.run_scan()
     assert _inventory_snapshot()["associations"][0]["approved_by_user"] == 0
+
+
+def _scheduler_runs(monkeypatch, interval_hours: float, setup_sql: list[str]) -> int:
+    """Run the scheduler loop briefly against a seeded scans/jobs table and
+    count how many scans it starts."""
+    conn = get_db()
+    try:
+        for sql in setup_sql:
+            conn.execute(sql)
+        conn.commit()
+    finally:
+        conn.close()
+    calls = []
+    monkeypatch.setattr(scanner, "run_scan", lambda: calls.append(1) or 0)
+    stop = threading.Event()
+    thread = scanner.start_scheduler(interval_hours, stop, check_seconds=0.02)
+    if thread is None:
+        return -1
+    stop.wait(0.15)
+    stop.set()
+    thread.join(2)
+    return len(calls)
+
+
+def test_scheduler_is_off_by_default(settings_env, monkeypatch):
+    assert settings_env.scan_interval_hours == 0
+    assert _scheduler_runs(monkeypatch, 0, []) == -1
+
+
+def test_scheduler_scans_a_stale_inventory(settings_env, monkeypatch):
+    old = ("INSERT INTO scans (status, started, finished) VALUES "
+           "('done', datetime('now','-8 hours'), datetime('now','-8 hours'))")
+    assert _scheduler_runs(monkeypatch, 6, [old]) >= 1
+
+
+def test_scheduler_leaves_a_fresh_inventory_alone(settings_env, monkeypatch):
+    fresh = ("INSERT INTO scans (status, started, finished) VALUES "
+             "('done', datetime('now','-1 hours'), datetime('now','-1 hours'))")
+    assert _scheduler_runs(monkeypatch, 6, [fresh]) == 0
+
+
+def test_scheduler_waits_after_a_recent_failed_attempt(settings_env, monkeypatch):
+    old = ("INSERT INTO scans (status, started, finished) VALUES "
+           "('done', datetime('now','-8 hours'), datetime('now','-8 hours'))")
+    failed = ("INSERT INTO scans (status, started, finished) VALUES "
+              "('failed', datetime('now','-10 minutes'), datetime('now','-9 minutes'))")
+    assert _scheduler_runs(monkeypatch, 6, [old, failed]) == 0
+
+
+def test_scheduler_skips_while_a_removal_job_runs(settings_env, monkeypatch):
+    old = ("INSERT INTO scans (status, started, finished) VALUES "
+           "('done', datetime('now','-8 hours'), datetime('now','-8 hours'))")
+    seed = [
+        old,
+        "INSERT INTO applications (id, slug, name, status, kind) VALUES (1, 'demo', 'demo', 'running', 'compose')",
+        "INSERT INTO plans (id, app_id) VALUES (1, 1)",
+        "INSERT INTO jobs (plan_id, mode, status) VALUES (1, 'live', 'running')",
+    ]
+    assert _scheduler_runs(monkeypatch, 6, seed) == 0

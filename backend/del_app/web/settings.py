@@ -28,8 +28,7 @@ def settings_view(
     settings = get_settings()
     conn = get_db(read_snapshot=True)
     try:
-        db_settings = _rows(q(conn, "SELECT * FROM settings"))
-        recent_scans = _rows(q(conn, "SELECT * FROM scans ORDER BY id DESC LIMIT 10"))
+        recent_scans = _rows(q(conn, "SELECT * FROM scans ORDER BY id DESC LIMIT 25"))
     finally:
         conn.close()
     for scan in recent_scans:
@@ -39,33 +38,39 @@ def settings_view(
         request,
         response,
         settings=settings.model_dump(),
-        db_settings=db_settings,
+        scan_interval_hours=settings.scan_interval_hours,
         recent_scans=recent_scans,
         assistant_status=assistant_web.current_status(),
         user=user,
     )
 
 
+def _background_scan() -> None:
+    try:
+        scanner.run_scan()
+    except scanner.ScanInProgressError:
+        pass
+    except Exception:
+        logger.exception("background scan failed; previous inventory retained")
+
+
 @router.post("/scan")
 def trigger_scan(
     request: Request, user: User = Depends(auth.require_user), csrf_token: str = Form("")
 ) -> Response:
+    # The sidebar scan stamp posts with Accept: application/json and stays on
+    # the page; a plain form post (no JS) gets the old redirect.
+    wants_json = "application/json" in request.headers.get("accept", "")
     if not _require_csrf(request, csrf_token):
         return _csrf_response()
     if scanner.scan_state().get("running"):
+        if wants_json:
+            return JSONResponse({"started": False, "error": "A scan is already in progress"}, status_code=409)
         return RedirectResponse(url="/settings?error=Scan+already+in+progress", status_code=303)
-
-    def _run() -> None:
-        try:
-            scanner.run_scan()
-        except scanner.ScanInProgressError:
-            pass
-        except Exception:
-            logger.exception("background scan failed; previous inventory retained")
-
-    threading.Thread(target=_run, name="del-scan", daemon=True).start()
-
+    threading.Thread(target=_background_scan, name="del-scan", daemon=True).start()
     auditlog.audit(user.id, "scan.run", "scanner", {})
+    if wants_json:
+        return JSONResponse({"started": True})
     return RedirectResponse(url="/settings?flash=Scan+started", status_code=303)
 
 

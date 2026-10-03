@@ -1,13 +1,12 @@
 """App gallery (/view-apps, /app-icon/{domain}): live HTTPS-probed launcher
-plus docker-reclaimable-bytes and favicon-proxy helpers used by the
-dashboard/gallery."""
+and the favicon proxy."""
 from __future__ import annotations
 
 import base64
-import json
+import logging
 from pathlib import Path
 import re
-import subprocess
+import socket
 import threading
 import time
 import urllib.error
@@ -23,16 +22,14 @@ from fastapi.responses import HTMLResponse
 
 from del_app import auth
 from del_app.auth import User
+from del_app.config import get_settings
 from del_app.db import get_db, q
-from del_app.web.formatting import _parse_docker_size
 from del_app.web.queries import _json_or, _latest_scan_id, _rows
 from del_app.web.render import _render
 
-router = APIRouter()
+logger = logging.getLogger(__name__)
 
-_RECLAIMABLE_CACHE: dict[str, Any] = {"ts": 0.0, "value": 0, "refreshing": False}
-_RECLAIMABLE_TTL = 300  # 5 minutes
-_RECLAIMABLE_LOCK = threading.Lock()
+router = APIRouter()
 
 # A gallery request may need to verify dozens of Nginx endpoints. Keep those
 # network checks off the request thread pool and cache the result briefly so
@@ -88,61 +85,6 @@ _CATEGORY_KEYWORDS = [
     ("Utilities", ("convert", "pdf", "tools", "txt", "b64", "short", "calc", "simple",
                    "tiny", "qr", "paste")),
 ]
-
-
-def _compute_reclaimable_bytes() -> int:
-    """Blocking read of docker's reclaimable bytes (images + build cache +
-    volumes) via `docker system df`. Called only off the request thread."""
-    total = 0
-    try:
-        proc = subprocess.run(
-            ["docker", "system", "df", "--format", "{{json .}}"],
-            capture_output=True, text=True, timeout=10, check=False,
-        )
-        if proc.returncode == 0:
-            for line in proc.stdout.splitlines():
-                line = line.strip()
-                if not line:
-                    continue
-                try:
-                    obj = json.loads(line)
-                except json.JSONDecodeError:
-                    continue
-                total += _parse_docker_size(obj.get("Reclaimable", ""))
-    except Exception:
-        pass
-    return total
-
-
-def _refresh_reclaimable_async() -> None:
-    def _worker() -> None:
-        value = _compute_reclaimable_bytes()
-        with _RECLAIMABLE_LOCK:
-            _RECLAIMABLE_CACHE["value"] = value
-            _RECLAIMABLE_CACHE["ts"] = time.monotonic()
-            _RECLAIMABLE_CACHE["refreshing"] = False
-    threading.Thread(target=_worker, daemon=True).start()
-
-
-def _reclaimable_bytes() -> int:
-    """Docker's reported reclaimable bytes, cached in-process for 5 minutes.
-
-    Stale-while-revalidate: the dashboard request NEVER blocks on docker. It
-    returns the last cached value immediately and, when that value is stale,
-    kicks off a single background refresh. Blocking here (a `docker system df`
-    that can take seconds, worst right after a removal when docker is busy with
-    the post-removal rescan) was the cause of slow / multi-click dashboard
-    loads. First load after a restart shows 0 until the async refresh lands."""
-    now = time.monotonic()
-    with _RECLAIMABLE_LOCK:
-        value = _RECLAIMABLE_CACHE["value"]
-        stale = (now - _RECLAIMABLE_CACHE["ts"]) >= _RECLAIMABLE_TTL
-        trigger = stale and not _RECLAIMABLE_CACHE["refreshing"]
-        if trigger:
-            _RECLAIMABLE_CACHE["refreshing"] = True
-    if trigger:
-        _refresh_reclaimable_async()
-    return value
 
 
 def _valid_gallery_domain(value: Any) -> str | None:
@@ -204,9 +146,9 @@ def _match_category(haystack: str) -> str:
 def _probe_domain(domain: str) -> dict[str, Any]:
     """Verify an HTTPS endpoint without downloading its response body.
 
-    Any HTTP response below 500 proves that DNS, TLS, Nginx routing, and an
-    answering upstream are in place. Auth challenges and root-level 404s still
-    count as live; 5xx responses do not count as correctly working.
+    Any HTTP response below 500 proves DNS, TLS and nginx routing; 5xx does
+    not count. Root-level 404s count as live. A 401/403 may come from nginx's
+    own basic auth, so view_apps also checks the upstream port listens.
     """
     started = time.monotonic()
     status: int | None = None
@@ -338,8 +280,8 @@ _ICON_LOCK = threading.Lock()
 _ICON_TTL = 86400          # a favicon changes about never
 _ICON_NEGATIVE_TTL = 3600  # retry failures sooner than successes
 _ICON_TIMEOUT = 4.0
-_ICON_MAX_BYTES = 262144
-_ICON_CACHE_MAX = 512
+_ICON_MAX_BYTES = 131072
+_ICON_CACHE_MAX = 256
 _ICON_ALLOWED_TYPES = (
     "image/x-icon", "image/vnd.microsoft.icon", "image/png", "image/gif",
     "image/jpeg", "image/svg+xml", "image/webp", "image/bmp",
@@ -388,121 +330,92 @@ _DOMAIN_STATIC_ICONS = {
 }
 
 
-def _fetch_icon(domain: str) -> tuple[bytes, str] | None:
-    """Fetch one icon/favicon for a domain. Returns (body, content_type) or None.
+def _http_get(url: str, accept: str, limit: int) -> tuple[int, str, bytes] | None:
+    """GET a URL; (status, content type, first `limit`+1 bytes) or None."""
+    request = urllib.request.Request(
+        url, headers={"User-Agent": "Mozilla/5.0 (DEL-App-Gallery/1.0)", "Accept": accept}, method="GET",
+    )
+    try:
+        with urllib.request.urlopen(request, timeout=_ICON_TIMEOUT) as response:
+            ctype = (response.headers.get("Content-Type") or "").split(";")[0].strip().lower()
+            return int(response.getcode()), ctype, response.read(limit + 1)
+    except Exception:
+        return None
 
-    1. Checks static official overrides for apps with special assets.
-    2. Probes direct endpoints (/favicon.ico, /favicon.png, /favicon.svg).
-    3. Scrapes root HTML for <link rel="icon"...> or apple-touch-icon.
+
+def _as_icon(body: bytes, ctype: str) -> tuple[bytes, str] | None:
+    """Accept a response body as an icon if it is a small image."""
+    if not body or len(body) > _ICON_MAX_BYTES or ctype == "text/html":
+        return None
+    if body[:4] == b"\x00\x00\x01\x00":
+        sniffed = "image/x-icon"
+    elif body[:4] == b"\x89PNG":
+        sniffed = "image/png"
+    elif body[:4] == b"GIF8":
+        sniffed = "image/gif"
+    elif b"<svg" in body[:250]:
+        sniffed = "image/svg+xml"
+    else:
+        sniffed = None
+    if not (ctype.startswith("image/") or sniffed):
+        return None
+    return body, ctype if ctype in _ICON_ALLOWED_TYPES else (sniffed or "image/x-icon")
+
+
+def _fetch_icon(domain: str) -> tuple[bytes, str] | None:
+    """Fetch one icon for a domain: (body, content_type) or None.
+
+    1. A bundled icon for apps without a usable favicon (static/icons/).
+    2. /favicon.ico, /favicon.png, /favicon.svg.
+    3. <link rel="icon"> or apple-touch-icon in the root page.
+
+    Never raises: a broken icon (a malformed data: URI, an unreadable bundled
+    file) is a miss, cached like any other, not a 500 retried on every view.
     """
-    # 1. Check official static icon overrides
+    try:
+        return _find_icon(domain)
+    except Exception:
+        logger.debug("icon lookup failed for %s", domain, exc_info=True)
+        return None
+
+
+def _find_icon(domain: str) -> tuple[bytes, str] | None:
     static_name = _DOMAIN_STATIC_ICONS.get(domain)
     if static_name:
         static_file = _STATIC_ICONS_DIR / static_name
         if static_file.is_file():
-            try:
-                body = static_file.read_bytes()
-                ext = static_file.suffix.lower()
-                ctype = "image/svg+xml" if ext == ".svg" else ("image/png" if ext == ".png" else "image/x-icon")
-                return body, ctype
-            except Exception:
-                pass
+            ctype = {".svg": "image/svg+xml", ".png": "image/png"}.get(static_file.suffix.lower(), "image/x-icon")
+            return static_file.read_bytes(), ctype
 
-    # 2. Check standard direct favicon paths
     for path in ("/favicon.ico", "/favicon.png", "/favicon.svg"):
-        request = urllib.request.Request(
-            f"https://{domain}{path}",
-            headers={"User-Agent": "DEL-App-Gallery/1.0", "Accept": "image/*"},
-            method="GET",
-        )
-        try:
-            with urllib.request.urlopen(request, timeout=_ICON_TIMEOUT) as response:
-                if int(response.getcode()) != 200:
-                    continue
-                ctype = (response.headers.get("Content-Type") or "").split(";")[0].strip().lower()
-                body = response.read(_ICON_MAX_BYTES + 1)
-                if not body or len(body) > _ICON_MAX_BYTES:
-                    continue
-                # Validate image signature or content-type
-                is_img = (
-                    ctype.startswith("image/")
-                    or body[:4] == b"\x00\x00\x01\x00"
-                    or body[:4] == b"\x89PNG"
-                    or b"<svg" in body[:250]
-                    or body[:4] == b"GIF8"
-                )
-                if not is_img or ctype == "text/html":
-                    continue
-                if ctype not in _ICON_ALLOWED_TYPES:
-                    if body[:4] == b"\x00\x00\x01\x00":
-                        ctype = "image/x-icon"
-                    elif body[:4] == b"\x89PNG":
-                        ctype = "image/png"
-                    elif b"<svg" in body[:250]:
-                        ctype = "image/svg+xml"
-                    else:
-                        ctype = "image/x-icon"
-                return body, ctype
-        except Exception:
+        got = _http_get(f"https://{domain}{path}", "image/*", _ICON_MAX_BYTES)
+        if got and got[0] == 200:
+            icon = _as_icon(got[2], got[1])
+            if icon:
+                return icon
+
+    got = _http_get(f"https://{domain}/", "text/html,*/*;q=0.8", 131072)
+    if not got or got[0] != 200:
+        return None
+    html = got[2].decode("utf-8", errors="ignore")
+    for link in re.findall(r"<link[^>]+>", html, re.I):
+        if not re.search(r"rel=[\"']?(?:shortcut )?(?:icon|apple-touch-icon)[\"']?", link, re.I):
             continue
-
-    # 3. Inspect root HTML for <link rel="icon"...> or apple-touch-icon
-    request = urllib.request.Request(
-        f"https://{domain}/",
-        headers={"User-Agent": "Mozilla/5.0 (DEL-App-Gallery/1.0)", "Accept": "text/html,*/*;q=0.8"},
-        method="GET",
-    )
-    try:
-        with urllib.request.urlopen(request, timeout=_ICON_TIMEOUT) as response:
-            if int(response.getcode()) == 200:
-                html = response.read(131072).decode("utf-8", errors="ignore")
-                for link in re.findall(r"<link[^>]+>", html, re.I):
-                    if re.search(r"rel=[\"']?(?:shortcut )?icon[\"']?", link, re.I) or re.search(
-                        r"rel=[\"']?apple-touch-icon[\"']?", link, re.I
-                    ):
-                        m = re.search(r"href=[\"']([^\"']+)[\"']", link, re.I)
-                        if not m:
-                            continue
-                        href = m.group(1).strip()
-                        if href.startswith("data:image/svg+xml"):
-                            if ";base64," in href:
-                                return base64.b64decode(href.split(";base64,", 1)[1]), "image/svg+xml"
-                            return unquote(href.split(",", 1)[1]).encode("utf-8"), "image/svg+xml"
-                        elif href.startswith("data:image/png;base64,"):
-                            return base64.b64decode(href.split(";base64,", 1)[1]), "image/png"
-
-                        icon_url = urljoin(f"https://{domain}/", href)
-                        ireq = urllib.request.Request(
-                            icon_url,
-                            headers={"User-Agent": "DEL-App-Gallery/1.0", "Accept": "image/*"},
-                            method="GET",
-                        )
-                        try:
-                            with urllib.request.urlopen(ireq, timeout=_ICON_TIMEOUT) as iresp:
-                                if int(iresp.getcode()) == 200:
-                                    idata = iresp.read(_ICON_MAX_BYTES + 1)
-                                    ictype = (iresp.headers.get("Content-Type") or "").split(";")[0].strip().lower()
-                                    is_img = (
-                                        ictype.startswith("image/")
-                                        or idata[:4] in (b"\x00\x00\x01\x00", b"\x89PNG")
-                                        or b"<svg" in idata[:250]
-                                    )
-                                    if idata and len(idata) <= _ICON_MAX_BYTES and is_img and ictype != "text/html":
-                                        if ictype not in _ICON_ALLOWED_TYPES:
-                                            if idata[:4] == b"\x00\x00\x01\x00":
-                                                ictype = "image/x-icon"
-                                            elif idata[:4] == b"\x89PNG":
-                                                ictype = "image/png"
-                                            elif b"<svg" in idata[:250]:
-                                                ictype = "image/svg+xml"
-                                            else:
-                                                ictype = "image/x-icon"
-                                        return idata, ictype
-                        except Exception:
-                            pass
-    except Exception:
-        pass
-
+        m = re.search(r"href=[\"']([^\"']+)[\"']", link, re.I)
+        if not m:
+            continue
+        href = m.group(1).strip()
+        if href.startswith("data:image/svg+xml"):
+            if ";base64," in href:
+                return base64.b64decode(href.split(";base64,", 1)[1]), "image/svg+xml"
+            return unquote(href.split(",", 1)[1]).encode("utf-8"), "image/svg+xml"
+        if href.startswith("data:image/png;base64,"):
+            return base64.b64decode(href.split(";base64,", 1)[1]), "image/png"
+        got = _http_get(urljoin(f"https://{domain}/", href), "image/*", _ICON_MAX_BYTES)
+        if got and got[0] == 200:
+            icon = _as_icon(got[2], got[1])
+            if icon:
+                return icon
     return None
 
 
@@ -516,16 +429,44 @@ def _cached_icon(domain: str) -> tuple[bytes, str] | None:
     value = _fetch_icon(domain)
 
     with _ICON_LOCK:
-        if len(_ICON_CACHE) >= _ICON_CACHE_MAX:
-            for key in [k for k, v in _ICON_CACHE.items() if v["expires"] <= now]:
-                del _ICON_CACHE[key]
-            if len(_ICON_CACHE) >= _ICON_CACHE_MAX:
-                _ICON_CACHE.clear()
+        _ICON_CACHE.pop(domain, None)
+        # Insertion order is age order: evict the oldest entries, not all.
+        while len(_ICON_CACHE) >= _ICON_CACHE_MAX:
+            del _ICON_CACHE[next(iter(_ICON_CACHE))]
         _ICON_CACHE[domain] = {
             "value": value,
             "expires": now + (_ICON_TTL if value else _ICON_NEGATIVE_TTL),
         }
     return value
+
+
+def _loopback_targets(upstreams: list[dict] | None) -> list[tuple[str, int]]:
+    """The loopback (host, port) pairs a site's proxy_pass lines point at."""
+    targets = set()
+    for u in upstreams or []:
+        parts = urllib.parse.urlsplit(str(u.get("proxy_pass") or ""))
+        host = parts.hostname
+        try:
+            port = int(u.get("port") or parts.port or 0)
+        except (TypeError, ValueError):
+            port = 0
+        if host in ("127.0.0.1", "localhost", "::1") and port:
+            targets.add(("::1" if host == "::1" else "127.0.0.1", port))
+    return sorted(targets)
+
+
+def _any_listening(targets: list[tuple[str, int]]) -> bool:
+    """Whether any target accepts a TCP connection.
+
+    nginx answers basic-auth challenges (401) itself, before it proxies, so
+    an HTTPS probe alone calls an app "online" while nothing serves it."""
+    for host, port in targets:
+        try:
+            with socket.create_connection((host, port), timeout=0.5):
+                return True
+        except OSError:
+            continue
+    return False
 
 
 def _gallery_owner_score(app: dict, domain: str, confidence: Any) -> tuple[int, int, int]:
@@ -617,9 +558,26 @@ def view_apps(
         rank = (domain.split(".", 1)[0] != slug.lower(), len(domain), domain)
         if best is None or rank < (best.split(".", 1)[0] != slug.lower(), len(best), best):
             primary[slug] = domain
+    unavailable: list[dict[str, Any]] = []
     for domain, app in owners.items():
+        if domain in aliased:
+            continue
         health = probes.get(domain, {})
-        if not health.get("healthy") or domain in aliased:
+        reason = ""
+        if not health.get("healthy"):
+            status = health.get("status")
+            reason = f"HTTP {status}" if status else (health.get("error") or "no answer")
+        elif health.get("status") in (401, 403):
+            # An auth challenge proves nginx is up, not the app behind it.
+            targets = _loopback_targets(_json_or(app.get("data_json"), {}).get("upstreams"))
+            if targets and not _any_listening(targets):
+                ports = ", ".join(str(port) for _, port in targets)
+                reason = f"login page only: nothing listens on port {ports}"
+        if reason:
+            unavailable.append({
+                "slug": app.get("slug"), "name": app.get("name") or app.get("slug"),
+                "domain": domain, "reason": reason, "status": app.get("status") or "unknown",
+            })
             continue
         score = app.get("owner_score") or (0, 0, 0)
         inferred_name = domain.split(".", 1)[0].replace("-", " ").replace("_", " ").title()
@@ -666,6 +624,7 @@ def view_apps(
         if category != "Favorites" and any(app["category"] == category for app in apps)
     ]
     checked_at = max((app.get("checked_at") or "" for app in apps), default="")
+    unavailable.sort(key=lambda u: u["domain"])
     return _render(
         "view_apps.html",
         request,
@@ -673,12 +632,40 @@ def view_apps(
         apps=apps,
         categories=categories,
         candidate_count=len(owners),
-        excluded_count=max(0, len(owners) - len(apps) - len(aliased)),
+        unavailable=unavailable,
+        excluded_count=len(unavailable),
         alias_count=len(aliased),
         latest_scan=latest,
         checked_at=checked_at,
         user=user,
     )
+
+
+_ICON_DOMAINS: dict[str, Any] = {"scan": None, "domains": frozenset()}
+
+
+def _icon_domains() -> frozenset:
+    """Domains of enabled nginx sites in the latest scan, computed once per
+    scan: a gallery view requests ~125 icons and each used to re-read and
+    parse every site row."""
+    conn = get_db()
+    try:
+        latest = _latest_scan_id(conn)
+        key = (get_settings().db_path, latest)
+        with _ICON_LOCK:
+            if _ICON_DOMAINS["scan"] == key and latest is not None:
+                return _ICON_DOMAINS["domains"]
+        domains = set()
+        if latest is not None:
+            for row in q(conn, "SELECT data_json FROM resources WHERE type = 'nginx_site' AND last_seen = ?", (latest,)):
+                data = _json_or(row["data_json"], {})
+                if data.get("enabled", False):
+                    domains.update(filter(None, (_valid_gallery_domain(sn) for sn in data.get("server_names") or [])))
+    finally:
+        conn.close()
+    with _ICON_LOCK:
+        _ICON_DOMAINS.update(scan=key, domains=frozenset(domains))
+    return frozenset(domains)
 
 
 @router.get("/app-icon/{domain}")
@@ -698,29 +685,7 @@ def app_icon(
     general-purpose outbound fetcher.
     """
     normalized = _valid_gallery_domain(domain)
-    if not normalized:
-        return Response(status_code=404)
-
-    conn = get_db(read_snapshot=True)
-    try:
-        latest = _latest_scan_id(conn)
-        known = False
-        if latest is not None:
-            for row in _rows(q(
-                conn,
-                "SELECT data_json FROM resources WHERE type = 'nginx_site' AND last_seen = ?",
-                (latest,),
-            )):
-                data = _json_or(row.get("data_json"), {})
-                if not data.get("enabled", False):
-                    continue
-                if any(_valid_gallery_domain(sn) == normalized
-                       for sn in data.get("server_names", []) or []):
-                    known = True
-                    break
-    finally:
-        conn.close()
-    if not known:
+    if not normalized or normalized not in _icon_domains():
         return Response(status_code=404)
 
     icon = _cached_icon(normalized)

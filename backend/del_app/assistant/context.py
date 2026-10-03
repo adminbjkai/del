@@ -14,6 +14,7 @@ from typing import Any
 
 from del_app.assistant.errors import AssistantError
 from del_app.db import q
+from del_app.discovery.docker_src import _normalize_image_ref
 from del_app.web.formatting import _level
 from del_app.web.orphans import classify_orphans
 from del_app.web.queries import (
@@ -22,7 +23,6 @@ from del_app.web.queries import (
     _disk_usage_bytes,
     _json_or,
     _latest_scan_id,
-    _normalize_image_ref,
     _owner_map,
     _rows,
     _type_counts,

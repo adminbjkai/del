@@ -7,13 +7,6 @@ import pydantic
 
 ConfidenceLevel = Literal["confirmed", "high", "probable", "possible", "unrelated", "manual"]
 
-ResourceType = Literal[
-    "container", "image", "volume", "network", "compose_project", "nginx_site",
-    "systemd_unit", "systemd_timer", "cron_entry", "process", "port", "directory",
-    "git_repo", "env_file", "tmux_session", "bind_mount",
-]
-
-
 class Resource(pydantic.BaseModel):
     type: str
     key: str

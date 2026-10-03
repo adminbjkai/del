@@ -17,9 +17,6 @@ class AssistantError(Exception):
         self.status = status
         self.retry_after = retry_after
 
-    def to_dict(self) -> dict:
-        return {"error": self.message, "kind": self.kind}
-
 
 class ProviderError(AssistantError):
     """Raised by provider.py for anything Ollama Cloud / the transport did."""

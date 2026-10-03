@@ -6,7 +6,7 @@ import pytest
 sys.path.insert(0, "/apps/del/backend")
 
 from del_app import scanner  # noqa: E402
-from del_app.web import gallery  # noqa: E402
+from del_app.web import docker_df  # noqa: E402
 
 # How long a test's leftover threads get to finish once its body returns.
 _THREAD_JOIN_TIMEOUT = 10.0
@@ -31,7 +31,7 @@ def _no_host_work_from_background_threads(request, monkeypatch):
     """
     if request.node.get_closest_marker("real_scanner") is None:
         monkeypatch.setattr(scanner, "run_scan", lambda: 0)
-    monkeypatch.setattr(gallery, "_compute_reclaimable_bytes", lambda: 0)
+    monkeypatch.setattr(docker_df, "_compute", lambda: {"reclaimable": 0, "volumes": 0})
 
 
 @pytest.hookimpl(wrapper=True)

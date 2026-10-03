@@ -1,88 +1,85 @@
 {% extends "base.html" %}
+{% import "_macros.html" as m %}
 {% block title %}Settings{% endblock %}
 {% block content %}
 <div class="page-header">
   <h1>Settings</h1>
 </div>
-<p class="page-lede">Read-only snapshot of this host’s DEL config. Scanning is on demand (button below). Ask is read-only — it cannot plan or delete.</p>
-
-<details class="section" id="settings-config" data-remember open>
-  <summary><h2>Configuration</h2><span class="section-hint">Values loaded from this host’s DEL config file.</span></summary>
-  <div class="section-body">
-    <dl class="kv">
-      <dt>Port</dt><dd>{{ settings.get('port') }}</dd>
-      <dt>DB path</dt><dd>{{ settings.get('db_path') }}</dd>
-      <dt>Manifests dir</dt><dd>{{ settings.get('manifests_dir') }}</dd>
-      <dt>Backups dir</dt><dd>{{ settings.get('backups_dir') }}</dd>
-      <dt>Scan roots</dt><dd>{{ settings.get('scan_roots', []) | join(', ') }}</dd>
-      <dt>Protected apps</dt><dd>{{ settings.get('protected_apps', []) | join(', ') }}</dd>
-      <dt>Session hours</dt><dd>{{ settings.get('session_hours') }}</dd>
-    </dl>
-  </div>
-</details>
-
-<details class="section" id="assistant-settings" data-remember open>
-  <summary><h2>Assistant</h2><span class="section-hint">Read-only chat over the inventory; not a config editor.</span></summary>
-  <div class="section-body">
-    {% set ast = assistant_status or {} %}
-    <dl class="kv">
-      <dt>Enabled</dt><dd>{% if ast.get('enabled') %}<span class="badge badge-ok">yes</span>{% else %}<span class="badge badge-grey">no</span>{% endif %}</dd>
-      <dt>Configured</dt><dd>{% if ast.get('configured') %}<span class="badge badge-ok">yes</span>{% else %}<span class="badge badge-amber">no</span>{% if ast.get('reason') %} <span class="muted text-sm">{{ ast.get('reason') }}</span>{% endif %}{% endif %}</dd>
-      <dt>Model</dt><dd>{{ ast.get('model') or '—' }}</dd>
-      <dt>Key source</dt><dd>{{ ast.get('key_source') or '—' }}</dd>
-    </dl>
-    <div class="cluster mt-2">
-      <form method="post" action="/assistant/test" data-submit-guard="Testing…">
-        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-        <button type="submit" class="btn btn-primary"{% if not (ast.get('enabled') and ast.get('configured')) %} disabled title="Configure an API key first"{% endif %}>Test connection</button>
-      </form>
-      <a class="btn" href="/assistant">Open full assistant</a>
-    </div>
-    <p class="muted text-sm mt-2">
-      Read-only chat over the inventory (Ollama Cloud <code>glm-5.3-flash</code>). It now includes
-      per-resource owners and shared flags, and sits in the right-rail <strong>Ask</strong> tab on every page
-      (desktop) or the Ask button on small screens. Key file:
-      <code>/apps/del/config/ollama-api-key.txt</code> (mode 0600).
-    </p>
-  </div>
-</details>
+<p class="page-lede">This host's DEL configuration (read only; edit <span class="mono">config/del.toml</span> and restart <span class="mono">del-web</span> to change it), the assistant, and scanning.</p>
 
 <details class="section" id="scan-now" data-remember open>
-  <summary><h2>Scanning</h2><span class="section-hint">Re-inventory this host; the dashboard uses the latest completed scan.</span></summary>
+  <summary><h2>Scanning</h2><span class="section-hint">re-inventory this host; every page uses the latest completed scan</span></summary>
   <div class="section-body">
-    <form method="post" action="/scan" class="scan-run-form" data-submit-guard="Starting scan…">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <button type="submit" class="btn btn-primary" id="run-scan-btn">Run scan now</button>
-    </form>
-    <div class="meta-row" id="scan-strip" role="status" aria-live="polite">
-      <span class="scan-strip-live" id="scan-strip-live" hidden>
-        <span class="scan-strip-bar" aria-hidden="true"></span>
-        <span id="scan-strip-elapsed">scanning…</span>
+    <div class="cluster mb-2">
+      <form method="post" action="/scan" class="scan-run-form" data-submit-guard="Starting scan…">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="btn btn-primary" id="run-scan-btn">Run scan now</button>
+      </form>
+      <span id="scan-strip" role="status" aria-live="polite">
+        <span class="badge status-running is-live" id="scan-strip-live" hidden><span id="scan-strip-elapsed">Scanning…</span></span>
+      </span>
+      <span class="faint text-sm">
+        {% if scan_interval_hours %}Automatic scans every {{ scan_interval_hours | int if scan_interval_hours == scan_interval_hours | int else scan_interval_hours }} h when the inventory is older than that.{% else %}Automatic scans are off (<span class="mono">scan_interval_hours = 0</span>).{% endif %}
       </span>
     </div>
-    <p class="muted text-sm mt-2">
-      A failed scan keeps the previous inventory. Approvals, exclusions, and manual
-      shared flags survive rescans for the same app and resource while its safety
-      classification stays unchanged.
-      Inventory uses the latest <strong>done</strong> scan only. Rows stuck at
-      <span class="badge status-running">running</span> after a restart are
-      auto-marked <span class="badge status-failed">failed</span> on service start.
+    <p class="faint text-sm">
+      A failed scan keeps the previous inventory. Approvals, exclusions and manual shared flags survive
+      rescans while the resource's safety classification stays the same. A scan left running by a restart
+      is marked failed when the service starts.
     </p>
-    <table class="table" data-enhanced data-empty="No scans yet." data-page-size="25">
+    <table class="table" id="scan-history" data-empty="No scans yet." data-page-size="25">
       <caption class="sr-only">The most recent inventory scans and their outcome.</caption>
-      <thead><tr><th scope="col">ID</th><th scope="col">Started</th><th scope="col">Finished</th><th scope="col">Status</th><th scope="col">Outcome</th></tr></thead>
+      <thead><tr><th scope="col">Scan</th><th scope="col">Started</th><th scope="col">Finished</th><th scope="col">Status</th><th scope="col">Outcome</th></tr></thead>
       <tbody>
         {% for s in recent_scans %}
         <tr>
-          <td>{{ s.get('id') }}</td>
+          <td data-sort-value="{{ s.get('id') }}">#{{ s.get('id') }}</td>
           <td data-sort-value="{{ iso_sort(s.get('started')) }}"><span class="dt">{{ format_dt(s.get('started')) }}</span></td>
           <td data-sort-value="{{ iso_sort(s.get('finished')) }}"><span class="dt">{{ format_dt(s.get('finished')) }}</span></td>
-          <td data-filter-value="{{ s.get('status') }}"><span class="badge status-{{ s.get('status') }}">{{ s.get('status') }}</span></td>
-          <td>{% set stats = s.get('stats') or {} %}{% if stats.get('error') or stats.get('reason') %}<span class="text-sm">{{ stats.get('error') or stats.get('reason') }}</span>{% elif s.get('status') == 'done' %}{{ stats.get('apps_total', '—') }} apps · {{ stats.get('resources_total', '—') }} resources{% if stats.get('duration_seconds') is not none %} · {{ stats.get('duration_seconds') }}s{% endif %}{% else %}—{% endif %}</td>
+          <td data-filter-value="{{ s.get('status') }}">{{ m.state(s.get('status')) }}</td>
+          <td>{% set stats = s.get('stats') or {} %}{% if stats.get('error') or stats.get('reason') %}<span class="text-sm">{{ stats.get('error') or stats.get('reason') }}</span>{% elif s.get('status') == 'done' %}{{ stats.get('apps_total', '—') }} apps, {{ stats.get('resources_total', '—') }} resources{% if stats.get('duration_seconds') is not none %}, {{ stats.get('duration_seconds') }}s{% endif %}{% else %}—{% endif %}</td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
+  </div>
+</details>
+
+<details class="section" id="assistant-settings" data-remember open>
+  <summary><h2>Assistant</h2><span class="section-hint">read-only chat over the inventory</span></summary>
+  <div class="section-body">
+    {% set ast = assistant_status or {} %}
+    <dl class="kv">
+      <dt>Enabled</dt><dd>{% if ast.get('enabled') %}<span class="badge badge-ok">yes</span>{% else %}<span class="badge badge-grey">no</span>{% endif %}</dd>
+      <dt>Configured</dt><dd>{% if ast.get('configured') %}<span class="badge badge-ok">yes</span>{% else %}<span class="badge badge-amber">no</span>{% if ast.get('reason') %} <span class="faint text-sm">{{ ast.get('reason') }}</span>{% endif %}{% endif %}</dd>
+      <dt>Model</dt><dd>{% if ast.get('model') %}<span class="mono">{{ ast.get('model') }}</span>{% else %}—{% endif %}</dd>
+      <dt>Key source</dt><dd>{{ ast.get('key_source') or '—' }}</dd>
+      <dt>Key file</dt><dd><span class="mono">{{ settings.get('assistant', {}).get('api_key_file') }}</span> <span class="faint text-sm">(mode 0600)</span></dd>
+    </dl>
+    <div class="cluster mt-3">
+      <form method="post" action="/assistant/test" data-submit-guard="Testing…">
+        <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+        <button type="submit" class="btn"{% if not (ast.get('enabled') and ast.get('configured')) %} disabled title="Configure an API key first"{% endif %}>Test connection</button>
+      </form>
+      <a class="btn btn-ghost" href="/assistant">Open the assistant</a>
+    </div>
+    <p class="faint text-sm mt-2 mb-0">The assistant answers from inventory metadata (names, paths, owners, shared flags). It sits in the right rail's Ask tab on every page, or behind the Ask button on small screens. It cannot plan or remove anything.</p>
+  </div>
+</details>
+
+<details class="section" id="settings-config" data-remember>
+  <summary><h2>Configuration</h2><span class="section-hint">values loaded from this host's config file</span></summary>
+  <div class="section-body">
+    <dl class="kv">
+      <dt>Port</dt><dd>{{ settings.get('port') }}</dd>
+      <dt>DB path</dt><dd class="mono">{{ settings.get('db_path') }}</dd>
+      <dt>Manifests dir</dt><dd class="mono">{{ settings.get('manifests_dir') }}</dd>
+      <dt>Backups dir</dt><dd class="mono">{{ settings.get('backups_dir') }}</dd>
+      <dt>Scan roots</dt><dd class="mono">{{ settings.get('scan_roots', []) | join(', ') }}</dd>
+      <dt>Protected apps</dt><dd>{{ settings.get('protected_apps', []) | join(', ') }}</dd>
+      <dt>Session hours</dt><dd>{{ settings.get('session_hours') }}</dd>
+      <dt>Scan interval</dt><dd>{% if scan_interval_hours %}{{ scan_interval_hours }} h{% else %}off{% endif %}</dd>
+    </dl>
   </div>
 </details>
 {% endblock %}

@@ -1,22 +1,23 @@
 {% extends "base.html" %}
+{% import "_macros.html" as m %}
 {% block title %}Removal plan{% endblock %}
 {% block content %}
 {% if plan %}
   <nav class="crumbs" aria-label="Breadcrumb">
-    <a href="/apps">Applications</a><span class="sep">›</span>
-    <a href="/apps/{{ app.get('slug') }}">{{ app.get('name', app.get('slug')) }}</a><span class="sep">›</span>
+    <a href="/apps">Applications</a><span class="sep">/</span>
+    <a href="/apps/{{ app.get('slug') }}">{{ app.get('name', app.get('slug')) }}</a><span class="sep">/</span>
     <span aria-current="page">Plan #{{ plan.get('id') }}</span>
   </nav>
   <div class="page-header">
-    <h1>Plan #{{ plan.get('id') }} <span class="muted">· {{ app.get('name', app.get('slug')) }}</span></h1>
+    <h1>Plan #{{ plan.get('id') }} <span class="muted">{{ app.get('name', app.get('slug')) }}</span></h1>
   </div>
   <div class="meta-row">
     <span class="meta"><span class="meta-k">Status</span> <span class="meta-v"><span class="badge {{ plan_run_class or ('status-' ~ plan.get('status')) }}">{{ plan_run_label or plan.get('status') }}</span></span></span>
     <span class="meta"><span class="meta-k">Created</span> <span class="meta-v dt">{{ format_dt(plan.get('created')) }}</span></span>
     <span class="meta"><span class="meta-k">Steps</span> <span class="meta-v">{{ plan.get('steps', [])|length }}</span></span>
-    <span class="meta"><span class="meta-k">Estimated reclaim</span> <span class="meta-v">{{ plan.get('est_reclaim_bytes', 0) }} bytes</span></span>
+    <span class="meta"><span class="meta-k">Estimated reclaim</span> <span class="meta-v" title="{{ plan.get('est_reclaim_bytes', 0) }} bytes">{{ human_size(plan.get('est_reclaim_bytes', 0)) }}</span></span>
   </div>
-  <p class="page-lede">Review steps, then execute dry-run first. LIVE runs real deletions. Shared = more than one current app, so those resources stay preserved. Protected apps cannot reach a plan.</p>
+  <p class="page-lede">Review the steps, run a dry run first, then run it live. Shared resources (more than one current app, or a system path) are preserved.</p>
 
   {% if latest_live_job and latest_live_job.get('status') == 'success' %}
   <div class="callout callout-info">
@@ -64,10 +65,9 @@
     <ul class="relation-list">
       {% for j in plan_jobs %}
       <li>
-        <span class="relation-type badge {{ 'badge-danger' if j.get('mode') == 'live' else 'badge-grey' }}">{{ 'LIVE' if j.get('mode') == 'live' else 'dry-run' }}</span>
+        <span class="relation-type">{{ m.mode_tag(j.get('mode')) }}</span>
         <a class="relation-name" href="/jobs/{{ j.get('id') }}">Job #{{ j.get('id') }}</a>
-        <span class="relation-arrow">→</span>
-        <span class="badge status-{{ j.get('status') }}">{{ j.get('status') }}</span>
+        {{ m.state(j.get('status')) }}
         <span class="relation-aside dt">{{ format_dt(j.get('started')) }}</span>
       </li>
       {% endfor %}
@@ -98,7 +98,7 @@
       <summary>
         <h3>{{ stage }}</h3>
         <span class="count-pill">{{ steps|length }}</span>
-        <span class="section-hint">{{ danger_parts | join(' · ') if danger_parts else 'no warnings' }}</span>
+        <span class="section-hint">{{ danger_parts | join(', ') if danger_parts else 'no warnings' }}</span>
       </summary>
       <div class="section-body">
         <div class="table-scroll">
@@ -111,7 +111,7 @@
               <td>{{ s.get('seq') }}</td>
               <td>{{ s.get('operation') }}</td>
               <td>{{ s.get('description') }}</td>
-              <td><span class="badge badge-danger-{{ s.get('danger') }}">{{ s.get('danger') }}</span></td>
+              <td><span class="badge badge-danger-{{ s.get('danger') }}">{{ (s.get('danger') or '—') | replace('_', ' ') }}</span></td>
               <td>{{ 'yes' if s.get('reversible') else 'no' }}</td>
             </tr>
             {% endfor %}
@@ -139,18 +139,18 @@
   {% endif %}
 {% else %}
   <nav class="crumbs" aria-label="Breadcrumb">
-    <a href="/apps">Applications</a><span class="sep">›</span>
-    <a href="/apps/{{ app.get('slug') }}">{{ app.get('name', app.get('slug')) }}</a><span class="sep">›</span>
+    <a href="/apps">Applications</a><span class="sep">/</span>
+    <a href="/apps/{{ app.get('slug') }}">{{ app.get('name', app.get('slug')) }}</a><span class="sep">/</span>
     <span aria-current="page">Build removal plan</span>
   </nav>
   <div class="page-header">
-    <h1>Build removal plan <span class="muted">· {{ app.get('name', app.get('slug')) }}</span></h1>
+    <h1>Plan removal <span class="muted">{{ app.get('name', app.get('slug')) }}</span></h1>
   </div>
-  <p class="page-lede">Choose what this app may lose, then build the plan. Shared resources (more than one current app) stay. Protected apps have no plan. Complete removal permanently deletes this app's exclusive data.</p>
+  <p class="page-lede">Choose what this app may lose, then build the plan. You review every step and can dry-run before anything is deleted. Shared resources always stay.</p>
   <form method="post" action="/apps/{{ app.get('slug') }}/plan" class="stacked-form" data-submit-guard="Building plan…">
     <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
 
-    <div class="callout callout-warn" id="preset-complete-removal-box">
+    <div class="callout callout-danger danger-zone" id="preset-complete-removal-box">
       <label class="choice">
         <input type="checkbox" id="preset-complete-removal">
         <span>
@@ -210,3 +210,4 @@
   </form>
 {% endif %}
 {% endblock %}
+{% block scripts %}<script src="{{ asset('removal.js') }}"></script>{% endblock %}

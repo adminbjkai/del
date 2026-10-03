@@ -1,17 +1,18 @@
 {% extends "base.html" %}
+{% import "_macros.html" as m %}
 {% block title %}Job #{{ job.get('id') }}{% endblock %}
 {% block content %}
 <nav class="crumbs" aria-label="Breadcrumb">
-  <a href="/jobs">Jobs</a><span class="sep">›</span><span aria-current="page">Job #{{ job.get('id') }}</span>
+  <a href="/jobs">Jobs</a><span class="sep">/</span><span aria-current="page">Job #{{ job.get('id') }}</span>
 </nav>
 <div class="page-header">
   <h1>Job #{{ job.get('id') }}</h1>
 </div>
-<p class="page-lede">This run of a removal plan. LIVE changes the host; dry-run does not. Shared = more than one current app, so those resources stay preserved. Protected apps never reach this page.</p>
+<p class="page-lede">One run of a removal plan. A live run changes the host; a dry run does not. Shared resources are always preserved.</p>
 
 <div class="meta-row">
-  <span class="meta"><span class="meta-k">Mode</span> <span class="meta-v"><span class="badge {{ 'badge-danger' if job.get('mode') == 'live' else 'badge-grey' }}">{{ 'LIVE' if job.get('mode') == 'live' else 'dry-run' }}</span></span></span>
-  <span class="meta"><span class="meta-k">Status</span> <span class="meta-v"><span class="badge status-{{ job.get('status') }}" id="job-status" aria-live="polite">{{ job.get('status') }}</span></span></span>
+  <span class="meta"><span class="meta-k">Mode</span> <span class="meta-v">{{ m.mode_tag(job.get('mode')) }}</span></span>
+  <span class="meta"><span class="meta-k">Status</span> <span class="meta-v"><span class="badge status-{{ job.get('status') }}{% if job.get('status') not in ('done', 'failed', 'success', 'error', 'refused') %} is-live{% endif %}" id="job-status" aria-live="polite">{{ job.get('status') }}</span></span></span>
   <span class="meta"><span class="meta-k">Started</span> <span class="meta-v dt">{{ format_dt(job.get('started')) }}</span></span>
   <span class="meta"><span class="meta-k">Finished</span> <span class="meta-v dt">{{ format_dt(job.get('finished')) }}</span></span>
   {% if job.get('app_slug') %}
@@ -29,7 +30,7 @@
     {% if progress is defined and progress %}{{ progress.get('done', 0) }} of {{ progress.get('total', 0) }} steps done ({{ pct }}%){% else %}No steps yet{% endif %}
   </div>
   <div class="job-current-step muted" id="job-current-step" aria-live="polite">
-    {% if current_step is defined and current_step %}Running: {{ current_step.get('stage') }} · {{ current_step.get('operation') }}{% endif %}
+    {% if current_step is defined and current_step %}Running: {{ current_step.get('stage') }}, {{ current_step.get('operation') }}{% endif %}
   </div>
 </div>
 
@@ -57,7 +58,6 @@
 {% for stage in stages %}
 <section class="panel">
   <h2>{{ stage.stage }} <span class="count-pill">{{ stage.steps | length }}</span></h2>
-  <div class="table-scroll">
   <table class="table job-steps" data-stage="{{ stage.stage }}">
     <caption class="sr-only">Steps in the {{ stage.stage }} stage.</caption>
     <thead><tr><th scope="col">#</th><th scope="col">Operation</th><th scope="col">State</th><th scope="col">Exit</th><th scope="col">Duration</th><th scope="col">Output</th></tr></thead>
@@ -78,12 +78,12 @@
       {% endfor %}
     </tbody>
   </table>
-  </div>
 </section>
 {% else %}
 <div class="empty-state" id="job-no-steps">
-  <div class="empty-state-msg">No steps recorded yet. Primary: wait for execute to start. Secondary: open Jobs if this run was not launched.</div>
+  <div class="empty-state-msg">No steps recorded yet. They appear here as soon as the run starts.</div>
 </div>
 {% endfor %}
 </div>
 {% endblock %}
+{% block scripts %}<script src="{{ asset('removal.js') }}"></script>{% endblock %}

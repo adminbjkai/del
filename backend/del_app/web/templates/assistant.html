@@ -10,7 +10,7 @@
     {% endif %}
   </div>
 </div>
-<p class="page-lede">Read-only questions about this inventory (owners, shared, probable vs possible, protected). Ask is also in the right rail on every other screen. Nothing here can change the host — plan and remove stay on the app.</p>
+<p class="page-lede">Ask about this inventory: owners, shared resources, weak claims, what is safe to remove. The same assistant sits in the right rail's Ask tab on every other page. It is read-only; planning and removal stay on each app.</p>
 
 {% if not assistant_on %}
 <div class="callout callout-info" id="assistant-disabled">
@@ -71,7 +71,7 @@
     <details class="section assistant-prompts-card" id="assistant-prompts-section" data-remember open>
       <summary><h2>Suggested questions</h2></summary>
       <div class="section-body">
-        <p class="muted text-xs mt-0">Templates — click to edit in the box, then Enter to send. Shift+Enter for a new line. If you see <code>[app]</code>, replace it before sending.</p>
+        <p class="faint text-xs mt-0">Click one to put it in the box, edit it, then press Enter. Shift+Enter adds a line. Replace any <code>[app]</code> before sending.</p>
         <div class="stack-sm" id="assistant-prompts">
           {% for p in prompts %}
           <button type="button" class="assistant-prompt" data-prompt-id="{{ p.id }}" data-text="{{ p.text }}" title="{{ p.description or p.text }}"><span class="assistant-prompt-label">{{ p.label }}</span>{% if p.description %}<span class="assistant-prompt-desc">{{ p.description }}</span>{% endif %}</button>
@@ -90,7 +90,7 @@
           <li class="assistant-conv{% if conversation and c.get('id') == conversation.get('id') %} is-active{% endif %}">
             <a href="/assistant?conversation={{ c.get('id') }}" class="assistant-conv-link">
               <span class="assistant-conv-title">{{ c.get('title') }}</span>
-              <span class="muted text-xs">{{ c.get('scope') }}{% if c.get('target') %} · {{ c.get('target') }}{% endif %} · <span class="dt">{{ relative_dt(c.get('updated_at')) }}</span></span>
+              <span class="faint text-xs">{{ c.get('scope') }}{% if c.get('target') %}: {{ c.get('target') }}{% endif %}, <span class="dt">{{ relative_dt(c.get('updated_at')) }}</span></span>
             </a>
             <form method="post" action="/assistant/conversations/{{ c.get('id') }}/delete" class="inline-form" data-submit-guard="…">
               <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
@@ -113,7 +113,7 @@
         {% endfor %}
       {% else %}
         <div class="empty-state" id="assistant-empty">
-          <div class="empty-state-msg">Click a light suggestion to fill the box, edit if you need an app slug, then Enter. Ask never scans, plans, or removes.</div>
+          <div class="empty-state-msg">Pick a suggested question or type your own. The assistant reads the latest scan; it never scans, plans or removes.</div>
         </div>
       {% endif %}
     </div>
@@ -130,7 +130,7 @@
       <div class="cluster assistant-composer-actions">
         <button type="submit" class="btn btn-primary" id="assistant-send">Ask</button>
         <button type="button" class="btn" id="assistant-stop" hidden>Stop</button>
-        <span class="muted text-xs">Enter sends · Shift+Enter newline</span>
+        <span class="faint text-xs"><kbd>Enter</kbd> sends, <kbd>Shift</kbd> <kbd>Enter</kbd> adds a line</span>
       </div>
     </form>
   </section>

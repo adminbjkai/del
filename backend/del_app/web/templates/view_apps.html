@@ -1,20 +1,19 @@
 {% extends "base.html" %}
+{% import "_icons.html" as i %}
 {% block title %}View Apps{% endblock %}
 {% block content %}
-<div class="page-header app-gallery-header">
-  <div>
-    {# The count is what actually changes as filters run, so the live region lives here. #}
-    <h1>View Apps <span class="count-pill" id="gallery-visible-count" role="status">{{ apps | length }}</span></h1>
-    <p class="page-lede">Launchpad of domains online in the latest scan and a live HTTPS check. This is not ownership or confidence — use Inventory for owners, shared, probable vs possible, and protected. Next: open a card, or Refresh health.</p>
-  </div>
+<div class="page-header">
+  {# The count changes as filters run, so the live region lives here. #}
+  <h1>View Apps <span class="count-pill" id="gallery-visible-count" role="status">{{ apps | length }}</span></h1>
   <div class="page-actions">
-    <span class="badge badge-ok">{{ apps | length }} online</span>
-    {% if excluded_count %}<span class="badge badge-grey" title="Enabled domains that failed the live HTTPS check">{{ excluded_count }} unavailable hidden</span>{% endif %}
+    <span class="badge badge-ok" title="Answered a live HTTPS check">{{ apps | length }} online</span>
     {% if alias_count %}<span class="badge badge-grey" title="Domains that redirect to another listed app; shown on that app's card">{{ alias_count }} redirect aliases merged</span>{% endif %}
+    {% if unavailable %}<a class="btn btn-sm btn-ghost" href="#gallery-unavailable" title="Enabled domains that failed the check, or only show a login page while nothing serves the app">{{ unavailable | length }} unavailable</a>{% endif %}
     <a class="btn btn-sm" href="/view-apps?refresh=1" data-pending-label="Checking…"
-       title="Bypass the two-minute health cache and check every domain again">Refresh health</a>
+       title="Bypass the five-minute health cache and check every domain again">Refresh health</a>
   </div>
 </div>
+<p class="page-lede">A launchpad of this host's web apps that answered a live HTTPS check. Stars, categories, order and layout are yours and stay in this browser. Ownership and removal live under Applications.</p>
 
 <section class="gallery-toolbar" aria-label="App gallery controls">
   <label class="gallery-search-wrap">
@@ -38,16 +37,16 @@
   <label>
     <span class="sr-only">Sort apps</span>
     <select id="gallery-sort" class="gallery-select">
-      <option value="category">Category</option>
-      <option value="name">Name</option>
-      <option value="domain">Domain</option>
-      <option value="latency">Response time</option>
+      <option value="category">Sort by category</option>
+      <option value="name">Sort by name</option>
+      <option value="domain">Sort by domain</option>
+      <option value="latency">Sort by response time</option>
       <option value="custom">My order</option>
     </select>
   </label>
-  <div class="gallery-view-switch" role="group" aria-label="Gallery view">
-    <button type="button" class="btn btn-sm active" data-gallery-view="grid" aria-pressed="true" title="Grid view">▦ <span>Grid</span></button>
-    <button type="button" class="btn btn-sm" data-gallery-view="list" aria-pressed="false" title="List view">☷ <span>List</span></button>
+  <div class="btn-group" role="group" aria-label="Gallery view">
+    <button type="button" class="btn btn-sm active" data-gallery-view="grid" aria-pressed="true">Grid</button>
+    <button type="button" class="btn btn-sm" data-gallery-view="list" aria-pressed="false">List</button>
   </div>
   <button type="button" class="btn btn-sm" id="gallery-layout-toggle" aria-expanded="false" aria-controls="gallery-layout-panel">Customize</button>
 </section>
@@ -55,7 +54,7 @@
 <nav class="gallery-category-bar" aria-label="Filter apps by category">
   <div class="gallery-category-pills">
     <button type="button" class="category-pill active" data-category-pill="" aria-pressed="true">All apps</button>
-    <button type="button" class="category-pill" data-category-pill="__favorites" aria-pressed="false">★ Favorites</button>
+    <button type="button" class="category-pill" data-category-pill="__favorites" aria-pressed="false">{{ i.icon('star') }}Favorites</button>
     {% for category in categories %}
     <button type="button" class="category-pill" data-category-pill="{{ category }}" aria-pressed="false">{{ category }}</button>
     {% endfor %}
@@ -75,12 +74,12 @@
     </select>
   </label>
   <label class="gallery-check"><input id="gallery-show-hidden" type="checkbox"> Show hidden apps while customizing</label>
-  <p class="muted">Use each card’s category menu, star, and visibility control. Drag cards to save a personal order. Preferences stay in this browser only.</p>
+  <p class="faint">Use each card's category menu, star and Hide box. Drag cards to save your own order. Preferences stay in this browser only.</p>
   <button type="button" class="btn btn-sm" id="gallery-reset">Reset gallery preferences</button>
 </section>
 
-<div class="gallery-meta muted" id="gallery-meta">
-  {% if checked_at %}Health checked {{ relative_dt(checked_at) }} · {% endif %}latest completed scan #{{ latest_scan or '—' }}
+<div class="gallery-meta" id="gallery-meta">
+  {% if checked_at %}Health checked {{ relative_dt(checked_at) }}, from completed scan #{{ latest_scan or '—' }}.{% else %}From completed scan #{{ latest_scan or '—' }}.{% endif %}
 </div>
 
 {% if apps %}
@@ -89,10 +88,8 @@
   <section class="gallery-section" data-gallery-section="{{ category }}">
     <div class="gallery-section-heading">
       <h2>
-        <button type="button" class="gallery-section-toggle" aria-expanded="true"
-                aria-controls="gallery-grid-{{ loop.index }}">
-          <span class="gallery-section-chevron" aria-hidden="true"></span>
-          {{ category }}
+        <button type="button" class="gallery-section-toggle" aria-expanded="true" aria-controls="gallery-grid-{{ loop.index }}">
+          <span class="gallery-section-chevron" aria-hidden="true"></span>{{ category }}
         </button>
       </h2>
       <span class="count-pill">{{ apps | selectattr('category', 'equalto', category) | list | length }}</span>
@@ -112,18 +109,17 @@
           <span class="app-launch-copy">
             <strong class="app-launch-name">{{ app.name }}</strong>
             <span class="app-launch-domain">{{ app.domain }}</span>
-            {% if app.aliases %}<span class="app-launch-domain muted" title="These domains redirect here">also {{ app.aliases | join(', ') }}</span>{% endif %}
+            {% if app.aliases %}<span class="app-launch-domain" title="These domains redirect here">also {{ app.aliases | join(', ') }}</span>{% endif %}
           </span>
-          <span class="app-launch-arrow" aria-hidden="true">↗</span>
+          <span class="app-launch-arrow" aria-hidden="true">{{ i.icon('external') }}</span>
         </a>
-        {# After the link on purpose: Tab reaches each app before its star.
-           The button is absolutely positioned, so nothing moves visually. #}
-        <button type="button" class="app-favorite" aria-label="Add {{ app.name }} to favorites" aria-pressed="false" title="Favorite">☆</button>
+        {# After the link on purpose: Tab reaches each app before its star. #}
+        <button type="button" class="app-favorite" aria-label="Add {{ app.name }} to favorites" aria-pressed="false" title="Favorite">{{ i.icon('star') }}</button>
         <div class="app-card-meta">
-          <span class="live-dot" aria-hidden="true"></span><span>Online</span>
-          <span>HTTP {{ app.http_status }}</span>
+          <span class="card-state"><span class="live-dot" aria-hidden="true"></span>Online</span>
+          <span title="{% if app.http_status in (401, 403) %}Sign-in required; the app behind it is listening{% else %}HTTP status of the root page{% endif %}">HTTP {{ app.http_status }}</span>
           <span>{{ app.latency_ms }} ms</span>
-          <a href="/apps/{{ app.slug }}" title="Open DEL inventory detail">Inventory</a>
+          <a href="/apps/{{ app.slug }}" title="Open this app in the inventory">Inventory</a>
         </div>
         <div class="app-card-editor" hidden>
           <label>Category
@@ -141,11 +137,34 @@
   </section>
   {% endfor %}
 </div>
-<div id="gallery-empty" class="gallery-empty panel" hidden>No online apps match these filters. Primary: Refresh health. Secondary: clear search or category.</div>
+<div id="gallery-empty" class="panel gallery-empty" hidden>No online apps match these filters. Clear the search or pick another category.</div>
 {% else %}
 <div class="panel gallery-empty">
-  <h2>No verified apps are online</h2>
-  <p class="muted">The latest completed scan has no enabled domain that passed the HTTPS health check. Primary: run a scan, then Refresh health. Secondary: fix DNS, TLS, Nginx, or the upstream.</p>
+  <h2>No web apps answered the health check</h2>
+  <p class="faint">The latest completed scan has no enabled domain that passed the HTTPS check. Run a scan, then Refresh health; if it persists, check DNS, TLS, nginx and the app's upstream.</p>
 </div>
 {% endif %}
+
+{% if unavailable %}
+<details class="section mt-3" id="gallery-unavailable">
+  <summary><h2>Unavailable</h2><span class="count-pill">{{ unavailable | length }}</span><span class="section-hint">enabled domains in the inventory that are not serving the app right now</span></summary>
+  <div class="section-body">
+    <table class="table" id="gallery-unavailable-table" data-page-size="50">
+      <caption class="sr-only">Enabled domains that failed the health check, with the reason.</caption>
+      <thead><tr><th scope="col">App</th><th scope="col">Domain</th><th scope="col">Why</th><th scope="col">Status</th></tr></thead>
+      <tbody>
+        {% for u in unavailable %}
+        <tr>
+          <td><a href="/apps/{{ u.slug }}">{{ u.name }}</a></td>
+          <td><a href="https://{{ u.domain }}" target="_blank" rel="noopener noreferrer" data-stop-propagation>{{ u.domain }}</a></td>
+          <td>{{ u.reason }}</td>
+          <td data-filter-value="{{ u.status }}"><span class="badge status-{{ u.status }}">{{ u.status }}</span></td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+  </div>
+</details>
+{% endif %}
 {% endblock %}
+{% block scripts %}<script src="{{ asset('gallery.js') }}"></script>{% endblock %}

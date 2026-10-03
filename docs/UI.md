@@ -1,46 +1,88 @@
 # DEL web UI — conventions
 
-How the server-rendered UI is put together: tokens, page anatomy, the
-component classes templates compose from, and the table engine's `data-*`
-contract. The stylesheet is `backend/del_app/web/static/app.css` (sections
-1–10 are listed at its top); behaviour is `static/app.js`; the assistant has
-its own `assistant.css` / `assistant.js`. Everything is served from `/static/`
-under CSP `script-src 'self'` — no inline scripts or `on*=` handlers, ever.
+How the server-rendered UI is put together: the visual language, the shell,
+the component classes templates compose from, the table engine's `data-*`
+contract, keyboard shortcuts and what the browser remembers.
 
-## Look and feel
+Files (all in `backend/del_app/web/static/`, served from `/static/` under CSP
+`script-src 'self'; style-src 'self'` — no inline scripts, `on*=` handlers or
+`style=""` in markup; JS sets sizes through the CSSOM, which CSP allows):
 
-- **Calm palette.** Light = warm paper neutrals; dark = soft slate (never
-  pure black or white). One muted sea-glass accent (`--accent`), hairline
-  borders (`--border-subtle`), almost no shadows, no gradients.
-- **Colour means state, not decoration.** Tone pairs `--tone-{ok,warn,danger,info,neutral}-{bg,fg}`
-  back every badge; each pair is ≥ 4.5:1 in both themes. Solid fills are
-  reserved for the one primary action on a page (`.btn-primary`) and truly
-  destructive buttons (`.btn-danger`).
-- **Themes.** `data-theme` on `<html>` (`light` / `dark`), set before first
-  paint by `/static/theme-init.js` from `localStorage["del.theme"]`, falling
-  back to `prefers-color-scheme`. Toggle: the half-moon button in the sidebar.
-- **Icons.** Inline SVG from `templates/_icons.html` (`{{ i.icon('layers') }}`
-  after `{% import "_icons.html" as i %}`); stroke uses `currentColor`.
+| File | Role |
+|---|---|
+| `app.css` | The only stylesheet (sections 1–7 listed at its top), including the assistant and gallery. |
+| `theme-init.js` | Blocking `<head>` script: sets `data-theme` / `data-density` before first paint. |
+| `app.js` | Shell, tables, palette, shortcuts, scan stamp, toasts, small behaviours. Exposes `window.DEL`. |
+| `assistant.js` | Ask dock and `/assistant` page. |
+| `removal.js` | Plan and job pages only: plan presets, the execute gate, the live job poller. |
+| `gallery.js` | View Apps only: search, categories, favourites, layout, drag order. |
+| `fonts/` | Barlow Semi Condensed 400/500/600 and IBM Plex Mono 400 (woff2 subsets, OFL licences alongside). |
+| `favicon.svg` | Survey-marker icon. |
 
-## Shell
+Templates link every file through `asset('name')`, which adds a content hash
+(`/static/app.css?v=1a2b3c4d5e`); a request carrying the current hash is cached
+for a year as immutable, so a deploy changes the URL and a page view costs no
+asset round trips. Fonts keep plain URLs (the stylesheet names them) and are
+always immutable — ship a changed font under a new file name. See
+`static_routes.py`.
 
-`base.html`: left sidebar (grouped nav: Inventory / Removal / Help, Settings
-and Log out at the foot; collapsible to icons on desktop, a flyout drawer
-below 900px) · main content (`.content > .content-inner`, max 1320px) · right
-rail with **Help** (context glossary) and **Ask** (assistant dock) tabs.
-The rail starts hidden below 1600px wide until the user opens it; the choice
-is remembered (`del.glossaryCollapsed`). Below 1280px Help and Ask are
-floating buttons that open bottom sheets.
+## Look and feel: the survey sheet
 
-Inventory tables share the page background (DEL tokens override Quartz; `app.css`
-loads after the vendor theme). The grid uses fixed row height, is sized before
-create, and keeps AG Grid's `translateY` row positions (`ensureDomOrder` off) so
-repeated header-click sorting does not stack every row onto the first line.
+DEL surveys one host and plans demolitions on it, so the UI borrows from
+survey sheets and site plans rather than a generic admin kit.
 
-On desktop, the slim divider beside each panel is a resize handle. Drag it,
-focus it and use Left/Right (Shift for larger steps), or double-click to reset.
-Widths persist as `del.sidebarWidth` and `del.rightRailWidth`; collapse remains
-independent. Handles disappear when their panel is collapsed and on mobile.
+- **Two papers.** Dark (default) is a cyanotype: Prussian-blue paper
+  `--paper #0f1f30`, chalk-blue accents `--chalk #8fd0ff`. Light is drafting
+  film: cool vellum `#edf1f4`, Prussian ink `#0e2235`, accent `#1658a0`. Both
+  carry a faint 24px measuring grid on the page background.
+- **Type.** Barlow Semi Condensed (a signage grotesque) for every word;
+  IBM Plex Mono only for literal machine values — paths, ids, ports, keys.
+  Numbers use tabular figures.
+- **Colour is state, never decoration.** Tone pairs `--ok`, `--warn`, `--bad`,
+  `--info`, `--idle` (each with a `-bg`) back badges, dots and callouts; text
+  and every pair are ≥ 4.5:1 on their surfaces in both themes.
+- **Status is a dot plus a word** (`.badge.status-running` renders a green dot
+  and "running"), so it reads without colour.
+- **One loud element: the hazard stripe.** Yellow/black tape appears only where
+  something is about to be deleted for real — the `LIVE` tag, the execute panel
+  in live mode, the complete-removal box. Dry runs stay calm.
+- **Motion** answers actions (sheets, popovers, the scan sweep) plus one
+  first-visit reveal of the dashboard site plan; `prefers-reduced-motion`
+  turns all of it off.
+- **Themes.** `data-theme` on `<html>`, set before paint from
+  `localStorage["del.theme"]`, else `prefers-color-scheme`, else dark; a
+  no-JS `@media (prefers-color-scheme: light)` block covers the rest. Toggle:
+  the half-moon button in the sidebar, `t`, or the command palette.
+- **Icons.** Inline SVG from `templates/_icons.html`
+  (`{% import "_icons.html" as i %}` then `{{ i.icon('scan') }}`), stroke
+  `currentColor`; `app.js` keeps a small matching set for JS-built controls.
+
+## Shell (`base.html`)
+
+- **Sidebar**: brand (marker, `DEL`, host name), theme and collapse buttons,
+  the command-palette button, grouped nav (Inventory: Dashboard, View Apps,
+  Applications, Resources, Orphans · Removal: Jobs · Help: Assistant), then the
+  **scan stamp**, Settings and Log out. Each nav link's tooltip names its
+  `g` shortcut. Collapses to icons on desktop; below 900px it is a drawer
+  behind the menu button with a backdrop.
+- **Scan stamp** (`#scan-block`): the inventory's completed scan number, its
+  age and duration, and a run button. Starting a scan here (or from Settings)
+  posts `/scan` with `Accept: application/json`, shows a toast, and the stamp
+  polls every 2.5 s while discovery runs (sweep bar + elapsed time), then
+  reloads the page when the new inventory is published.
+- **Main**: `.content > .content-inner` (max 1440px).
+- **Right rail** (≥ 1280px): **Help** (glossary filtered to the page via
+  `<body data-glossary>`, computed by `glossary_ctx()` in `render.py`) and
+  **Ask** (assistant dock). It starts collapsed on every page; "Ask" links
+  anywhere open the Ask tab with a drafted question. Below 1280px Help and Ask
+  are floating buttons that open bottom sheets (Esc or the close button
+  dismisses them).
+- **Resize handles** beside the sidebar and rail on desktop: drag, or focus
+  and use Left/Right (Shift for bigger steps), double-click to reset. Widths
+  persist; handles hide when their panel is collapsed and on mobile.
+- **Toasts** (`#toast-region`, `DEL.toast(msg, "ok"|"error"|"info")`) and
+  **flash banners** from `?flash=` / `?error=` (success banners auto-dismiss;
+  both query parameters are stripped from the URL once shown).
 
 ## Page anatomy
 
@@ -48,79 +90,101 @@ independent. Handles disappear when their panel is collapsed and on mobile.
 <nav class="crumbs" aria-label="Breadcrumb">…</nav>          <!-- detail pages -->
 <div class="page-header">
   <h1>Title <span class="count-pill">171</span></h1>
-  <div class="page-actions">…buttons…</div>
+  <div class="page-actions">…links / buttons…</div>
 </div>
-<div class="meta-row"><span class="meta"><span class="meta-k">Status</span> …</span></div>
+<div class="meta-row"><span class="meta"><span class="meta-k">Kind</span> compose</span></div>
 <p class="page-lede">One or two sentences: what this page is for.</p>
-<details class="explain"><summary>What do these words mean?</summary>
-  <div class="explain-body">…</div></details>
-…sections / panels…
+<details class="explain"><summary>How rows relate</summary><div class="explain-body">…</div></details>
+…panels / sections / tables…
 ```
 
 ## Components
 
 | Class | Use |
 |---|---|
-| `.panel` (+ `.panel-head`, `.panel-actions`) | Default content container. |
-| `details.section` > `summary` (+ `.section-hint`, `.section-aside`, `.count-pill`) > `.section-body` | Collapsible block with a count. Add `id` + `data-remember` to persist open state per page; a `#id` link opens it. |
-| `[data-expand-all="open\|close"]` (+ `data-scope="#sel"`) | Button that opens/closes every `details.section` in scope. |
-| `.section-group-label` | Small caps label above a group of sections. |
+| `.panel` (+ `.panel-head`) | Default content container. |
+| `details.section` > `summary` (`h2`, `.count-pill`, `.section-hint`) > `.section-body` | Collapsible block. Add `id` + `data-remember` to persist open state per page; a `#id` link opens it. |
+| `[data-expand-all="open\|close"]` (+ `data-scope`) | Opens/closes every `details.section` in scope. |
 | `details.explain` > `.explain-body` | Inline "what does this mean" disclosure. |
-| `.callout` + `-info` / `-warn` / `-danger` / `-ok` (+ `.callout-title`) | Notices. `.box-*` and `.flash-*` are the older names, same look. |
-| `.meta-row` / `.meta` / `.meta-k` / `.meta-v` | Inline facts under a title. |
+| `.callout` + `-info` / `-warn` / `-danger` (+ `.callout-title`) | Notices. `.flash-ok` / `.flash-error` for banners. |
+| `.meta-row` / `.meta` / `.meta-k` | Compact facts under a title. |
 | `.kv` (`<dl>`) | Key/value grid. |
-| `.stat-grid` > `a.stat-card` (`.stat-value`, `.stat-label`, `.stat-hint`, `.is-warn`, `.is-danger`) | Linked metric tiles. |
-| `.subnav` > `.subnav-group` > `.subnav-label` + links (`.active`, `.is-empty`) | Grouped navigation between sibling views (resource types). |
-| `.jump-nav` | In-page anchor chips on long pages. |
-| `.tabs` > `.tablist` > `button.tab[role=tab]` + `.tabpanel` | ARIA tabs (roving tabindex + arrows in app.js). |
-| `.relation-list` > `li` (`.relation-type`, `.relation-name`, `.relation-arrow`, `.relation-aside`) | "this → that" relationship rows with links. |
-| `.btn` + `-primary` / `-danger` / `-danger-quiet` / `-ghost` / `-sm`, `.btn-group` | Buttons. One primary per view. |
-| `.chip`, `.owner-chip`, `.owner-chip-unassigned` | Link chips (owners, legend). |
-| `.badge` + tone / `status-*` / `badge-confidence-*` / `badge-danger-*` | Status labels. `.is-live` pulses (live jobs only). |
-| `.dot` + `-ok` / `-warn` / `-danger` / `-info` | Small state dot. |
-| `.choice` (`.choice-title`, `.choice-desc`) | Radio/checkbox cards (dry-run vs live). |
-| `.empty-state` / macro `m.empty_state(msg)` | Nothing-to-show message. |
+| `.siteplan` > `a.lot` (`.is-running` etc., `.has-warning`, `.is-protected`) | Dashboard site plan tiles. |
+| `.figures` | Dashboard figure strip; `.stat-grid` > `a.stat-card` on Orphans. |
+| `.subnav`, `.jump-nav` | Sibling views (resource types); in-page anchor chips. |
+| `.tabs` > `[role=tablist]` > `[role=tab]` + `[role=tabpanel]` | ARIA tabs: roving tabindex, arrows/Home/End, `#tab-id` deep links. |
+| `.relation-list` | "this → that" relationship rows. |
+| `.btn` + `-primary` / `-danger` / `-danger-quiet` / `-ghost` / `-sm`, `.icon-btn`, `.btn-group` | Buttons. One primary per view; `-danger` only for real deletion. |
+| `.badge` + `badge-ok/-amber/-grey` / `status-*` / `badge-confidence-*` / `badge-danger-*`; `.tag-live` | Labels. `m.state(value)` and `m.mode_tag(mode)` in `_macros.html` render the common ones. |
+| `.dot` + `-ok` / `-warn` / `-info` / `-idle` | Small state dot. |
+| `.choice` (`.choice-title`, `.choice-desc`) | Radio/checkbox cards (dry run vs live). |
+| `.execute-panel` (`.is-live-mode`), `.danger-zone` | Removal controls; hazard stripe in live mode. |
+| `.chip`, `.filter-chip`, `.count-pill` | Link chips, filter toggles, counts. |
 
-Utilities: `.stack`, `.cluster`, `.grid-2`, `.muted`, `.faint`, `.mono`,
-`.text-xs|sm|md`, `.mt-*`, `.mb-*`, `.ml-auto`, `.nowrap`, `.sr-only`.
+Utilities: `.stack`, `.cluster`, `.muted`, `.faint`, `.mono`, `.text-xs|sm`,
+`.mt-0|2|3`, `.mb-0|1|2`, `.sr-only`.
 
 ## Tables
 
-Any `<table class="table" data-enhanced>` becomes an AG Grid Community grid
-(vendored 32.3.3); if AG Grid is unavailable, a vanilla sorter/filter runs
-instead. The engine reads:
+Every `table.table` is enhanced by the vanilla engine in `app.js`
+(`enhanceTable`); add `table-plain` (or `job-steps`) to keep plain HTML. It
+provides a search box, sortable headers, a per-column filter popover
+(contains / equals / starts with / greater than / is empty …), quick filter
+chips for status-like columns (Status, Kind, State, Class, Active, Type …), a
+Columns menu (show/hide columns, compact rows, reset), pagination
+(25/50/100/250/All), drag-to-resize columns, CSV export of the filtered rows,
+and clickable rows (a click anywhere opens the row's first link;
+Ctrl/Cmd-click opens a new tab). Tables wider than their container scroll
+horizontally with a sticky header. Tables with ≤ 10 rows get a minimal
+toolbar unless they have an export button or `data-toolbar`.
 
 | Attribute | Effect |
 |---|---|
-| `data-page-size="25"` | Rows per page (default 50). |
+| `table[id]` | Storage key for the table's remembered state (see below); give every inventory table a stable id. |
+| `data-page-size="25"` | Initial rows per page (default 50). |
 | `data-empty="…"` | Message when nothing matches. |
-| `data-search-placeholder="…"` | Quick-filter placeholder. |
-| `data-prefill="…"` | Initial quick-filter text. |
-| `data-toolbar` | Force the full toolbar even for ≤ 10 rows. |
-| `th[data-nosort]` | Not sortable/filterable; fixed width; the last such column is pinned right (actions like **Ask**). |
-| `th[title]` | Header tooltip. |
-| `td[data-sort-value]` | Sort key (numbers sort numerically). |
-| `td[data-filter-value]` | Filter/export text instead of the cell text. |
+| `data-search-placeholder="…"` | Search box placeholder. |
+| `data-prefill="…"` | Initial search text. |
+| `data-toolbar` | Full toolbar even for ≤ 10 rows. |
+| `th[data-nosort]` | Not sortable or filterable (action columns such as **Ask**). |
+| `th[data-priority="low"]` / `td[data-priority="low"]` | Hidden on narrow screens until "Show all columns". |
+| `td[data-sort-value]` | Sort key. Dates use `iso_sort()`; numbers, sizes (`1.5 GB`) and durations (`42s`, `1.5m`) are parsed. Columns that are ≥ 85% numeric right-align. |
+| `td[data-filter-value]` | Text used for search, filters, chips and CSV instead of the cell text. |
+| `[data-export-table="<table id>"]` | Page-level export button; the engine moves it into the table toolbar as **CSV**. |
 
-Behaviour: column widths come from header and content length; cells with
-block content (meters, `<details>`, forms, chip clusters) wrap and grow the
-row; plain cells stay on one line with a tooltip. Grids size to their rows
-(no internal scroll box). Tables with ≤ 10 rows hide search and pager.
-Column layout, filters and page size persist per table in
-`localStorage["del.ag2.colstate.<table id or path|caption>"]`. Every `table.table` is
-enhanced; add class `table-plain` (or `job-steps`) to keep plain HTML.
+`—` is treated as blank everywhere.
+
+## Keyboard
+
+| Key | Action |
+|---|---|
+| Ctrl/Cmd + K | Command palette: pages, applications, "Open site" domains, actions (run scan, theme, help, ask, export, collapse sidebar). |
+| `g` then `d` `v` `a` `r` `o` `j` `k` `s` | Dashboard, View Apps, Applications, Resources, Orphans, Jobs, Assistant, Settings. |
+| `/` | Focus the page's table search (or the gallery search). |
+| `t` | Toggle theme. |
+| `?` | Shortcuts dialog. |
+| Esc | Close the open popover, dialog, sheet or Ask panel. |
+
+Shortcuts are ignored while typing in a field.
+
+## What the browser remembers (localStorage)
+
+| Key | What |
+|---|---|
+| `del.theme`, `del-density` | Theme; compact or comfortable rows. |
+| `del.sidebarCollapsed`, `del.sidebarWidth`, `del.rightRailWidth` | Shell layout. |
+| `del.table.<table id>` (or `del.table.<path>\|<caption>`) | Sort, page size, hidden columns, column widths. Search text and filters are not kept. |
+| `del.sections.<path>` | Open/closed `details.section[data-remember]`. |
+| `del.siteplanGroup` | Dashboard site plan grouping (kind or status). `sessionStorage del.siteplanSeen` limits the reveal to once per session. |
+| `del.appGallery.v1` | View Apps favourites, hidden apps, categories, order, view, density, card width, sort. |
+
+Keys from older layouts (`del.agN.colstate.*`, `del.glossaryCollapsed`,
+`del.rightRailTab`) are deleted on load.
 
 ## Accessibility
 
-Skip link, landmark roles, `aria-current="page"` on active nav, focus-visible
-rings, keyboard-operable resize separators, focus traps on the mobile drawer
-and sheets, `prefers-reduced-motion` honoured, text ≥ 4.5:1 in both themes.
-
-## Scan feedback
-
-Dashboard and Settings show live scan status and disable their scan button while
-web or CLI discovery is active. The elapsed time treats database timestamps as
-UTC, then the date formatter displays Eastern time. Settings' Outcome column shows
-completed app/resource counts and duration, or the recorded failure reason.
-Failed scans retain the previous inventory. The dashboard's last-scan strip always
-names the inventory's completed scan, even after more than five failed attempts.
+Skip link, landmarks, `aria-current="page"` on the active nav item, visible
+focus rings, keyboard-operable resize separators, ARIA tabs, focus traps in
+the drawer, sheets and dialogs, live regions for toasts, the scan stamp and
+the gallery count, `prefers-reduced-motion` honoured, text ≥ 4.5:1 in both
+themes. Print hides the shell and prints tables in black on white.

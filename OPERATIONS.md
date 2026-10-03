@@ -118,19 +118,29 @@ The key is never logged; the file is gitignored (`config/*-api-key.txt`).
 
 ## Rescan (refresh the application inventory)
 
-Either:
-- **UI**: Settings page → Scan (issues `POST /scan`, requires auth + CSRF).
-  `POST /scan` starts `run_scan()` on a background thread and redirects
-  immediately to `/settings?flash=Scan+started` — it does not block the
-  request on the whole scan. If a scan is already running (`scanner.scan_state()`
-  reports `running: true`), it redirects with an error instead of starting a
-  second one. Poll `GET /scan/status` for progress; it returns the current
-  `scan_state()` (running/scan_id/started) plus the most recent `scans` row.
+Any of:
+- **UI**: the scan stamp at the foot of the sidebar (its refresh icon), or
+  Settings → Scanning → **Run scan now**. Both issue `POST /scan` (auth +
+  CSRF), which starts `run_scan()` on a background thread and answers at once:
+  JSON `{"started": true}` for the UI's fetch, or a redirect with
+  `flash=Scan+started` for a plain form post. If a scan is already running
+  (`scanner.scan_state()` reports `running: true`) it refuses (409 /
+  an error flash) instead of starting a second one. The stamp polls
+  `GET /scan/status` — the current `scan_state()` (running/scan_id/started)
+  plus the most recent `scans` row — and reloads the page when the new
+  inventory is published.
 - **CLI**:
   ```bash
   /apps/del/scripts/del-admin rescan
   ```
-Both call `del_app.scanner.run_scan()`, which re-runs all discovery sources
+- **Automatically**: set `scan_interval_hours` in `config/del.toml` (0 = off,
+  the code default; this host uses 6) and restart `del-web`. Every ten minutes
+  `del-web` checks the age of the latest completed scan and scans when it is
+  older than the interval; after a failed attempt it waits min(interval, 1 h)
+  before retrying, and it never scans while a removal job runs (a live removal
+  ends with its own rescan).
+
+All of them call `del_app.scanner.run_scan()`, which re-runs all discovery sources
 (docker, compose, nginx, systemd, proc, cron, fs), re-correlates, and persists a new
 scan row plus refreshed `applications`/`resources`/`associations`. The inventory and
 completed marker publish in one transaction; scan failures retain the previous

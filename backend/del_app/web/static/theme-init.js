@@ -1,3 +1,5 @@
+/* Runs in <head> before first paint: theme (and table density) from
+   localStorage, else the OS colour-scheme preference. */
 (function () {
   try {
     var t = localStorage.getItem("del.theme");
@@ -6,11 +8,9 @@
     }
     document.documentElement.setAttribute("data-theme", t);
     document.querySelectorAll("meta[data-theme-color]").forEach(function (meta) {
-      meta.content = t === "light" ? "#f3f2ee" : "#1b2021";
+      meta.content = t === "light" ? "#edf1f4" : "#0f1f30";
     });
     var d = localStorage.getItem("del-density");
-    if (d === "compact" || d === "comfortable") {
-      document.documentElement.setAttribute("data-density", d);
-    }
+    if (d === "compact" || d === "comfortable") document.documentElement.setAttribute("data-density", d);
   } catch (e) {}
 })();

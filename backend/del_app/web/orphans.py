@@ -383,7 +383,7 @@ def classify_orphan_candidate(
                 "label": "Actionable",
                 "reason": "dangling (untagged) image unused by any container — reclaim candidate",
             }
-        from del_app.web.queries import _normalize_image_ref
+        from del_app.discovery.docker_src import _normalize_image_ref
 
         repo_tag = _normalize_image_ref(data.get("repo_tag") or display)
         project = (compose_images or {}).get(repo_tag)
@@ -461,10 +461,6 @@ def classify_orphan_candidate(
         "label": "Actionable",
         "reason": ORPHAN_REASONS.get(res_type, "no matching application found"),
     }
-
-
-def _is_actionable_orphan(classification: dict) -> bool:
-    return classification.get("bucket") == "actionable"
 
 
 def _listener_identity(data: dict) -> tuple | None:

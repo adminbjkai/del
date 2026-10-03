@@ -14,7 +14,7 @@
         Runtime state DEL last correlated:
         <ul>
           <li><strong>running / active</strong> — up now</li>
-          <li><strong>stopped / exited / inactive</strong> — installed but not running</li>
+          <li><strong>stopped / exited / inactive</strong> — installed but not running (or, for a manifest-only source clone, nothing to run)</li>
           <li><strong>paused / unknown</strong> — held or unclear</li>
           <li><strong>absent</strong> — only a manifest names it; none of its folders, units or containers exist on the host any more</li>
         </ul>
@@ -36,9 +36,9 @@
     <summary>View Apps</summary>
     <dl class="glossary-dl">
       <dt>Online</dt>
-      <dd>The domain is in an enabled Nginx site from the latest completed scan and returned an HTTPS response below 500. DNS, TLS, routing, and an answering upstream all worked.</dd>
-      <dt>Unavailable hidden</dt>
-      <dd>An enabled inventory domain failed its live HTTPS check or returned a 5xx response, so it is intentionally absent from the launchpad.</dd>
+      <dd>The domain is in an enabled Nginx site from the latest completed scan and returned an HTTPS response below 500. For a sign-in challenge (401/403), which nginx can answer by itself, the app's upstream port must also accept a connection.</dd>
+      <dt>Unavailable</dt>
+      <dd>An enabled inventory domain that failed its live HTTPS check, returned a 5xx response, or showed only a login page while nothing listened behind it. Listed under the cards with the reason; health is cached for five minutes.</dd>
       <dt>Categories</dt>
       <dd>DEL supplies an initial category. Customize it per card; your override is saved only in this browser.</dd>
       <dt>My order</dt>
@@ -52,7 +52,7 @@
       <dt>Owner app(s)</dt>
       <dd>App(s) DEL attributes this resource to. <span class="badge badge-grey">unassigned</span> = no association rows (no owner chips). Orphans is different: no <em>probable</em> (≥60) owner — a resource can still have possible/weak claims and appear there.</dd>
       <dt>Shared</dt>
-      <dd>Used by more than one app. Removal of one app must not delete shared resources.</dd>
+      <dd>Used by more than one app, or a system path such as <code>/var/run/docker.sock</code> or <code>/etc</code>. Removing one app never deletes a shared resource.</dd>
     </dl>
   </details>
 
@@ -160,29 +160,29 @@
   <details class="glossary-section" data-g="jobs job-detail general" open>
     <summary>Jobs</summary>
     <dl class="glossary-dl">
-      <dt>dry-run</dt>
+      <dt>dry run</dt>
       <dd>Simulates every step; changes nothing on the host.</dd>
       <dt>LIVE</dt>
-      <dd>Executes real helper operations (with safety gates).</dd>
+      <dd>Executes real helper operations (with safety gates). Striped like hazard tape wherever it appears.</dd>
       <dt>success / failed / refused</dt>
       <dd>Terminal outcomes. <em>refused</em> = a gate blocked the run.</dd>
     </dl>
   </details>
 
   <details class="glossary-section" data-g="apps app-detail resources resources-container resources-image resources-volume resources-network resources-directory resources-git_repo resources-nginx_site orphans jobs job-detail general" open>
-    <summary>Table filters</summary>
+    <summary>Tables</summary>
     <dl class="glossary-dl">
-      <dt>Quick filter</dt>
-      <dd>Top search box — matches any column. Shortcut: <kbd>/</kbd>.</dd>
+      <dt>Filter</dt>
+      <dd>The search box matches any column. Shortcut: <kbd>/</kbd>. Chips above a table toggle common values such as a status.</dd>
       <dt>Column filter</dt>
       <dd>
-        Excel-style: open the filter under a header to pick from a
-        <strong>checkbox list of existing values</strong> (select all / clear),
-        and/or use text operators (<strong>contains</strong>,
-        <strong>does not contain</strong>, equals, starts with, …).
+        The funnel beside a header: tick values from a list, or use operators
+        (contains, equals, greater than, is empty, …). <strong>Clear filters</strong> resets them all.
       </dd>
-      <dt>Clear all filters</dt>
-      <dd>Resets every column filter and the quick filter at once.</dd>
+      <dt>Sort, columns, width</dt>
+      <dd>Click a header to sort; drag its right edge to resize. <strong>Columns</strong> shows or hides columns and switches compact rows. Each table remembers this in your browser.</dd>
+      <dt>Rows and export</dt>
+      <dd>Click a row to open what it names. <strong>CSV</strong> exports every filtered row, not just this page.</dd>
     </dl>
   </details>
 
@@ -200,9 +200,9 @@
     </dl>
   </details>
 
-  <details class="glossary-section glossary-section-muted" data-g="apps app-detail resources resources-container resources-image resources-volume resources-network resources-directory resources-git_repo resources-nginx_site orphans jobs job-detail general" open>
+  <details class="glossary-section" data-g="apps app-detail resources resources-container resources-image resources-volume resources-network resources-directory resources-git_repo resources-nginx_site orphans jobs job-detail general" open>
     <summary>Times</summary>
-    <p class="muted text-sm mt-0">
+    <p class="glossary-dl muted">
       Eastern (New York), compact <code>MM-DD-YY H:MM AM/PM</code>
       (e.g. <code>05-13-26 7:31 AM</code>).
     </p>

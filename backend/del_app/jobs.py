@@ -251,7 +251,7 @@ def _record_backup(conn, job_id: int, operation: str, args: dict) -> None:
         logger.exception("job %s: failed to record backup row for %s", job_id, operation)
 
 
-def _restore_from_backups(conn, job_id: int, failed_step: dict) -> list[dict]:
+def _restore_from_backups(conn, job_id: int) -> list[dict]:
     """Restore this job's file backups, newest first. Returns a per-backup
     outcome list so the caller can audit what actually happened — the previous
     version swallowed every failure and reported success unconditionally."""
@@ -418,7 +418,7 @@ def _run_job(job_id: int, confirm_phrase: str | None) -> None:
             if not ok:
                 job_failed = True
                 if step["operation"] in _RESTORE_ON_FAILURE_OPS:
-                    outcomes = _restore_from_backups(conn, job_id, dict(step))
+                    outcomes = _restore_from_backups(conn, job_id)
                     auditlog.audit(
                         user_id, "job_restore_attempted", f"job:{job_id}",
                         {

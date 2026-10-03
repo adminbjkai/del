@@ -240,10 +240,3 @@ def prompt_library(scope: str, target: str | None = None) -> list[dict]:
             entry["text"] = entry["text"].replace("<type>", t)
         out.append(entry)
     return out
-
-
-def get_prompt(prompt_id: str) -> dict | None:
-    for p in PROMPT_LIBRARY:
-        if p["id"] == prompt_id:
-            return p
-    return None

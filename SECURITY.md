@@ -7,9 +7,10 @@
   path. Accounts are created only via `del-admin create-admin` /
   `change-password`; there are no default or hardcoded credentials.
 - The unauthenticated routes are exactly: `/login`, `/healthz`, `/favicon.ico`
-  (a 301 to the SVG), and `/static/*` (`app.css`, `app.js`, `theme-init.js`,
-  `favicon.svg`, `assistant.css`, `assistant.js`, and vendored AG Grid under
-  `/static/vendor/`). Every other route carries
+  (a 301 to the SVG), and `/static/*` — only the files directly in `static/`
+  (`app.css`, `app.js`, `assistant.js`, `removal.js`, `gallery.js`,
+  `theme-init.js`, `favicon.svg`) and `static/fonts/` (woff2 + licences); any
+  other path, including `static/icons/`, is a 404. Every other route carries
   `Depends(auth.require_user)` — including `/app-icon/{domain}` (the
   gallery's server-side favicon proxy) and `/palette.json` (the
   command-palette data feed). Unauthenticated requests to protected routes
@@ -198,7 +199,7 @@ The original full attacker/vector/mitigation table lives in `docs/server-audit.m
 
 | Vector | Mitigation |
 |---|---|
-| Internet → Nginx → auth bypass | TLS termination + security headers (incl. CSP and HSTS with `includeSubDomains`) at Nginx; `del-web` bound to 127.0.0.1 only; a session required on every route except `/login`, `/healthz`, `/favicon.ico` and `/static/*` (app + assistant assets and `/static/vendor/` AG Grid); rate-limited login |
+| Internet → Nginx → auth bypass | TLS termination + security headers (incl. CSP and HSTS with `includeSubDomains`) at Nginx; `del-web` bound to 127.0.0.1 only; a session required on every route except `/login`, `/healthz`, `/favicon.ico` and `/static/*` (first-party JS/CSS/fonts only); rate-limited login |
 | Compromised web session → arbitrary host command | Fixed 24-op helper allowlist with independent re-validation bounds the blast radius regardless of what `del-web` is tricked into requesting |
 | Compromised web tier → rewrite what root runs | Helper code and policy are deployed `root:root` outside `/apps/del`; `protected_units` refuses to stop `del-helper` itself |
 | Path traversal / symlink escape | `realpath` canonicalization + protected-root refusal + approved-root confinement on every path argument, including backup *reads* and restore *writes* |
@@ -228,12 +229,13 @@ The original full attacker/vector/mitigation table lives in `docs/server-audit.m
   frame-ancestors 'none'; base-uri 'self'; object-src 'none'
   ```
 
-  The one deliberate relaxation is `img-src data:`, for inline SVG sprites in
-  the vendored AG Grid stylesheet. Everything else is `'self'` — the client-side tables are a vanilla
-  JS/CSS table engine (AG Grid Community 32.3.3 vendored at `/static/vendor/`, vanilla fallback if the script fails to load, no CDN), there are
-  no CDN scripts or web fonts, and app icons are proxied through `/app-icon/`
-  rather than loaded from a third-party origin, so no external asset origin is
-  needed. `script-src 'self'` with no `'unsafe-inline'` is also why the pre-paint
+  The one relaxation is `img-src data:`: the app UI no longer uses `data:`
+  images, but the basic-auth inventory export served from the same vhost
+  (`/miscwork.html`) embeds them. Everything else is
+  `'self'` — the client-side tables are DEL's own vanilla JS table engine,
+  there is no third-party JavaScript at all, the fonts are self-hosted woff2
+  files, and app icons are proxied through `/app-icon/` rather than loaded from
+  a third-party origin, so no external asset origin is needed. `script-src 'self'` with no `'unsafe-inline'` is also why the pre-paint
   dark/light theme switch is its own external file, `/static/theme-init.js`,
   rather than an inline `<script>` in `base.html`.
   Note that nginx's `add_header` is not inherited into a `location` block that

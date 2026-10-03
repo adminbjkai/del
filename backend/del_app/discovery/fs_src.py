@@ -8,6 +8,7 @@ from __future__ import annotations
 import logging
 import os
 import subprocess
+from concurrent.futures import ThreadPoolExecutor
 from datetime import datetime, timezone
 
 from del_app.config import get_settings
@@ -134,6 +135,28 @@ def _top_level_dirs(root: str) -> list[str]:
         return []
 
 
+# du and git dominate a scan (~180 directories, ~470 subprocesses). They are
+# independent per directory, so a few run at once; results keep their order.
+_WORKERS = 4
+
+
+def _probe_dir(path: str) -> tuple:
+    """(size_kb, (has_env, names, count), git_info, compose_files) for one dir."""
+    size_kb = _du_size_kb(path)
+    env = _env_var_names(path)
+    git_info = _git_info(path)
+    compose_files = []
+    try:
+        for fn in os.listdir(path):
+            if fn in COMPOSE_FILENAMES:
+                compose_files.append(os.path.join(path, fn))
+    except PermissionError:
+        logger.warning("fs_src: no permission to list %s, skipping", path)
+    except Exception:
+        logger.exception("fs_src: failed to list top-level files of %s", path)
+    return size_kb, env, git_info, compose_files
+
+
 def collect() -> list[Resource]:
     """Collect top-level project directories under scan_roots: size (fast du
     estimate), compose-file presence, .env var NAMES (never values), and git
@@ -147,9 +170,9 @@ def collect() -> list[Resource]:
         logger.exception("fs_src: could not load settings, aborting")
         return resources
 
+    paths: list[tuple[str, str]] = []
     seen_paths: set[str] = set()
     artifact_dir_names = {"__MACOSX"}
-
     for root in scan_roots:
         if not os.path.isdir(root):
             continue
@@ -158,27 +181,19 @@ def collect() -> list[Resource]:
                 logger.info("fs_src: skipping archive metadata directory %s/%s", root, name)
                 continue
             path = os.path.join(root, name)
-            if path in seen_paths:
-                continue
-            seen_paths.add(path)
+            if path not in seen_paths:
+                seen_paths.add(path)
+                paths.append((name, path))
 
+    # mtime/ctime change whenever an entry is added or removed, so they say
+    # "last changed", never "installed". Birth time comes from statx (see
+    # file_times) and is the real creation time; one batched call for all.
+    births = stat_times([path for _, path in paths])
+    with ThreadPoolExecutor(max_workers=_WORKERS) as pool:
+        futures = [pool.submit(_probe_dir, path) for _, path in paths]
+        for (name, path), future in zip(paths, futures):
             try:
-                size_kb = _du_size_kb(path)
-                has_env, env_var_names, env_var_count = _env_var_names(path)
-                git_info = _git_info(path)
-                compose_files = []
-                try:
-                    for fn in os.listdir(path):
-                        if fn in COMPOSE_FILENAMES:
-                            compose_files.append(os.path.join(path, fn))
-                except PermissionError:
-                    logger.warning("fs_src: no permission to list %s, skipping", path)
-                except Exception:
-                    logger.exception("fs_src: failed to list top-level files of %s", path)
-
-                # mtime/ctime change whenever an entry is added or removed, so
-                # they say "last changed", never "installed". Birth time comes
-                # from statx (see file_times) and is the real creation time.
+                size_kb, (has_env, env_var_names, env_var_count), git_info, compose_files = future.result()
                 mtime_iso = ctime_iso = None
                 try:
                     st = os.stat(path)
@@ -186,7 +201,6 @@ def collect() -> list[Resource]:
                     ctime_iso = _epoch_to_iso(st.st_ctime)
                 except OSError:
                     pass
-                birthtime_iso = (stat_times([path]).get(path) or {}).get("birthtime")
 
                 data = {
                     "size_kb": size_kb,
@@ -198,7 +212,7 @@ def collect() -> list[Resource]:
                     "git": git_info,
                     "mtime": mtime_iso,
                     "ctime": ctime_iso,
-                    "birthtime": birthtime_iso,
+                    "birthtime": (births.get(path) or {}).get("birthtime"),
                 }
 
                 resources.append(

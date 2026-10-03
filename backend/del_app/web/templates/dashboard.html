@@ -3,158 +3,178 @@
 {% block title %}Dashboard{% endblock %}
 {% block content %}
 <div class="page-header">
-  <h1>Dashboard</h1>
+  <h1>{{ host_name }}</h1>
   <div class="page-actions">
-    <form method="post" action="/scan" class="scan-run-form" data-submit-guard="Starting scan…">
-      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
-      <button type="submit" class="btn btn-primary" id="run-scan-btn">Run scan now</button>
-    </form>
+    <a class="btn btn-sm btn-ghost" href="/apps">All applications</a>
+    <a class="btn btn-sm btn-ghost" href="/orphans">Review orphans</a>
   </div>
 </div>
+<p class="page-lede">Every application on this host, from the latest completed scan. Open a lot to see what it owns and plan its removal.</p>
 
-<div class="meta-row" id="scan-strip">
-  {% if last_scan %}
-  <span class="meta"><span class="meta-k">Last scan</span> <span class="meta-v badge status-{{ last_scan.get('status') }}">#{{ last_scan.get('id') }} {{ last_scan.get('status') }}</span></span>
-  {% if last_scan_age %}<span class="meta muted">{{ last_scan_age }}</span>{% endif %}
-  {% if last_scan_duration and last_scan_duration != '—' %}<span class="meta muted">took {{ last_scan_duration }}</span>{% endif %}
-  <span class="meta muted">finished <span class="dt">{{ format_dt(last_scan.get('finished') or last_scan.get('started')) }}</span></span>
-  <span class="scan-strip-live" id="scan-strip-live" hidden>
-    <span class="scan-strip-bar" aria-hidden="true"></span>
-    <span id="scan-strip-elapsed">scanning…</span>
-  </span>
+{% set lots_total = stats.get('apps', 0) %}
+<section class="siteplan" id="siteplan" aria-labelledby="siteplan-title">
+  <div class="siteplan-head">
+    <h2 id="siteplan-title">Site plan</h2>
+    <ul class="siteplan-legend" aria-label="Applications by status">
+      {% for s in ['running', 'stopped', 'absent', 'unknown'] %}{% if status_counts.get(s) %}
+      <li><span class="dot dot-{{ {'running': 'ok', 'stopped': 'warn'}.get(s, 'idle') }}" aria-hidden="true"></span><b>{{ status_counts.get(s) }}</b> {{ s }}</li>
+      {% endif %}{% endfor %}
+      {% if site_plan.kind | map(attribute='lots') | sum(start=[]) | selectattr('warn_count') | list %}<li><span class="lot-flag" aria-hidden="true"></span> weak claims to review</li>{% endif %}
+    </ul>
+    <div class="btn-group siteplan-switch" role="group" aria-label="Group lots by">
+      <button type="button" class="btn btn-sm" data-siteplan-group="kind" aria-pressed="true">By kind</button>
+      <button type="button" class="btn btn-sm" data-siteplan-group="status" aria-pressed="false">By status</button>
+    </div>
+  </div>
+  {% if lots_total %}
+  {% for mode in ['kind', 'status'] %}
+  <div data-siteplan-view="{{ mode }}"{% if mode != 'kind' %} hidden{% endif %}>
+    {% for g in site_plan[mode] %}
+    <div class="siteplan-group">
+      <div class="siteplan-group-label"><b>{{ g.name | replace("_", " ") }}</b>{{ g.lots | length }} app{{ 's' if g.lots | length != 1 else '' }}</div>
+      <ul class="lots">
+        {% for lot in g.lots %}
+        <li><a class="lot is-{{ lot.status }}{% if lot.warn_count %} has-warning{% endif %}{% if lot.protected %} is-protected{% endif %}"
+               href="/apps/{{ lot.slug }}"
+               title="{{ lot.name }}: {{ lot.status }}, {{ lot.kind }}, {{ lot.res_count }} resource{{ 's' if lot.res_count != 1 else '' }}{% if lot.warn_count %}, {{ lot.warn_count }} weak claim{{ 's' if lot.warn_count != 1 else '' }}{% endif %}{% if lot.protected %}, protected{% endif %}">
+          <span class="lot-name">{{ lot.name }}</span><span class="lot-count">{{ lot.res_count }}</span>
+        </a></li>
+        {% endfor %}
+      </ul>
+    </div>
+    {% endfor %}
+  </div>
+  {% endfor %}
   {% else %}
-  <span class="meta muted">No scans yet — run one above.</span>
+  {{ m.empty_state('No inventory yet. Run a scan from the scan stamp in the sidebar.') }}
   {% endif %}
-</div>
+</section>
 
-<p class="page-lede">Host inventory at a glance. Work the loop below; jump from stats when something is already on fire.</p>
-<details class="explain">
-  <summary>How rows relate</summary>
-  <div class="explain-body cluster">
-    <span class="chip" title="More than one current application owns it">shared = 2+ current apps</span>
-    <span class="chip" title="Confidence ≥ 60 counts as an owner">probable = strong owner</span>
-    <span class="chip" title="Confidence 30–59; review, do not treat as owner">possible = weak</span>
-    <span class="chip" title="No probable (≥60) current owner; review-only, no delete. Unassigned chips are no association rows.">no probable owner → Orphans</span>
-    <span class="chip" title="Ask cannot plan or delete">Ask = read-only</span>
-  </div>
-</details>
-
-<div class="stat-grid">
-  <a class="stat-card" href="/apps">
-    <div class="stat-value">{{ stats.get('apps', 0) }}</div>
-    <div class="stat-label">Applications</div>
-    <div class="stat-hint">tracked in the latest scan</div>
+<div class="figures" role="list">
+  <a class="figure" role="listitem" href="/apps">
+    <span class="figure-value">{{ stats.get('apps', 0) }}</span>
+    <span class="figure-label">Applications</span>
+    <span class="figure-hint">in the latest scan</span>
   </a>
-  <a class="stat-card" href="/jobs">
-    <div class="stat-value">{{ stats.get('running', 0) }}</div>
-    <div class="stat-label">Running jobs</div>
-    <div class="stat-hint">in progress right now</div>
+  <a class="figure{% if stats.get('orphan_candidates', 0) %} is-warn{% endif %}" role="listitem" href="/orphans">
+    <span class="figure-value">{{ stats.get('orphan_candidates', 0) }}</span>
+    <span class="figure-label">Orphan rows</span>
+    <span class="figure-hint">no probable owner; review</span>
   </a>
-  <a class="stat-card {{ 'is-warn' if stats.get('orphan_candidates', 0) > 0 else '' }}" href="/orphans">
-    <div class="stat-value">{{ stats.get('orphan_candidates', 0) }}</div>
-    <div class="stat-label">Orphan candidate rows</div>
-    <div class="stat-hint">resource rows with no probable owner — review</div>
+  <a class="figure" role="listitem" href="/resources/{{ stats.get('shared_top_type', 'volume') }}?filter=shared">
+    <span class="figure-value">{{ stats.get('shared_resources', 0) }}</span>
+    <span class="figure-label">Shared</span>
+    <span class="figure-hint">used by 2+ apps or a system path; always kept</span>
   </a>
-  <a class="stat-card" href="/resources/{{ stats.get('shared_top_type', 'volume') }}?filter=shared">
-    <div class="stat-value">{{ stats.get('shared_resources', 0) }}</div>
-    <div class="stat-label">Shared resources</div>
-    <div class="stat-hint">owned by 2+ apps — kept on removal</div>
+  <a class="figure{% if stats.get('uncertain_mappings', 0) %} is-warn{% endif %}" role="listitem" href="/apps">
+    <span class="figure-value">{{ stats.get('uncertain_mappings', 0) }}</span>
+    <span class="figure-label">Uncertain</span>
+    <span class="figure-hint">probable (60–79) mappings, not yet safe</span>
   </a>
-  <a class="stat-card {{ 'is-warn' if stats.get('uncertain_mappings', 0) > 0 else '' }}" href="/apps">
-    <div class="stat-value">{{ stats.get('uncertain_mappings', 0) }}</div>
-    <div class="stat-label">Uncertain mappings</div>
-    <div class="stat-hint">probable (60–79), not yet safe — review before removal</div>
+  {% set measuring = stats.get('reclaimable_bytes') is none %}
+  {% set docker_down = stats.get('docker_df_state') == 'unavailable' %}
+  <a class="figure" role="listitem" href="/resources/directory"
+     title="Project directories {{ human_size(stats.get('directory_bytes', 0)) }}{% if not measuring %}, Docker volumes {{ human_size(stats.get('volume_bytes')) }}{% endif %}">
+    <span class="figure-value">{{ human_size(stats.get('directory_bytes', 0) if measuring else stats.get('disk_usage_bytes')) }}</span>
+    <span class="figure-label">Disk usage</span>
+    <span class="figure-hint">{% if not measuring %}project directories + Docker volumes{% elif docker_down %}project directories only; Docker did not answer{% else %}project directories; measuring Docker volumes{% endif %}</span>
   </a>
-  <a class="stat-card" href="/resources/directory">
-    <div class="stat-value">{{ human_size(stats.get('disk_usage_bytes', 0)) }}</div>
-    <div class="stat-label">Disk usage</div>
-    <div class="stat-hint">project directories + Docker volumes</div>
+  <a class="figure" role="listitem" href="/resources/image?filter=dangling">
+    <span class="figure-value">{{ '—' if measuring else human_size(stats.get('reclaimable_bytes')) }}</span>
+    <span class="figure-label">Reclaimable</span>
+    <span class="figure-hint">{% if not measuring %}Docker: images, containers, volumes, build cache{% elif docker_down %}Docker did not answer; retrying{% else %}measuring; reload in a moment{% endif %}</span>
   </a>
-  <a class="stat-card" href="/resources/image?filter=dangling">
-    <div class="stat-value">{{ human_size(stats.get('reclaimable_bytes', 0)) }}</div>
-    <div class="stat-label">Reclaimable</div>
-    <div class="stat-hint">Docker-reported: images, containers, volumes, build cache</div>
+  <a class="figure" role="listitem" href="/jobs">
+    <span class="figure-value">{{ stats.get('running', 0) }}</span>
+    <span class="figure-label">Jobs running</span>
+    <span class="figure-hint">removals in progress</span>
   </a>
 </div>
 
-<details class="section" id="attention-section" data-remember open>
-  <summary><h2>Needs attention</h2> <span class="count-pill">{{ attention | length if attention is defined else 0 }}</span></summary>
-  <div class="section-body">
-    {% if attention is defined and attention %}
-    <ul class="attention-list">
-      {% for a in attention %}
-      <li class="attention-item">
-        <a href="{{ a.url }}">{{ a.name }}</a>
-        <span class="attention-reason">{{ a.reason }}</span>
+<div class="dash-cols">
+  <div class="dash-stack">
+  <section class="panel" aria-labelledby="changes-title">
+    <div class="panel-head">
+      <h2 id="changes-title">Since the previous scan</h2>
+      {% if changes %}<span class="faint text-sm">scan #{{ changes.prev }} to #{{ changes.latest }}</span>{% endif %}
+    </div>
+    {% if not changes %}
+      <p class="faint mb-0">Two completed scans are needed to compare.</p>
+    {% elif changes.quiet %}
+      <p class="faint mb-0">Nothing changed: same applications, statuses and resources.</p>
+    {% else %}
+    <ul class="change-list">
+      {% if changes.new_apps %}
+      <li><span class="change-kind">New apps</span>{% for a in changes.new_apps %}<a class="chip owner-chip" href="/apps/{{ a.slug }}">{{ a.name }}</a>{% endfor %}</li>
+      {% endif %}
+      {% if changes.gone_apps %}
+      <li><span class="change-kind">Gone</span>{% for a in changes.gone_apps %}<a class="chip" href="/apps/{{ a.slug }}">{{ a.name }}</a>{% endfor %}</li>
+      {% endif %}
+      {% for c in changes.status_changes or [] %}
+      <li><span class="change-kind">Status</span><a href="/apps/{{ c.slug }}">{{ c.name }}</a> {{ m.state(c.before) }} <span class="faint">to</span> {{ m.state(c.after) }}</li>
+      {% endfor %}
+      {% for r in changes.resources %}
+      <li><span class="change-kind">{{ r.label }}</span>
+        {% if r.added %}<a class="delta-add" href="/resources/{{ r.type }}" title="First seen in scan #{{ changes.latest }}">+{{ r.added }}</a>{% endif %}
+        {% if r.removed %}<span class="delta-del" title="Present in scan #{{ changes.prev }}, gone now">−{{ r.removed }}</span>{% endif %}
       </li>
       {% endfor %}
     </ul>
-    {% else %}
-    {{ m.empty_state('Nothing needs attention right now.') }}
+    {% if changes.status_changes is none %}<p class="faint text-xs mt-2 mb-0">Status changes appear once two scans have recorded app status.</p>{% endif %}
     {% endif %}
-  </div>
-</details>
-
-<details class="section" id="how-to-use" data-remember open>
-  <summary><h2>How to use DEL</h2> <span class="section-hint">the operator loop</span></summary>
-  <div class="section-body">
-    <ol class="sop-list">
-      <li>Press <strong>Run scan now</strong> above. Wait until the scan strip shows <span class="badge status-done">done</span>. Scan config lives under <a href="/settings#scan-now">Settings → Scanning</a>.</li>
-      <li>Open <a href="/apps">Applications</a>. Review warnings and possible (weak) mappings before you plan. Protected apps have no plan.</li>
-      <li>Open <a href="/resources/container">Resources → Containers</a>, then the other tabs. Owner chips = current apps; shared = more than one current app (do not delete with a single app).</li>
-      <li>Open <a href="/orphans">Orphans</a> (actionable view). Review-only — there is no delete on that page. Read Why listed; Ask the row if unsure.</li>
-      <li>Use the right-rail <strong>Ask</strong> tab (or an Ask chip). Read-only; it cannot plan or remove.</li>
-      <li>On the app page, <strong>Plan removal</strong> — not "Remove app now (skips review)" unless you mean it. Dry-run first on the plan, then LIVE. Track it on <a href="/jobs">Jobs</a>.</li>
-    </ol>
-    <div class="cluster sop-actions">
-      <div class="btn-group" role="group" aria-label="Next screens">
-        <a class="btn btn-sm" href="/apps">Applications</a>
-        <a class="btn btn-sm" href="/resources/container">Resources</a>
-        <a class="btn btn-sm" href="/orphans">Orphans</a>
-        <a class="btn btn-sm" href="/jobs">Jobs</a>
-      </div>
-    </div>
-  </div>
-</details>
-
-<div class="grid-2">
-  <section class="panel">
-    <h2>Recent scans</h2>
-    <table class="table" data-enhanced data-empty="No scans yet." data-page-size="25">
-      <caption class="sr-only">The most recent inventory scans and their outcome.</caption>
-      <thead><tr><th scope="col">ID</th><th scope="col">Started</th><th scope="col">Finished</th><th scope="col">Status</th></tr></thead>
-      <tbody>
-        {% for s in recent_scans %}
-        <tr>
-          <td>{{ s.get('id') }}</td>
-          <td data-sort-value="{{ iso_sort(s.get('started')) }}"><span class="dt">{{ format_dt(s.get('started')) }}</span></td>
-          <td data-sort-value="{{ iso_sort(s.get('finished')) }}"><span class="dt">{{ format_dt(s.get('finished')) }}</span></td>
-          <td data-filter-value="{{ s.get('status') }}"><span class="badge status-{{ s.get('status') }}">{{ s.get('status') }}</span></td>
-        </tr>
-        {% endfor %}
-      </tbody>
-    </table>
-    <div class="cluster mt-3">
-      <a class="btn btn-sm" href="/settings#scan-now">Scan settings</a>
-    </div>
   </section>
 
-  <section class="panel">
-    <h2>Recent jobs</h2>
-    <table class="table" data-enhanced data-empty="No jobs yet." data-page-size="25">
+  <section class="panel" aria-labelledby="jobs-title">
+    <div class="panel-head">
+      <h2 id="jobs-title">Recent jobs</h2>
+      <span class="panel-actions"><a class="btn btn-sm btn-ghost" href="/jobs">All jobs</a></span>
+    </div>
+    <table class="table" data-empty="No jobs yet." id="dashboard-jobs">
       <caption class="sr-only">The most recent removal jobs, their mode and status.</caption>
-      <thead><tr><th scope="col">ID</th><th scope="col">Mode</th><th scope="col">Status</th><th scope="col">Started</th></tr></thead>
+      <thead><tr><th scope="col">Job</th><th scope="col">App</th><th scope="col">Mode</th><th scope="col">Status</th><th scope="col">Started</th></tr></thead>
       <tbody>
         {% for j in recent_jobs %}
         <tr>
-          <td><a href="/jobs/{{ j.get('id') }}">{{ j.get('id') }}</a></td>
-          <td data-filter-value="{{ j.get('mode') }}"><span class="badge {{ 'badge-danger' if j.get('mode') == 'live' else 'badge-grey' }}">{{ 'LIVE' if j.get('mode') == 'live' else 'dry-run' }}</span></td>
-          <td data-filter-value="{{ j.get('status') }}"><span class="badge status-{{ j.get('status') }}">{{ j.get('status') }}</span></td>
+          <td><a href="/jobs/{{ j.get('id') }}">#{{ j.get('id') }}</a></td>
+          <td>{{ j.get('app_name') or j.get('app_slug') or '—' }}</td>
+          <td data-filter-value="{{ j.get('mode') }}">{{ m.mode_tag(j.get('mode')) }}</td>
+          <td data-filter-value="{{ j.get('status') }}">{{ m.state(j.get('status')) }}</td>
           <td data-sort-value="{{ iso_sort(j.get('started')) }}"><span class="dt">{{ format_dt(j.get('started')) }}</span></td>
         </tr>
         {% endfor %}
       </tbody>
     </table>
   </section>
+  </div>
+  <div class="dash-stack">
+  <section class="panel" aria-labelledby="attention-title">
+    <div class="panel-head">
+      <h2 id="attention-title">Needs attention <span class="count-pill">{{ attention | length }}</span></h2>
+    </div>
+    {% if attention %}
+    <ul class="attention-list">
+      {% for a in attention %}
+      <li class="attention-item"><a href="{{ a.url }}#tab-readiness">{{ a.name }}</a><span class="attention-reason">{{ a.reason }}</span></li>
+      {% endfor %}
+    </ul>
+    {% else %}
+    <p class="faint mb-0">Nothing needs attention: no uncertain mappings.</p>
+    {% endif %}
+  </section>
+
+  <details class="section" id="how-to-use" data-remember>
+    <summary><h2>The operator loop</h2><span class="section-hint">how a removal goes, start to finish</span></summary>
+    <div class="section-body">
+      <ol class="sop-list">
+        <li>Run a scan from the scan stamp at the bottom of the sidebar (or <kbd>Ctrl</kbd> <kbd>K</kbd>, Run a new scan). The stamp shows when it finished.</li>
+        <li>Open <a href="/apps">Applications</a> and review warnings and possible (weak) mappings before you plan. Protected apps have no plan.</li>
+        <li>Check <a href="/resources/container">Resources</a>: owner chips are current apps; shared means more than one app or a system path, and it is never deleted with a single app.</li>
+        <li>Review <a href="/orphans">Orphans</a>. Read why each row is listed; nothing is deleted from that page.</li>
+        <li>Ask the assistant from the right rail when unsure. It is read-only.</li>
+        <li>On the app page, <strong>Plan removal</strong>, run it as a dry run, then live. Follow it on <a href="/jobs">Jobs</a>. <em>Remove app now</em> skips the review; use it only when you mean it.</li>
+      </ol>
+    </div>
+  </details>
+  </div>
 </div>
 {% endblock %}

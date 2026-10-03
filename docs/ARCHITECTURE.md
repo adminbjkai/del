@@ -10,7 +10,7 @@ served at https://del.bjk.ai behind Nginx, bound only to localhost.
 |---|---|---|
 | Language | Python 3.10 (system python3, venv) | Already on host; excellent for sysadmin tooling; typed with dataclasses/pydantic |
 | Web framework | FastAPI + Uvicorn | Typed request/response models, async, small footprint |
-| Templates/UI | Jinja2 server-rendered + vanilla JS + `app.css` plus assistant and vendored AG Grid styles | No Node toolchain; fully self-contained (CSP `script-src 'self'`, no CDN); theme follows `localStorage`, else OS `prefers-color-scheme`, else dark, with a header toggle (`data-theme`, persisted in `localStorage`) |
+| Templates/UI | Jinja2 server-rendered + vanilla JS + one `app.css`, self-hosted fonts | No Node toolchain, no third-party JS; fully self-contained (CSP `script-src 'self'`, no CDN); content-hashed asset URLs cached as immutable; theme follows `localStorage`, else OS `prefers-color-scheme`, else dark (`docs/UI.md`) |
 | Database | SQLite (WAL mode) via sqlite3 + migration runner | Single admin user; zero-ops; file lives in /apps/del/database/del.db |
 | Privileged layer | del-helper: separate root daemon on a unix socket | Strict allowlist; web app never runs shell as root |
 | Deployment | Host systemd units (del-web.service, del-helper.service) | See below |
@@ -157,10 +157,11 @@ being uncompromised.
 │   ├── jobs.py            staged job engine (backup→quiesce→remove_runtime→remove_host→remove_files→validate), step records, backup recording, in-job restore
 │   ├── helper_client.py   unix-socket client to del-helper
 │   ├── auditlog.py        append-only audit records
-│   └── web/               routes.py (thin aggregator) + render.py, formatting.py,
-│                          queries.py, orphans.py, gallery.py, auth_routes.py,
-│                          dashboard.py, apps.py, plans_jobs.py, resources.py,
-│                          settings.py, static_routes.py + Jinja2 templates + static/
+│   └── web/               routes.py (router aggregator) + render.py, formatting.py,
+│                          queries.py, orphans.py, gallery.py, docker_df.py,
+│                          auth_routes.py, dashboard.py, apps.py, plans_jobs.py,
+│                          resources.py, assistant.py, settings.py,
+│                          static_routes.py + Jinja2 templates + static/
 ├── helper/
 │   ├── del_helper.py      root daemon (stdlib only) — source; deployed to /usr/local/lib/del-helper/
 │   └── validation.py      pure argument/path validation, imported by the daemon
@@ -182,60 +183,68 @@ being uncompromised.
 
 ### Frontend (`web/templates`, `web/static`)
 
-Server-rendered Jinja2 (`base.html` shell + one template per route, `_macros.html`
-for shared markup like the confidence meter, `_glossary.html` for the glossary rail
-and its mobile sheet, `_assistant_dock.html` for the Ask tab) plus static assets.
-`base.html` (authenticated pages) loads `app.css`, vendored AG Grid Community 32.3.3
-(`ag-grid.css`, `ag-theme-quartz.css`, `ag-grid-community.min.js` at `/static/vendor/`),
-`assistant.css` / `assistant.js`, `theme-init.js`, `app.js`, and a CSRF meta tag
-(`<meta name="csrf-token">`). `login.html` does **not** load AG Grid or assistant
-assets. All of those files are still served unauthenticated under `/static/*`
-(CSP `script-src 'self'`, no `'unsafe-inline'`, no CDN).
-`theme-init.js` (~9 lines, in `<head>` before first paint) reads
-`localStorage['del.theme']`, falls back to `prefers-color-scheme`, and sets
-`data-theme` on `<html>` so there is no flash of the wrong theme.
-The Assistant is a **read-only** inventory chat (`docs/ASSISTANT.md`): Ollama Cloud
-`glm-5.3-flash`, no helper or planner access, suggested prompts per scope
-(general / app / orphans / resource type / resource). It lives on `/assistant`
-and as the Ask tab of the Help|Ask right rail on every other authenticated page.
+Server-rendered Jinja2: `base.html` is the shell, one template per route,
+`_macros.html` for shared markup (confidence meter, status badge, dry-run/LIVE
+tag, copyable ids), `_icons.html` for inline SVG icons, `_glossary.html` for the
+Help rail and its mobile sheet, `_assistant_dock.html` for the Ask tab. The
+visual language, component classes, table contract, shortcuts and stored
+preferences are documented in `docs/UI.md`.
 
-`app.js` is one file exposing a `window.DEL` namespace plus several page-scoped
-blocks, all guarded by `if (element) { … }` so a script this size can run
-unconditionally on every page:
+`render.py` owns the shared template context: the user, CSRF token, the
+assistant status, the glossary context for the page (`glossary_ctx`), and the
+sidebar **scan stamp** (`_scan_block`: whether discovery is running, plus the
+latest completed scan's id, age and duration; it never fails a render).
 
-- `DEL.toast(message, kind)` — aria-live toast notifications (copy-to-clipboard,
-  job completion).
-- `DEL.theme` (`get`/`set`/`toggle`) — the dark/light switch wired to the header
-  button; `base.html`/`theme-init.js` already set `data-theme` before this runs, so
-  this only handles the click and persists the choice back to `localStorage`.
-- `DEL.assistant` (`assistant.js` on all authenticated pages) — scope chips, suggested
-  prompts, NDJSON streaming ask, conversation list; binds `#assistant-page` or
-  `#assistant-dock`. Cannot mutate inventory.
-- The table engine (`enhanceTable` on every `table[data-enhanced]`) — AG Grid
-  Community 32.3.3 vendored at `/static/vendor/` (CSP `self`, no CDN) when
-  `window.agGrid` loads, with a `.table-toolbar` (quick filter, Clear all filters,
-  status); otherwise `enhanceTableVanilla` (same toolbar plus density and, ≤900px,
-  "Show all columns"; sort, Excel-style filter popover, `/` focus, CSV export).
-- `DEL.tabs.init(root)` — an accessible tablist (roving tabindex, arrow keys,
-  `aria-selected`) applied to every `.tabs` block, used by the application detail
-  page's Overview/Docker/systemd/Nginx/Scheduled/Processes/Files/Shared/Readiness
-  tabs; a tab whose `id` matches `location.hash` opens on load, and selecting a tab
-  updates the hash for deep-linking.
-- `DEL.palette` (`open`/`close`) — the `Ctrl`/`Cmd`+`K` command palette
-  (`<dialog id="cmdk">`), fuzzy-filtering two groups: **Pages** (read from the
-  sidebar's `.nav-links` already in the DOM) and **Apps** (fetched once from
-  `GET /palette.json`, best-effort — the dialog still works pages-only if that
-  fetch fails).
-- The job-detail poller (`GET /jobs/{id}/status`) — updates the progress bar,
-  current-step line, and per-stage step tables; polls every 2s, backing off
-  ×1.5 up to a 10s ceiling, pauses entirely while the tab is hidden (resuming
-  immediately on visibility), and stops once the job reaches a terminal status.
-- The dashboard and Settings scan-status poller (`GET /scan/status`) — shows an elapsed-time
-  strip and disables "Run scan now" while a scan is running, then reloads the
-  page once when it flips back to idle.
-- A shared focus-trap helper (`makeFocusTrap`) used by the four modal-ish
-  surfaces: the mobile nav drawer, the glossary bottom sheet, a column filter
-  popover, and the command palette.
+Static files and who loads them:
+
+| File | Loaded by |
+|---|---|
+| `app.css`, `theme-init.js`, `favicon.svg`, `fonts/*.woff2` | every page, including `login.html` |
+| `app.js`, `assistant.js` | every authenticated page (`base.html`) |
+| `removal.js` | `plan.html`, `job_detail.html` |
+| `gallery.js` | `view_apps.html` |
+
+All are served unauthenticated by `static_routes.py` (only `static/` itself
+and `static/fonts/` are public; `static/icons/` stays private for
+`/app-icon/{domain}`). Templates link them with `asset('name')`, which appends
+a short content hash; a request with the current hash gets
+`Cache-Control: public, max-age=31536000, immutable`, so repeat page views
+fetch only the HTML. CSP is `script-src 'self'; style-src 'self'; font-src
+'self'`, no `'unsafe-inline'`, no CDN, no third-party code.
+
+`app.js` exposes `window.DEL` (`toast`, `theme`, `util`, `sortValue`,
+`runScan`, `palette`; `assistant.js` adds `DEL.assistant`) and runs page
+blocks guarded by element checks:
+
+- The table engine (`enhanceTable`, every `table.table` except `.table-plain`
+  / `.job-steps`): search, sort on parsed values, per-column filter popovers,
+  quick chips, column chooser and density, pagination, column resize, CSV
+  export, clickable rows; per-table state in `localStorage["del.table.<id>"]`.
+- The scan stamp: run buttons post `/scan` with `Accept: application/json`
+  (the route answers JSON, or redirects for a plain form post); while a scan
+  runs it polls `GET /scan/status` every 2.5 s and reloads the page once the
+  new inventory is published.
+- Shell: sidebar collapse and resize, rail tabs (Help glossary filtered by
+  `<body data-glossary>`, Ask dock), mobile drawer and bottom sheets, a shared
+  focus trap, toasts, flash banners, `data-confirm`, submit guards.
+- ARIA tabs with `#tab-id` deep links; remembered `details.section` state;
+  the dashboard site plan grouping.
+- The command palette (`<dialog id="cmdk">`, Ctrl/Cmd+K): pages from the
+  sidebar, applications from `GET /palette.json` (fetched once, best-effort),
+  their domains as "Open site", and actions; plus `g`-key navigation, `/`, `t`
+  and `?` shortcuts.
+
+`removal.js` holds the plan page's complete-removal preset and the execute gate
+(typed confirmation for volume deletion, live-mode styling), and the job poller
+(`GET /jobs/{id}/status` every 2 s backing off to 10 s, paused while the tab is
+hidden, not started for a job that is already finished). `gallery.js` holds
+the View Apps launchpad (search operators, categories, favourites, hidden apps,
+layout, drag order in `localStorage["del.appGallery.v1"]`).
+
+The Assistant is a **read-only** inventory chat (`docs/ASSISTANT.md`): Ollama
+Cloud model, no helper or planner access, suggested prompts per scope (general
+/ app / orphans / resource type / resource). It lives on `/assistant` and as the
+Ask tab of the right rail on every other authenticated page.
 
 ## Data model (SQLite)
 
@@ -305,13 +314,42 @@ exposed to templates as the globals `format_dt`, `relative_dt` and
 One exception, outside the UI: `del-admin backup-db` names its snapshot with
 `datetime.now()` — host local time, not UTC.
 
+### Dashboard (`/`)
+
+`dashboard.py` renders one read transaction over the latest completed scan:
+
+- **Site plan**: every current application as a tile ("lot") showing its
+  resource count, grouped by kind (compose, container, systemd, manifest, …)
+  or by status (running, stopped, absent, unknown); a corner flag marks apps
+  holding weak claims to review (ownership "possible" or confidence below 60),
+  and protected apps are marked.
+- **Figures**: applications, orphan rows, shared resources (used by 2+ current
+  apps or a system path), uncertain mappings, disk usage (project directories
+  plus Docker volumes) and Docker's reclaimable space, running jobs. The two
+  Docker numbers come from `docker_df.py`: `docker system df` runs on a
+  background thread and is cached for five minutes (stale-while-revalidate);
+  until the first measurement finishes they show "measuring" rather than 0,
+  and if docker does not answer they keep the last real figures (or say
+  "Docker did not answer") and retry after a minute.
+- **Since the previous scan**: apps that appeared or disappeared, resources
+  added/removed per type, and app status changes (from the `app_status` map
+  each scan stores in `scans.stats_json`).
+- **Needs attention** (apps with uncertain mappings, linking to their
+  Readiness tab) and **Recent jobs**.
+
 ### Live app gallery (`/view-apps`)
 
 `GET /view-apps` is an authenticated, read-only projection of the inventory. A
 domain is eligible only when it belongs to an application and an **enabled**
 Nginx resource from the latest completed scan. DEL verifies each candidate over
-HTTPS (DNS, certificate, proxy route, and answering upstream); responses below
-500 are shown, while connection/TLS failures and 5xx responses are omitted.
+HTTPS (DNS, certificate, proxy route, and answering upstream). A domain becomes
+a launch card when it answers below 500, **except** a 401/403 auth wall whose
+site proxies to loopback ports where nothing accepts a TCP connection: nginx
+answers basic-auth challenges itself, so that response proves only nginx is up.
+Everything that fails — connection or TLS errors, 5xx, or an auth wall in
+front of a dead upstream — is listed in the page's **Unavailable** table with
+the reason ("HTTP 502", the error, or "login page only: nothing listens on
+port N") and the app's status, instead of silently disappearing.
 Health results are cached in-process for five minutes and served
 **stale-while-revalidate**: whatever is cached renders immediately and a stale
 batch is re-probed on a background thread, coalesced so concurrent requests do not
@@ -319,17 +357,19 @@ stack up refreshes. Only two cases block on the network — an explicit `?refres
 and a domain with nothing cached at all (the first load after a restart, where
 blocking is the difference between a populated gallery and an empty one). The
 gallery does not write to SQLite: categories, stars, hidden cards, size/density,
-view mode, and drag order are browser-local settings.
+view mode, and drag order are browser-local settings (`gallery.js`).
 
 **Icons are proxied, never loaded cross-origin.** Cards point `<img>` at
 `GET /app-icon/{domain}`, which is itself session-authenticated. That route
 normalizes the hostname, requires it to be an enabled Nginx site in the latest
-scan (so it cannot be used as a general-purpose outbound fetcher), fetches
-`https://{domain}/favicon.ico` server-side with a 4s timeout, caps the body at
-256 KiB, checks the content type, and caches results in-process — 24h for a hit,
-1h for a miss. Anything that is not a 200 image, including a `401` with a
-`WWW-Authenticate` header, becomes an empty **204** and the card falls back to its
-initial letter.
+scan (so it cannot be used as a general-purpose outbound fetcher; the set of
+allowed domains is computed once per completed scan), then tries a bundled icon,
+`/favicon.ico|png|svg`, and finally the root page's `<link rel="icon">` /
+apple-touch-icon, server-side with short timeouts. Bodies are capped at
+128 KiB and must be images; results are cached in-process (24h for a hit, 1h
+for a miss, at most 256 domains, oldest evicted first). Anything that is not a
+usable image, including a `401` with a `WWW-Authenticate` header, becomes an
+empty **204** and the card falls back to its initial letter.
 
 The reason is concrete: pointing the `<img>` straight at the third-party origin
 made the *browser* issue those requests, so every app behind HTTP basic auth
@@ -340,18 +380,22 @@ top of a page the operator was already authenticated to.
 
 - `GET /favicon.ico` — 301 to `/static/favicon.svg`. Browsers request it
   unprompted; it used to 404 on every page load.
-- `/static/*` — `app.css`, `app.js`, `assistant.css`, `assistant.js`,
-  `theme-init.js`, `favicon.svg` and the vendored AG Grid files under
-  `/static/vendor/` are served with `Cache-Control: public, max-age=300,
-  must-revalidate`. They previously carried etag and last-modified but no cache
-  directive, costing a revalidation round trip per asset per page load.
+- `/static/*` — the files in `static/` and `static/fonts/` (`app.css`,
+  `app.js`, `assistant.js`, `removal.js`, `gallery.js`, `theme-init.js`,
+  `favicon.svg`, the woff2 fonts and their licences). A request carrying the
+  file's current content hash (`?v=`, as `asset()` writes it) and every font
+  get `Cache-Control: public, max-age=31536000, immutable`; anything else gets
+  `public, max-age=300, must-revalidate`. Other paths, including
+  `static/icons/`, return 404.
 - Unauthenticated routes are exactly `/login`, `/healthz`, `/favicon.ico` and
   those `/static/*` paths. Everything else, `/app-icon/{domain}` and
   `GET /palette.json` included, depends on `auth.require_user`.
-- `POST /scan` starts the scan on a background thread and redirects
-  immediately with `flash=Scan+started` (it no longer blocks the request on
-  the whole scan); `GET /scan/status` returns the current `scanner.scan_state()`
-  plus the most recent `scans` row as JSON, for the settings page to poll.
+- `POST /scan` starts the scan on a background thread. With
+  `Accept: application/json` (the sidebar stamp and Settings button) it answers
+  `{"started": true}`, or 409 `{"started": false, "error": …}` when a scan is
+  already running; a plain form post redirects with `flash=Scan+started`.
+  `GET /scan/status` returns the current `scanner.scan_state()` plus the most
+  recent `scans` row as JSON, for the scan stamp to poll.
 - `/apps/{slug}`, `/apps/{slug}/plan` and `/plans/{id}` return 404 for an
   unknown slug/id. `/plans/{id}/execute` returns 404 when the plan id does not
   exist (`planner.PlanNotFoundError`) or 409 when the plan exists but fails
@@ -448,6 +492,13 @@ correlation errors, or write failures retain the previous inventory and record a
 failed scan with an outcome shown in Settings. Individual collectors still handle
 some partial failures internally by logging and skipping an artifact.
 
+Scans start from the sidebar stamp or Settings (`POST /scan`), from
+`del-admin rescan`, after every live removal job, and — when
+`scan_interval_hours` in `del.toml` is above 0 — from the in-process scheduler
+(`scanner.start_scheduler`, started in `main.py`'s lifespan): every ten minutes
+it scans if the latest completed scan is older than the interval, waits
+min(interval, 1 h) after a failed attempt, and skips while a removal job runs.
+
 `database/del.scan.lock` uses Linux `flock` to serialize web and CLI scans. The
 thread lock prevents concurrent calls within a process. Startup cleanup checks
 the file lock before abandoning a running scan, and a crashed CLI's stale row does
@@ -528,9 +579,10 @@ new reality. A rescan failure is logged and audited as
   5-per-60s in-memory sliding window per IP, no backoff.
 - Argon2id password hashing (`argon2.PasswordHasher`, the only hasher — no bcrypt
   fallback); admin account created via CLI, no defaults.
-- CSP is sent by Nginx: `default-src 'self'`; scripts and styles are self-only,
-  while `img-src` also allows `data:` for vendored AG Grid sprites. HSTS carries
-  `includeSubDomains`. No external asset origins.
+- CSP is sent by Nginx: `default-src 'self'`; scripts, styles and fonts are
+  self-only (`img-src` also allows `data:`, used by the `/miscwork.html`
+  inventory export on the same vhost, not by the app UI). HSTS
+  carries `includeSubDomains`. No external asset origins, no third-party code.
 - Secrets never logged; env values stripped at the discovery source layer; the DB
   and backups directory are not world-readable.
 - Helper socket 0660 root:bjkai; 24 allowlisted operations; args validated twice;

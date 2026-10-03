@@ -4,7 +4,8 @@
 {% block content %}
 {# Per-row "Ask" links exist for the four docker types only (the assistant's
    `resource` scope); computed once so every row shares the decision. #}
-{% set ask_rows = res_type in ('container', 'image', 'volume', 'network') and assistant_enabled() %}
+{% set ask_rows = res_type in ('container', 'image', 'volume', 'network') and assistant_on %}
+{% set table_id = 'resources-' ~ res_type ~ '-table' %}
 {# Grouped nav: real type keys/labels/counts come from type_counts (queries.py);
    these tuples only decide which group each key is shown under. #}
 {% set res_groups = [
@@ -33,9 +34,9 @@
   'tmux_session': "Created is the raw timestamp tmux reports, shown as-is rather than reformatted.",
 } %}
 <div class="page-header">
-  <h1>Resources</h1>
+  <h1>{{ res_label }} <span class="count-pill">{{ rows | length }}</span></h1>
   <div class="page-actions">
-    <button type="button" class="btn btn-sm btn-ghost" data-export-table="resources-table" title="Export the currently filtered rows as CSV">Export CSV</button>
+    <button type="button" class="btn btn-sm btn-ghost" data-export-table="{{ table_id }}" title="Export the filtered rows as CSV">Export CSV</button>
     {% if ask_rows %}
     <a class="btn btn-sm btn-ghost" href="/assistant?scope=resource_type&amp;target={{ res_type }}" data-ask-scope="resource_type" data-ask-target="{{ res_type }}" title="Ask the read-only assistant about all {{ res_label | lower }}">Ask the assistant</a>
     {% endif %}
@@ -60,8 +61,6 @@
   {% endfor %}
 </nav>
 
-<h2>{{ res_label }} <span class="count-pill">{{ rows | length }}</span></h2>
-
 {% if active_filter %}
 <div class="callout callout-info" role="status">
   <span class="callout-title">Filtered: {{ active_filter_label }}</span>
@@ -69,7 +68,7 @@
   {% if filter_counts %}
   <div class="cluster mt-2" aria-label="Shared resources by type">
     <span class="muted text-sm">Shared, by type:</span>
-    {% for t in filter_counts %}<a class="chip{% if t.type == res_type %} owner-chip{% endif %}" href="/resources/{{ t.type }}?filter=shared">{{ t.label }} · {{ t.count }}</a>{% endfor %}
+    {% for t in filter_counts %}<a class="chip{% if t.type == res_type %} owner-chip{% endif %}" href="/resources/{{ t.type }}?filter=shared">{{ t.label }} <span class="count-pill">{{ t.count }}</span></a>{% endfor %}
   </div>
   {% endif %}
 </div>
@@ -92,7 +91,7 @@
 
 {# ---------- container ---------- #}
 {% if res_type == 'container' %}
-<table id="resources-table" class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
+<table id="{{ table_id }}" class="table" data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
   <caption class="sr-only">{{ res_label }} from the latest scan, with the application(s) that own each one.</caption>
   <thead><tr><th scope="col">Name</th><th scope="col">State/health</th><th scope="col">Image</th><th scope="col">Host port(s)</th><th scope="col">Container port(s)</th><th scope="col">Compose project</th><th scope="col">Owner app(s)</th><th scope="col">Shared</th>{% if ask_rows %}<th scope="col" data-nosort>Ask</th>{% endif %}</tr></thead>
   <tbody>
@@ -101,11 +100,11 @@
     <tr>
       <td>{{ r.display or r.key }}</td>
       <td data-filter-value="{{ r.data.get('state') }}{% if r.data.get('health') %} {{ r.data.get('health') }}{% endif %}">
-        <span class="badge status-{{ r.data.get('state') }}">{{ r.data.get('state') or '—' }}</span>
+        {{ m.state(r.data.get('state')) }}
         {% if r.data.get('health') %}
           <span class="badge {% if r.data.get('health') == 'healthy' %}badge-ok{% elif r.data.get('health') == 'unhealthy' %}badge-danger{% endif %}" title="Docker healthcheck">{{ r.data.get('health') }}</span>
         {% else %}
-          <span class="muted text-xs" title="No Docker healthcheck defined for this container">no healthcheck</span>
+          <span class="faint text-xs" title="No Docker healthcheck defined for this container">no healthcheck</span>
         {% endif %}
       </td>
       <td>{{ m.trunc(r.data.get('image')) }}</td>
@@ -122,7 +121,7 @@
 
 {# ---------- image ---------- #}
 {% elif res_type == 'image' %}
-<table id="resources-table" class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
+<table id="{{ table_id }}" class="table" data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
   <caption class="sr-only">{{ res_label }} from the latest scan, with the application(s) that own each one.</caption>
   <thead><tr><th scope="col">Repo:tag</th><th scope="col">ID</th><th scope="col">Size</th><th scope="col">Dangling</th><th scope="col">Used by</th><th scope="col">Owner app(s)</th>{% if ask_rows %}<th scope="col" data-nosort>Ask</th>{% endif %}</tr></thead>
   <tbody>
@@ -142,7 +141,7 @@
 
 {# ---------- volume ---------- #}
 {% elif res_type == 'volume' %}
-<table id="resources-table" class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
+<table id="{{ table_id }}" class="table" data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
   <caption class="sr-only">{{ res_label }} from the latest scan, with the application(s) that own each one.</caption>
   <thead><tr><th scope="col">Name</th><th scope="col">Mountpoint</th><th scope="col">Containers using</th><th scope="col">Orphan</th><th scope="col">Owner app(s)</th><th scope="col">Shared</th>{% if ask_rows %}<th scope="col" data-nosort>Ask</th>{% endif %}</tr></thead>
   <tbody>
@@ -163,7 +162,7 @@
 
 {# ---------- network ---------- #}
 {% elif res_type == 'network' %}
-<table id="resources-table" class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
+<table id="{{ table_id }}" class="table" data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
   <caption class="sr-only">{{ res_label }} from the latest scan, with the application(s) that own each one.</caption>
   <thead><tr><th scope="col">Name</th><th scope="col">Driver</th><th scope="col">Attached</th><th scope="col">Owner app(s)</th><th scope="col">Shared</th>{% if ask_rows %}<th scope="col" data-nosort>Ask</th>{% endif %}</tr></thead>
   <tbody>
@@ -182,7 +181,7 @@
 
 {# ---------- nginx_site ---------- #}
 {% elif res_type == 'nginx_site' %}
-<table id="resources-table" class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
+<table id="{{ table_id }}" class="table" data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
   <caption class="sr-only">{{ res_label }} from the latest scan, with the application(s) that own each one.</caption>
   <thead><tr><th scope="col">Server names</th><th scope="col">Config path</th><th scope="col">Upstream port(s)</th><th scope="col">SSL</th><th scope="col">Owner app(s)</th></tr></thead>
   <tbody>
@@ -201,14 +200,14 @@
 
 {# ---------- systemd_unit / systemd_timer ---------- #}
 {% elif res_type in ('systemd_unit', 'systemd_timer') %}
-<table id="resources-table" class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
+<table id="{{ table_id }}" class="table" data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
   <caption class="sr-only">{{ res_label }} from the latest scan, with the application(s) that own each one.</caption>
   <thead><tr><th scope="col">Unit</th><th scope="col">Active</th><th scope="col">Exec / target</th><th scope="col">Working dir</th><th scope="col">Owner app(s)</th></tr></thead>
   <tbody>
     {% for r in rows %}
     <tr>
       <td>{{ r.display or r.key }}</td>
-      <td data-filter-value="{{ r.data.get('active') }}"><span class="badge status-{{ 'running' if r.data.get('active') == 'active' else 'pending' }}">{{ r.data.get('active') or r.state or '—' }}</span></td>
+      <td data-filter-value="{{ r.data.get('active') }}">{% set act = r.data.get('active') or r.state %}<span class="badge status-{{ 'running' if act == 'active' else ('failed' if act == 'failed' else 'inactive') }}">{{ act or '—' }}</span>{% if r.data.get('sub') and r.data.get('sub') not in ('running', 'dead', act) %} <span class="faint text-sm">{{ r.data.get('sub') }}</span>{% endif %}{% if r.data.get('load') == 'not-found' %} <span class="badge badge-grey" title="systemd knows this name but no unit file exists">no unit file</span>{% endif %}</td>
       <td>{{ m.trunc(r.data.get('exec_start') or r.data.get('activates')) }}</td>
       <td>{{ m.trunc(r.data.get('working_directory')) }}</td>
       <td>{{ m.owner_cell(r) }}</td>
@@ -219,7 +218,7 @@
 
 {# ---------- directory / git_repo ---------- #}
 {% elif res_type in ('directory', 'git_repo') %}
-<table id="resources-table" class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
+<table id="{{ table_id }}" class="table" data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
   <caption class="sr-only">{{ res_label }} from the latest scan, with the application(s) that own each one.</caption>
   <thead><tr><th scope="col">Path</th><th scope="col">Size</th><th scope="col">Git branch</th><th scope="col">Dirty</th><th scope="col">Owner app(s)</th></tr></thead>
   <tbody>
@@ -240,7 +239,7 @@
 
 {# ---------- port / process ---------- #}
 {% elif res_type in ('port', 'process') %}
-<table id="resources-table" class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
+<table id="{{ table_id }}" class="table" data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
   <caption class="sr-only">{{ res_label }} from the latest scan, with the application(s) that own each one.</caption>
   <thead><tr><th scope="col">Port</th><th scope="col">Bind addr</th><th scope="col">Proto</th><th scope="col">Process</th><th scope="col">PID</th><th scope="col">Owner app(s)</th></tr></thead>
   <tbody>
@@ -259,7 +258,7 @@
 
 {# ---------- env_file ---------- #}
 {% elif res_type == 'env_file' %}
-<table id="resources-table" class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
+<table id="{{ table_id }}" class="table" data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
   <caption class="sr-only">{{ res_label }} from the latest scan, with the application(s) that own each one.</caption>
   <thead><tr><th scope="col">Path</th><th scope="col">Variable count</th><th scope="col">Owner app(s)</th></tr></thead>
   <tbody>
@@ -275,7 +274,7 @@
 
 {# ---------- cron_entry ---------- #}
 {% elif res_type == 'cron_entry' %}
-<table id="resources-table" class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
+<table id="{{ table_id }}" class="table" data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
   <caption class="sr-only">{{ res_label }} from the latest scan, with the application(s) that own each one.</caption>
   <thead><tr><th scope="col">Schedule</th><th scope="col">User</th><th scope="col">Command</th><th scope="col">Source</th><th scope="col">Owner app(s)</th></tr></thead>
   <tbody>
@@ -293,7 +292,7 @@
 
 {# ---------- compose_project ---------- #}
 {% elif res_type == 'compose_project' %}
-<table id="resources-table" class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
+<table id="{{ table_id }}" class="table" data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
   <caption class="sr-only">{{ res_label }} from the latest scan, with the application(s) that own each one.</caption>
   <thead><tr><th scope="col">Project</th><th scope="col">Working dir</th><th scope="col">Services</th><th scope="col">Owner app(s)</th></tr></thead>
   <tbody>
@@ -310,7 +309,7 @@
 
 {# ---------- bind_mount ---------- #}
 {% elif res_type == 'bind_mount' %}
-<table id="resources-table" class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
+<table id="{{ table_id }}" class="table" data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
   <caption class="sr-only">{{ res_label }} from the latest scan, with the application(s) that own each one.</caption>
   <thead><tr><th scope="col">Source</th><th scope="col">Destination</th><th scope="col">Container</th><th scope="col">Compose project</th><th scope="col">Owner app(s)</th></tr></thead>
   <tbody>
@@ -328,7 +327,7 @@
 
 {# ---------- tmux_session ---------- #}
 {% elif res_type == 'tmux_session' %}
-<table id="resources-table" class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
+<table id="{{ table_id }}" class="table" data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
   <caption class="sr-only">{{ res_label }} from the latest scan, with the application(s) that own each one.</caption>
   <thead><tr><th scope="col">Session</th><th scope="col">Windows</th><th scope="col">Created</th><th scope="col">Owner app(s)</th></tr></thead>
   <tbody>
@@ -348,7 +347,7 @@
 
 {# ---------- fallback ---------- #}
 {% else %}
-<table id="resources-table" class="table" data-enhanced data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
+<table id="{{ table_id }}" class="table" data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
   <caption class="sr-only">{{ res_label }} from the latest scan, with the application(s) that own each one.</caption>
   <thead><tr><th scope="col">Display</th><th scope="col">Key</th><th scope="col">Path</th><th scope="col">State</th><th scope="col">Owner app(s)</th></tr></thead>
   <tbody>
@@ -357,7 +356,7 @@
       <td>{{ r.display or r.key }}</td>
       <td>{{ m.trunc(r.key) }}</td>
       <td>{{ m.trunc(r.path, 50) }}</td>
-      <td data-filter-value="{{ r.state }}"><span class="badge">{{ r.state }}</span></td>
+      <td data-filter-value="{{ r.state }}"><span class="badge">{{ r.state or '—' }}</span></td>
       <td>{{ m.owner_cell(r) }}</td>
     </tr>
     {% endfor %}

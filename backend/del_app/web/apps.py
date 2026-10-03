@@ -12,6 +12,7 @@ from del_app.db import get_db, q
 from del_app.web.formatting import _app_dates, _level
 from del_app.web.queries import (
     RESOURCE_TYPE_LABELS,
+    _app_aggregates,
     _json_or,
     _latest_scan_id,
     _owner_map,
@@ -34,21 +35,6 @@ _TYPE_TO_SECTION = {
     "process": "processes", "port": "processes", "tmux_session": "processes",
     "directory": "files", "git_repo": "files", "bind_mount": "files", "env_file": "files",
 }
-
-# Sidebar nav entries surfaced by the command palette. Kept in one place so
-# a page rename here does not silently fall out of sync with the sidebar.
-_PALETTE_PAGES = [
-    {"title": "Dashboard", "url": "/"},
-    {"title": "Applications", "url": "/apps"},
-    {"title": "App Gallery", "url": "/view-apps"},
-    {"title": "Resources", "url": "/resources"},
-    {"title": "Orphans", "url": "/orphans"},
-    {"title": "Assistant", "url": "/assistant"},
-    {"title": "Jobs", "url": "/jobs"},
-    {"title": "Settings", "url": "/settings"},
-]
-
-
 
 def _dates_from(assoc: dict) -> bool:
     """Whether an association's resource dates count for its app.
@@ -105,25 +91,9 @@ def apps_list(
         # of a further ~136 applications that no longer exist — and a `search=`
         # filter narrowing the page to three rows did not narrow this at all.
         app_ids = [a["id"] for a in apps if a.get("id") is not None]
+        agg_map = _app_aggregates(conn, app_ids)
         if app_ids:
             id_ph = ",".join("?" for _ in app_ids)
-            agg = _rows(
-                q(
-                    conn,
-                    f"""
-                    SELECT ap.id AS app_id,
-                           COUNT(a.id) AS res_count,
-                           SUM(CASE WHEN a.ownership = 'possible' OR a.confidence < 60
-                                    THEN 1 ELSE 0 END) AS warn_count
-                    FROM applications ap
-                    LEFT JOIN associations a
-                           ON a.app_id = ap.id AND a.excluded = 0
-                    WHERE ap.id IN ({id_ph})
-                    GROUP BY ap.id
-                    """,
-                    tuple(app_ids),
-                )
-            )
             detail_sql = f"""
                 SELECT a.app_id AS app_id, r.type AS type, r.data_json AS data_json,
                        a.shared AS shared, a.excluded AS excluded, a.evidence_json AS evidence_json
@@ -141,13 +111,13 @@ def apps_list(
                 detail_params.append(int(latest))
             detail = _rows(q(conn, detail_sql, tuple(detail_params)))
         else:
-            agg, detail = [], []
-        agg_map = {r["app_id"]: r for r in agg}
+            detail = []
     finally:
         conn.close()
 
     domains: dict[int, set] = {}
-    ports: dict[int, set] = {}
+    ports: dict[int, set] = {}        # something listens on it now
+    idle_ports: dict[int, set] = {}   # published by a container that is not running
     date_rows: dict[int, list[dict]] = {}
     for d in detail:
         data = _json_or(d.get("data_json"), {})
@@ -168,8 +138,9 @@ def apps_list(
             if p is not None:
                 ports.setdefault(aid, set()).add(str(p))
         elif d["type"] == "container":
+            running = data.get("state") == "running"
             for p in data.get("published_ports", []) or []:
-                ports.setdefault(aid, set()).add(str(p))
+                (ports if running else idle_ports).setdefault(aid, set()).add(str(p))
 
     for app in apps:
         aid = app.get("id")
@@ -177,7 +148,9 @@ def apps_list(
         app["res_count"] = a.get("res_count") or 0
         app["warn_count"] = a.get("warn_count") or 0
         app["domains"] = sorted(domains.get(aid, set()))
-        app["ports"] = sorted(ports.get(aid, set()), key=lambda x: (len(x), x))
+        live = ports.get(aid, set())
+        app["ports"] = sorted(live, key=lambda x: (len(x), x))
+        app["idle_ports"] = sorted(idle_ports.get(aid, set()) - live, key=lambda x: (len(x), x))
 
         first_seen_id = app.get("first_seen")
         last_seen_id = app.get("last_seen")
@@ -395,8 +368,8 @@ def rescan_approve(
 
 @router.get("/palette.json")
 def palette_json(user: User = Depends(auth.require_user)) -> JSONResponse:
-    """Command-palette data feed: known apps (from the latest completed scan)
-    plus the sidebar's static page list."""
+    """Command-palette feed: apps in the latest completed scan with their
+    enabled domains. Pages come from the sidebar already in the DOM."""
     conn = get_db(read_snapshot=True)
     try:
         latest = _latest_scan_id(conn)
@@ -443,4 +416,4 @@ def palette_json(user: User = Depends(auth.require_user)) -> JSONResponse:
         }
         for a in app_rows
     ]
-    return JSONResponse({"apps": apps, "pages": _PALETTE_PAGES})
+    return JSONResponse({"apps": apps})

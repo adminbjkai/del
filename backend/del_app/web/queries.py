@@ -6,6 +6,7 @@ import json
 from typing import Any
 
 from del_app.db import latest_done_scan_id, q
+from del_app.discovery.docker_src import _normalize_image_ref
 
 # DB resource types are SINGULAR. Ordered for the Resources tab bar.
 ALL_RESOURCE_TYPES = [
@@ -24,6 +25,25 @@ RESOURCE_TYPE_LABELS = {
     "git_repo": "Git repos", "env_file": "Env files",
     "bind_mount": "Bind mounts", "tmux_session": "tmux sessions",
 }
+
+RESOURCE_TYPE_SINGULAR = {
+    "container": "Container", "image": "Image", "volume": "Volume",
+    "network": "Network", "compose_project": "Compose project",
+    "nginx_site": "Nginx site", "systemd_unit": "systemd unit",
+    "systemd_timer": "systemd timer", "cron_entry": "Cron entry",
+    "process": "Process", "port": "Port", "directory": "Directory",
+    "git_repo": "Git repo", "env_file": "Env file",
+    "bind_mount": "Bind mount", "tmux_session": "tmux session",
+}
+
+
+def resource_type_label(res_type: str | None, singular: bool = False) -> str:
+    """Human label for a resource type ("Containers" / "Container")."""
+    if not res_type:
+        return "—"
+    table = RESOURCE_TYPE_SINGULAR if singular else RESOURCE_TYPE_LABELS
+    return table.get(res_type, res_type)
+
 
 # Accept legacy plural URLs (e.g. /resources/containers) -> singular DB type.
 RESOURCE_TYPE_MAP = {t + "s": t for t in ALL_RESOURCE_TYPES}
@@ -88,19 +108,6 @@ def _scan_started_map(conn) -> dict[int, str]:
     return out
 
 
-def _normalize_image_ref(ref: str | None) -> str:
-    """Normalize an image reference for tag matching: append ':latest' when
-    there is no explicit tag or digest, matching docker's own convention."""
-    if not ref:
-        return ""
-    if "@" in ref:
-        return ref
-    tail = ref.rsplit("/", 1)[-1]
-    if ":" in tail:
-        return ref
-    return f"{ref}:latest"
-
-
 def _compose_declared_images(conn) -> dict[str, str]:
     """Normalized image ref -> compose project display name, from every
     discovered compose_project resource's declared `image:` entries (latest
@@ -147,6 +154,33 @@ def _disk_usage_bytes(conn, latest_scan: int | None) -> int:
             if isinstance(size_bytes, (int, float)):
                 total += int(size_bytes)
     return total
+
+
+def _app_aggregates(conn, app_ids: list[int]) -> dict[int, dict]:
+    """app id -> {res_count, warn_count} over non-excluded associations.
+    Warnings are weak claims: ownership 'possible' or confidence below 60."""
+    if not app_ids:
+        return {}
+    out: dict[int, dict] = {}
+    for start in range(0, len(app_ids), 400):
+        batch = app_ids[start:start + 400]
+        id_ph = ",".join("?" for _ in batch)
+        for r in q(
+            conn,
+            f"""
+            SELECT ap.id AS app_id,
+                   COUNT(a.id) AS res_count,
+                   SUM(CASE WHEN a.ownership = 'possible' OR a.confidence < 60
+                            THEN 1 ELSE 0 END) AS warn_count
+            FROM applications ap
+            LEFT JOIN associations a ON a.app_id = ap.id AND a.excluded = 0
+            WHERE ap.id IN ({id_ph})
+            GROUP BY ap.id
+            """,
+            tuple(batch),
+        ):
+            out[r["app_id"]] = {"res_count": r["res_count"] or 0, "warn_count": r["warn_count"] or 0}
+    return out
 
 
 def _type_counts(conn, latest_scan: int | None) -> list[dict]:
