@@ -56,6 +56,7 @@ Accuracy:
 Docs: UI.md rewritten; README, ARCHITECTURE, OPERATIONS, DISCOVERY, SECURITY,
 INSTALL and ASSISTANT updated. CI syntax-checks every static script.
 Tests: 459 passed, 2 skipped (`-W error`); pyflakes clean.
+Validation details: [report](reports/2026-10-03/validation.md).
 
 ## 2026.10.02
 
