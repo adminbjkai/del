@@ -2737,6 +2737,19 @@ def test_wiring_lanes_group_own_resources_and_skip_excluded():
     assert data == ["x_data", "/a -> web:/a", "x/.env"]
 
 
+def test_wiring_does_not_list_a_published_port_twice():
+    from del_app.web.apps import _wiring
+
+    rows = [
+        {"resource_type": "port", "resource_display": "0.0.0.0:8080", "resource_state": "listen",
+         "resource_data": {"port": 8080}},
+        {"resource_type": "container", "resource_key": "web", "resource_data": {"state": "running"},
+         "port_mappings": [{"host": "8080", "container": "80/tcp"}, {"host": "9090", "container": "90/tcp"}]},
+    ]
+    listening = next(lane for lane in _wiring(rows, []) if lane["key"] == "listening")["items"]
+    assert [i["label"] for i in listening] == ["0.0.0.0:8080", "9090 → web"]
+
+
 def test_wiring_lane_caps_items_and_links_the_rest():
     from del_app.web.apps import _WIRING_LANE_MAX, _wiring
 

@@ -471,6 +471,8 @@ def _disk_icon(domain: str) -> tuple[bool, tuple[bytes, str] | None, float]:
     if not raw:
         return True, None, age
     ctype, _, body = raw.partition(b"\n")
+    if not body:  # a torn write; fetch again
+        return False, None, 0.0
     return True, (body, ctype.decode("ascii", "replace")), age
 
 

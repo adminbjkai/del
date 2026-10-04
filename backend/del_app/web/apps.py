@@ -68,12 +68,15 @@ def _wiring(assoc_rows: list[dict], domains: list[str]) -> list[dict]:
 
     entry = [{"label": d, "kind": "Domain", "href": f"https://{d}", "tone": "", "section": "nginx"} for d in domains]
     listening = [_wiring_item(a) for a in of("port")]
+    # A published port already seen as a live listener is not listed twice.
+    listener_ports = {str((a.get("resource_data") or {}).get("port")) for a in of("port")}
     for a in of("container"):
         running = (a.get("resource_data") or {}).get("state") == "running"
+        name = a.get("resource_display") or a.get("resource_key") or "?"
         for pm in a.get("port_mappings") or []:
-            if pm.get("host"):
+            if pm.get("host") and str(pm.get("host")) not in listener_ports:
                 listening.append(_wiring_item(
-                    a, label=f"{pm.get('host')} → {a.get('resource_display')}",
+                    a, label=f"{pm.get('host')} → {name}",
                     state="listen" if running else "not listening",
                 ))
     runtime = [

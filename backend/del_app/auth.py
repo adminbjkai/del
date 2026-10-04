@@ -229,10 +229,12 @@ def list_sessions(request: Request, user_id: int) -> list[dict]:
 def end_other_sessions(request: Request, user_id: int) -> int:
     """Sign this user out everywhere except the requesting browser."""
     current = _request_token_hash(request)
+    if current is None:
+        return 0
     conn = get_db()
     try:
         cur = conn.execute(
-            "DELETE FROM sessions WHERE user_id = ? AND token_hash != ?", (user_id, current or ""),
+            "DELETE FROM sessions WHERE user_id = ? AND token_hash != ?", (user_id, current),
         )
         conn.commit()
         return cur.rowcount
