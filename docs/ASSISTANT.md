@@ -104,8 +104,8 @@ The key is never written to the database, the audit log, journald, or a template
 - `OllamaCloudClient(base_url, api_key, model, timeout_seconds)`.
 - `chat_stream(messages: list[dict], *, think, temperature) -> Iterator[Chunk]`
   where `Chunk = {"content": str, "thinking": str, "done": bool, "usage": dict | None}`.
-- Transport: `urllib.request` (the allowed-dependency list in `docs/INTERFACES.md`
-  excludes HTTP client packages). `POST {base_url}/api/chat` with
+- Transport: `urllib.request` (no HTTP client package; `requirements.txt`
+  stays minimal). `POST {base_url}/api/chat` with
   `Authorization: Bearer <key>`, body
   `{"model", "messages", "stream": true, "think", "options": {"temperature"}}`.
   The response is NDJSON; each line is parsed and yielded. `thinking` deltas are

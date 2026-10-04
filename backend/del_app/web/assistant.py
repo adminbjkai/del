@@ -71,11 +71,6 @@ def current_status() -> dict:
     return st
 
 
-def is_enabled() -> bool:
-    st = current_status()
-    return bool(st.get("enabled") and st.get("configured"))
-
-
 def _scopes() -> list[str]:
     return list(assistant.SCOPES)
 

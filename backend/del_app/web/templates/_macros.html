@@ -21,7 +21,7 @@
   {% else %}—{% endif %}
 {%- endmacro %}
 
-{% macro trunc(value, width=40) -%}
+{% macro trunc(value) -%}
   {% if value %}<span class="mono trunc" title="{{ value }}">{{ value }}</span>{% else %}—{% endif %}
 {%- endmacro %}
 

@@ -1,6 +1,6 @@
 """Correlation engine: groups discovered Resources into applications and scores
 the evidence for each app<->resource association, per docs/ARCHITECTURE.md
-"Confidence scoring" and docs/INTERFACES.md correlate.py contract.
+"Confidence scoring".
 
 Grouping seed = compose project label (from docker_src containers), then
 compose_src's own compose_project resources fill in stopped/orphaned projects.

@@ -78,12 +78,16 @@
   </summary>
   <div class="section-body">
     <button type="button" class="btn btn-sm btn-ghost" data-export-table="orphans-{{ g.type }}-table" title="Export the filtered rows as CSV">Export CSV</button>
+    {# Volumes (and some others) use the key as the display name: skip the
+       duplicate column when no row differs. #}
+    {% set ns = namespace(key_differs=false) %}
+    {% for r in g.rows %}{% if r.display and r.display != r.key %}{% set ns.key_differs = true %}{% endif %}{% endfor %}
     <table id="orphans-{{ g.type }}-table" class="table" data-empty="No orphaned {{ g.label|lower }} in this view. Primary: run a scan. Secondary: show system and expected too." data-page-size="25">
       <caption class="sr-only">Unassociated {{ g.label|lower }} from the latest scan, with why each one is listed.</caption>
       <thead>
         <tr>
           <th scope="col">Display</th>
-          <th scope="col">Key</th>
+          {% if ns.key_differs %}<th scope="col">Key</th>{% endif %}
           <th scope="col">Path</th>
           <th scope="col">State</th>
           <th scope="col">Class</th>
@@ -95,16 +99,16 @@
       </thead>
       <tbody>
         {% for r in g.rows %}
-        <tr class="{% if r.bucket == 'system' %}row-muted{% elif r.bucket == 'expected' %}{% endif %}">
+        <tr{% if r.bucket == 'system' %} class="row-muted"{% endif %}>
           <td>
             {% if g.type in ('volume', 'image', 'container', 'network') %}
-              <a href="/resources/{{ g.type }}">{{ r.display or r.key }}</a>
+              <a class="trunc" href="/resources/{{ g.type }}" title="{{ r.display or r.key }}">{{ r.display or r.key }}</a>
             {% else %}
-              {{ r.display or r.key }}
+              <span class="trunc" title="{{ r.display or r.key }}">{{ r.display or r.key }}</span>
             {% endif %}
           </td>
-          <td>{{ m.trunc(r.key) }}</td>
-          <td>{{ m.trunc(r.path, 50) }}</td>
+          {% if ns.key_differs %}<td>{{ m.trunc(r.key) }}</td>{% endif %}
+          <td>{{ m.trunc(r.path) }}</td>
           <td data-filter-value="{{ r.state }}">{{ r.state or '—' }}</td>
           <td data-filter-value="{{ r.bucket_label }}">
             {% if r.bucket == 'actionable' %}
@@ -115,7 +119,7 @@
               <span class="badge badge-grey">{{ r.bucket_label }}</span>
             {% endif %}
           </td>
-          <td class="muted text-sm">{{ r.reason }}</td>
+          <td class="muted text-sm td-prose">{{ r.reason }}</td>
           {% if g.type in ('container', 'image', 'volume', 'network') and assistant_on %}
           {{ m.ask_link(g.type, r.key) }}
           {% endif %}

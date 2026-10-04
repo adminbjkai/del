@@ -39,10 +39,6 @@
   function isTyping(el) {
     return !!el && (el.tagName === "INPUT" || el.tagName === "TEXTAREA" || el.tagName === "SELECT" || el.isContentEditable);
   }
-  function csrfToken() {
-    var meta = $('meta[name="csrf-token"]');
-    return meta ? meta.getAttribute("content") : "";
-  }
   // SQLite datetime('now') strings carry no zone but are UTC.
   function parseUtc(value) {
     if (!value) return NaN;
@@ -436,7 +432,7 @@
     }
 
     // Short tables need no chrome at all.
-    var minimal = allRows.length <= 10 && !table.hasAttribute("data-toolbar") && !exportBtn;
+    var minimal = allRows.length <= 10 && !exportBtn;
     toolbar.classList.toggle("is-minimal", minimal);
 
     // --- Headers: sort button, filter button, resizer ----------------------
@@ -1159,8 +1155,13 @@
   var glossaryFab = document.getElementById("glossary-fab");
   var glossarySheet = document.getElementById("glossary-sheet");
   var glossaryTrap = makeFocusTrap(function () { return glossarySheet && $(".glossary-sheet-panel", glossarySheet); });
+  // One glossary per page: it lives in the rail and visits the sheet.
+  var glossaryRoot = $(".glossary-root");
+  var glossaryHome = glossaryRoot && glossaryRoot.parentNode;
   function openGlossary() {
     if (!glossarySheet) return;
+    var sheetBody = document.getElementById("glossary-sheet-body");
+    if (glossaryRoot && sheetBody) sheetBody.appendChild(glossaryRoot);
     glossarySheet.hidden = false;
     if (glossaryFab) glossaryFab.setAttribute("aria-expanded", "true");
     document.body.style.overflow = "hidden";
@@ -1169,6 +1170,7 @@
   function closeGlossary() {
     if (!glossarySheet || glossarySheet.hidden) return;
     glossarySheet.hidden = true;
+    if (glossaryRoot && glossaryHome) glossaryHome.appendChild(glossaryRoot);
     if (glossaryFab) glossaryFab.setAttribute("aria-expanded", "false");
     if (!sidebar || !sidebar.classList.contains("open")) document.body.style.overflow = "";
     glossaryTrap.release(glossaryFab);
@@ -1484,7 +1486,9 @@
   // =========================================================================
   var gPending = 0;
   document.addEventListener("keydown", function (e) {
-    if ((e.ctrlKey || e.metaKey) && !e.altKey && e.key.toLowerCase() === "k") {
+    // Autofill and some IME events fire keydown without a key.
+    var key = (e.key || "").toLowerCase();
+    if ((e.ctrlKey || e.metaKey) && !e.altKey && key === "k") {
       if (!cmdk || typeof cmdk.showModal !== "function") return;
       e.preventDefault();
       if (cmdk.open) cmdk.close(); else DEL.palette.open();
@@ -1500,7 +1504,7 @@
     if (e.ctrlKey || e.metaKey || e.altKey || isTyping(e.target) || document.querySelector("dialog[open]")) return;
     if (gPending && Date.now() - gPending < 1200) {
       gPending = 0;
-      var link = $('#sidebar a[data-nav-key="' + e.key.toLowerCase() + '"]');
+      var link = $('#sidebar a[data-nav-key="' + key + '"]');
       if (link) { e.preventDefault(); location.href = link.getAttribute("href"); }
       return;
     }

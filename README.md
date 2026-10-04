@@ -118,7 +118,7 @@ If you are reading the committed repo, do not go looking for them:
 
 | Path | What it is |
 |---|---|
-| `docs/INTERFACES.md` | Internal module/function contracts. `backend/del_app/planner.py:2` calls it authoritative for stage order and safety rules — that content is mirrored in docs/ARCHITECTURE.md and docs/REMOVAL-LIFECYCLE.md, which are committed |
+| `docs/INTERFACES.md` | The original July 2026 module contracts, kept for history only. The code no longer cites it; docs/ARCHITECTURE.md and docs/REMOVAL-LIFECYCLE.md are current |
 | `docs/PORT-REGISTRY.md` | Auto-generated port/subdomain map (`scripts/gen-registry.py`); regenerate on demand rather than trusting a stale copy |
 | `docs/server-audit.md` | The phase-2 host audit this design was built from |
 | `PROGRESS.md` | Scratch working notes for whatever change is in flight; finished ones are moved into `reports/<date>/` |

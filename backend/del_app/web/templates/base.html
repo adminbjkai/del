@@ -160,9 +160,8 @@
         <strong id="glossary-sheet-title">Help</strong>
         <button type="button" class="btn btn-sm" id="glossary-sheet-close" aria-label="Close help">Close</button>
       </div>
-      <div class="glossary-sheet-body">
-        {% include "_glossary.html" %}
-      </div>
+      {# Filled on open: app.js moves the rail's glossary here and back. #}
+      <div class="glossary-sheet-body" id="glossary-sheet-body"></div>
     </div>
   </div>
 

@@ -50,9 +50,10 @@ def test_migrations_apply_on_tmp_db(settings_env):
     expected = {
         "users", "sessions", "scans", "applications", "resources",
         "associations", "plans", "jobs", "job_steps", "backups",
-        "audit_log", "settings", "schema_migrations",
+        "audit_log", "schema_migrations",
     }
     assert expected.issubset(tables)
+    assert "settings" not in tables  # 005 drops the never-used key/value table
 
 
 def test_user_create_and_verify_roundtrip(settings_env):
@@ -168,3 +169,38 @@ def test_read_snapshot_stays_consistent_while_scan_publishes(settings_env):
     finally:
         reader.close()
         writer.close()
+
+
+def test_verify_unknown_user_still_runs_a_hash_check(settings_env, monkeypatch):
+    """An unknown username costs one argon2 verify, like a wrong password, so
+    timing does not reveal which usernames exist."""
+    from del_app import auth
+
+    calls = []
+    real = auth._hasher
+
+    class Counting:
+        def hash(self, pw):
+            return real.hash(pw)
+
+        def verify(self, h, pw):
+            calls.append(h)
+            return real.verify(h, pw)
+
+    monkeypatch.setattr(auth, "_hasher", Counting())
+    assert auth.verify("nobody-here", "whatever") is None
+    assert len(calls) == 1
+
+
+def test_rate_limiter_forgets_idle_ips(monkeypatch):
+    from del_app import auth
+
+    monkeypatch.setattr(auth, "_login_attempts", {})
+    clock = [1000.0]
+    monkeypatch.setattr(auth.time, "time", lambda: clock[0])
+    for _ in range(auth.RATE_LIMIT_MAX):
+        auth.record_attempt("203.0.113.9")
+    assert auth.rate_limited("203.0.113.9")
+    clock[0] += auth.RATE_LIMIT_WINDOW_SECONDS + 1
+    assert not auth.rate_limited("203.0.113.9")
+    assert "203.0.113.9" not in auth._login_attempts

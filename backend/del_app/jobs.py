@@ -6,7 +6,9 @@ each step, and halting on unsafe failure.
 route and no CLI entry point for it, so it is reachable only from a Python
 shell or the test-suite.
 
-See docs/ARCHITECTURE.md "Removal job engine" and docs/INTERFACES.md jobs.py.
+Any failed step halts the job: later steps stay pending, so nothing runs on
+top of an unverified state. See docs/ARCHITECTURE.md "Removal job engine" and
+docs/REMOVAL-LIFECYCLE.md.
 """
 from __future__ import annotations
 
@@ -41,11 +43,6 @@ logger = logging.getLogger("del_app.jobs")
 CONFIRM_VOLUMES_PHRASE = "y"
 
 _SECRET_RE = re.compile(r"(?i)(password|token|secret|key)=\S+")
-
-# Stages whose step failures always halt the job before any downstream
-# deletion runs (backup/validate failures also halt: nothing downstream
-# should proceed on top of an unverified state).
-_HALTING_STAGES = {"backup", "quiesce", "remove_runtime", "remove_host", "remove_files", "validate"}
 
 # Failures in these stages attempt an automatic restore from the backups
 # recorded earlier in this job before the job is marked failed.

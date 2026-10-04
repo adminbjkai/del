@@ -92,12 +92,28 @@ def change_password(username: str, new_password: str) -> None:
         conn.close()
 
 
+_DUMMY_HASH: str | None = None
+
+
+def _dummy_hash() -> str:
+    global _DUMMY_HASH
+    if _DUMMY_HASH is None:
+        _DUMMY_HASH = _hasher.hash(secrets.token_hex(16))
+    return _DUMMY_HASH
+
+
 def verify(username: str, password: str) -> int | None:
     """Verify credentials; return user id on success, None on failure."""
     conn = get_db()
     try:
         rows = q(conn, "SELECT id, password_hash FROM users WHERE username = ?", (username,))
         if not rows:
+            # Same argon2 cost as a real check, so response time does not
+            # reveal whether the username exists.
+            try:
+                _hasher.verify(_dummy_hash(), password)
+            except VerifyMismatchError:
+                pass
             return None
         row = rows[0]
         try:
@@ -234,7 +250,10 @@ def rate_limited(ip: str) -> bool:
     """Return True if this IP has exceeded the login attempt rate limit."""
     now = time.time()
     attempts = [t for t in _login_attempts.get(ip, []) if now - t < RATE_LIMIT_WINDOW_SECONDS]
-    _login_attempts[ip] = attempts
+    if attempts:
+        _login_attempts[ip] = attempts
+    else:
+        _login_attempts.pop(ip, None)
     return len(attempts) >= RATE_LIMIT_MAX
 
 

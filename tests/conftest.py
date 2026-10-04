@@ -1,9 +1,12 @@
 import sys
 import threading
+from pathlib import Path
 
 import pytest
 
-sys.path.insert(0, "/apps/del/backend")
+# This checkout's backend, not the deployed one, so a worktree or CI run tests
+# its own code.
+sys.path.insert(0, str(Path(__file__).resolve().parent.parent / "backend"))
 
 from del_app import scanner  # noqa: E402
 from del_app.web import docker_df  # noqa: E402

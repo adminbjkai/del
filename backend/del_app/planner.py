@@ -1,5 +1,5 @@
 """Removal plan generation (dry-run) — see docs/ARCHITECTURE.md and
-docs/INTERFACES.md for the authoritative stage order and safety rules.
+docs/REMOVAL-LIFECYCLE.md for the stage order and safety rules.
 
 build_plan() loads an app + its associated resources from the DB and turns
 each removal-eligible association into one or more PlanStep entries, grouped

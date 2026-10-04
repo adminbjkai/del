@@ -1,6 +1,6 @@
 """Ollama Cloud client: stdlib urllib, NDJSON streaming, API key resolution.
 
-No HTTP client packages (docs/INTERFACES.md allowed-dependency list). Tests
+No HTTP client packages (requirements.txt stays minimal). Tests
 patch `del_app.assistant.provider.urllib.request.urlopen`, the same convention
 as web/gallery.py.
 """
