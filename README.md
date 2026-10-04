@@ -119,6 +119,7 @@ live under `reports/<date>/`:
 | [reports/2026-09-13/](reports/2026-09-13/) | Read-only Nginx alias audit of scan 249's confidence-60 site associations |
 | [reports/2026-10-02/](reports/2026-10-02/) | Scan integrity, review persistence, CI cleanup, performance measurement, and live validation |
 | [reports/2026-10-03/](reports/2026-10-03/) | UI rebuild ("survey sheet"): feature-checklist verification, old-vs-new accuracy comparison, payload, live checks |
+| [reports/2026-10-04/](reports/2026-10-04/) | Refinement pass: old-vs-new parity on one snapshot, CSP crawl, new features checked against the DB, review |
 
 ### Local-only files this repo references but does not contain
 
