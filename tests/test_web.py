@@ -2940,3 +2940,18 @@ def test_step_durations_read_as_time_not_raw_floats():
     assert _seconds(4.3) == "4.3s"
     assert _seconds(90) == "1.5m"
     assert _seconds(None) == "—" and _seconds("x") == "—"
+
+
+def test_dashboard_title_block_shows_next_scan_when_auto_scan_is_on(authed_client, settings_env, monkeypatch):
+    from del_app.db import get_db, x
+
+    monkeypatch.setattr(settings_env, "scan_interval_hours", 6.0)
+    conn = get_db()
+    try:
+        x(conn, "INSERT INTO scans (status, started, finished) VALUES ('done', datetime('now'), datetime('now'))")
+        conn.commit()
+    finally:
+        conn.close()
+    body = authed_client.get("/").text
+    assert "every 6 h" in body
+    assert "<dt>Next scan</dt><dd>after" in body
