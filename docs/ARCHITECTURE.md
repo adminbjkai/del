@@ -249,7 +249,9 @@ Ask tab of the right rail on every other authenticated page.
 ## Data model (SQLite)
 
 - users(id, username, password_hash, created_at, last_login)
-- sessions(token_hash, user_id, created, expires, ip)
+- sessions(token_hash, user_id, created, expires, ip) — Settings → Account lists
+  the signed-in user's unexpired rows (time, expiry, IP) and can delete all but
+  the current one.
 - scans(id, started, finished, status, stats_json)
 - applications(id, slug, name, status, kind, protected, manifest_path, first_seen, last_seen)
   — `first_seen` / `last_seen` are scan IDs. The UI resolves them to `scans.started`
@@ -366,10 +368,14 @@ scan (so it cannot be used as a general-purpose outbound fetcher; the set of
 allowed domains is computed once per completed scan), then tries a bundled icon,
 `/favicon.ico|png|svg`, and finally the root page's `<link rel="icon">` /
 apple-touch-icon, server-side with short timeouts. Bodies are capped at
-128 KiB and must be images; results are cached in-process (24h for a hit, 1h
-for a miss, at most 256 domains, oldest evicted first). Anything that is not a
-usable image, including a `401` with a `WWW-Authenticate` header, becomes an
-empty **204** and the card falls back to its initial letter.
+128 KiB and must be images. Results are cached twice: in process memory (at
+most 256 domains, oldest evicted first) and as one small file per domain in
+`icon-cache/` next to the database (`<domain>.icon`: content type, newline,
+body; an empty file is a cached miss), so a restart does not refetch every
+icon. A hit is kept 7 days, a miss 6 hours; concurrent requests for one domain
+share a single lookup. Anything that is not a usable image, including a `401`
+with a `WWW-Authenticate` header, becomes an empty **204** and the card falls
+back to its initial letter.
 
 The reason is concrete: pointing the `<img>` straight at the third-party origin
 made the *browser* issue those requests, so every app behind HTTP basic auth

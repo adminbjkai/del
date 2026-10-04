@@ -29,6 +29,10 @@
       <dd>The newest of: a file added or removed in its folder, its last git commit, a container recreate, or an edit to its unit or nginx site file.</dd>
       <dt>Kind</dt>
       <dd>Primary runtime: compose, container, systemd, …</dd>
+      <dt>Status by scan</dt>
+      <dd>On an app's Overview: one bar per completed scan (oldest left, newest outlined), coloured by the status that scan recorded. Scans record per-app status from 2026-10-03 on; an empty bar means the app was not in that scan's inventory.</dd>
+      <dt>How it is wired</dt>
+      <dd>The app's own resources (excluded rows left out) in four lanes: the domains that reach it, the ports it listens on (a stopped container's published port shows as not listening), what runs it, and where it keeps data. Data-bearing storage is listed first and marked in orange; each lane shows six and links to the rest.</dd>
     </dl>
   </details>
 

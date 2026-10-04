@@ -33,8 +33,15 @@
   (`auth.csrf_token` / `auth.check_csrf`); forms and `app.js` fetches both carry it.
   JSON posts from the Assistant also send `X-CSRF-Token` (same HMAC as the form field).
 - Login is rate-limited to 5 attempts per 60 seconds per IP — a plain in-memory
-  sliding window (`auth.rate_limited` / `auth.record_attempt`). There is no
-  escalating backoff and no persistence: a `del-web` restart clears the counters.
+  sliding window (`auth.rate_limited` / `auth.record_attempt`); an IP's entry is
+  dropped once its window is empty. There is no escalating backoff and no
+  persistence: a `del-web` restart clears the counters.
+- An unknown username costs the same argon2 verification as a wrong password
+  (against a per-process dummy hash), so response time does not reveal which
+  usernames exist.
+- Settings → Account lists your active sessions (sign-in time, expiry, client
+  IP as seen through Nginx) and **Sign out other sessions** deletes every other
+  session row for your user (CSRF-checked, audited as `sessions.end_others`).
 
 ## File permissions
 
@@ -206,7 +213,7 @@ The original full attacker/vector/mitigation table lives in `docs/server-audit.m
 | Command/argument injection | subprocess arg-arrays only, `shell=False`, everywhere |
 | Secrets exposure | env values stripped at collection; never logged or stored; DB and backups no longer world-readable |
 | Assistant → Ollama Cloud | Inventory metadata only (names, paths, tags, evidence); no env values, file contents or secrets; read-only (no helper, no planner); key file 0600 |
-| Server-side request forgery via `/app-icon/` | The proxy accepts only hostnames that are enabled Nginx sites in the latest scan, requires a session, fetches `https://{host}/favicon.ico` only, caps the body at 256 KiB, and checks content type |
+| Server-side request forgery via `/app-icon/` | The proxy accepts only syntactically valid hostnames that are enabled Nginx sites in the latest scan, requires a session, only ever requests `https://{host}/favicon.ico\|png\|svg`, the site root, and icon links that page declares, caps each body at 128 KiB, accepts only image content, and caches results (7 d / 6 h) so a page view cannot drive repeated outbound fetches |
 
 ## Hardening notes
 

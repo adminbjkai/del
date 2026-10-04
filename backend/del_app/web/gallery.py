@@ -436,7 +436,13 @@ def _find_icon(domain: str) -> tuple[bytes, str] | None:
             return unquote(href.split(",", 1)[1]).encode("utf-8"), "image/svg+xml"
         if href.startswith("data:image/png;base64,"):
             return base64.b64decode(href.split(";base64,", 1)[1]), "image/png"
-        got = _http_get(urljoin(f"https://{domain}/", href), "image/*", _ICON_MAX_BYTES)
+        target = urljoin(f"https://{domain}/", href)
+        # Only follow icon links on the same site over https: urllib would
+        # otherwise also open file:// URLs or fetch from arbitrary hosts.
+        parts = urllib.parse.urlsplit(target)
+        if parts.scheme != "https" or (parts.hostname or "").lower() != domain:
+            continue
+        got = _http_get(target, "image/*", _ICON_MAX_BYTES)
         if got and got[0] == 200:
             icon = _as_icon(got[2], got[1])
             if icon:

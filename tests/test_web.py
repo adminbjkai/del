@@ -2894,3 +2894,27 @@ def test_settings_lists_sessions_and_ends_only_the_others(authed_client, setting
     finally:
         conn.close()
     assert left == {current_hash, "h-someone"}
+
+
+def test_icon_links_are_only_followed_on_the_same_https_site(monkeypatch, tmp_path):
+    monkeypatch.setattr(gallery, "_icon_disk_dir", lambda: tmp_path)
+    fetched = []
+
+    def fake_get(url, accept, limit):
+        fetched.append(url)
+        if url == "https://site.bjk.ai/":
+            return 200, "text/html", (
+                b'<link rel="icon" href="file:///etc/secret.png">'
+                b'<link rel="icon" href="https://elsewhere.example/x.png">'
+                b'<link rel="icon" href="http://site.bjk.ai/plain.png">'
+                b'<link rel="icon" href="/ok.png">'
+            )
+        if url == "https://site.bjk.ai/ok.png":
+            return 200, "image/png", b"\x89PNG-ok"
+        return None
+
+    monkeypatch.setattr(gallery, "_http_get", fake_get)
+    gallery._ICON_CACHE.clear()
+    assert gallery._cached_icon("site.bjk.ai") == (b"\x89PNG-ok", "image/png")
+    assert not any(u.startswith(("file:", "http:")) or "elsewhere" in u for u in fetched)
+    gallery._ICON_CACHE.clear()
