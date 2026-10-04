@@ -13,6 +13,7 @@ from del_app.web.formatting import _app_dates, _level
 from del_app.web.queries import (
     RESOURCE_TYPE_LABELS,
     _app_aggregates,
+    resource_type_label,
     _json_or,
     _latest_scan_id,
     _owner_map,
@@ -35,6 +36,112 @@ _TYPE_TO_SECTION = {
     "process": "processes", "port": "processes", "tmux_session": "processes",
     "directory": "files", "git_repo": "files", "bind_mount": "files", "env_file": "files",
 }
+
+# Overview "wiring": the app's own resources in four lanes, from how traffic
+# reaches it to where it keeps data. Excluded rows are not the app's.
+_WIRING_LANE_MAX = 6
+_RUNNING_STATES = {"running", "active", "listen"}
+_IDLE_STATES = {"exited", "created", "inactive", "dead", "stopped", "paused", "not listening"}
+
+
+def _wiring_item(a: dict, label: str | None = None, state: str | None = None) -> dict:
+    rt = a.get("resource_type") or ""
+    state = state if state is not None else (a.get("resource_state") or "")
+    tone = "ok" if state in _RUNNING_STATES else ("idle" if state in _IDLE_STATES else ("danger" if state == "failed" else ""))
+    return {
+        "label": label or a.get("resource_display") or a.get("resource_key") or "?",
+        "kind": resource_type_label(rt, singular=True),
+        "state": state,
+        "tone": tone,
+        "shared": bool(a.get("shared")),
+        "data": a.get("data_loss_risk") == "data",
+        "section": _TYPE_TO_SECTION.get(rt),
+        "title": a.get("resource_key") or "",
+    }
+
+
+def _wiring(assoc_rows: list[dict], domains: list[str]) -> list[dict]:
+    own = [a for a in assoc_rows if not a.get("excluded")]
+
+    def of(*types: str) -> list[dict]:
+        return [a for a in own if a.get("resource_type") in types]
+
+    entry = [{"label": d, "kind": "Domain", "href": f"https://{d}", "tone": "", "section": "nginx"} for d in domains]
+    listening = [_wiring_item(a) for a in of("port")]
+    for a in of("container"):
+        running = (a.get("resource_data") or {}).get("state") == "running"
+        for pm in a.get("port_mappings") or []:
+            if pm.get("host"):
+                listening.append(_wiring_item(
+                    a, label=f"{pm.get('host')} → {a.get('resource_display')}",
+                    state="listen" if running else "not listening",
+                ))
+    runtime = [
+        _wiring_item(a, state=(a.get("resource_data") or {}).get("state") or a.get("resource_state"))
+        for a in of("container")
+    ] + [_wiring_item(a) for a in of("systemd_unit", "systemd_timer", "compose_project", "cron_entry", "tmux_session")]
+    processes = of("process")
+    if processes:
+        runtime.append({"label": f"{len(processes)} process{'es' if len(processes) != 1 else ''}",
+                        "kind": "Processes", "tone": "ok", "section": "processes"})
+    storage_order = ("volume", "directory", "bind_mount", "git_repo", "env_file")
+    data = [
+        (storage_order.index(a["resource_type"]), _wiring_item(a))
+        for a in of(*storage_order)
+    ]
+    # Data-bearing items first (what a removal would destroy), volumes and
+    # directories before the individual mounts that point into them.
+    data.sort(key=lambda p: (not p[1]["data"], p[0], p[1]["label"]))
+    data = [item for _, item in data]
+    lanes = [
+        {"key": "entry", "title": "Reached at", "items": entry, "empty": "No enabled site"},
+        {"key": "listening", "title": "Listens on", "items": listening, "empty": "No listening port"},
+        {"key": "runtime", "title": "Runs as", "items": runtime, "empty": "Nothing running or declared"},
+        {"key": "data", "title": "Keeps data in", "items": data, "empty": "No storage found"},
+    ]
+    for lane in lanes:
+        lane["more"] = max(0, len(lane["items"]) - _WIRING_LANE_MAX)
+        lane["more_section"] = next((i.get("section") for i in lane["items"][_WIRING_LANE_MAX:] if i.get("section")), None)
+        lane["items"] = lane["items"][:_WIRING_LANE_MAX]
+    return lanes
+
+
+_HISTORY_SCANS = 48
+
+
+def _status_history(conn, slug: str) -> dict | None:
+    """This app's status in each recent completed scan, oldest first, and
+    since when the current status holds. Only scans that recorded per-app
+    status (2026-10-03 on) count; an app missing from one was not in that
+    scan's inventory."""
+    rows = _rows(q(
+        conn,
+        "SELECT id, started, stats_json FROM scans WHERE status = 'done' "
+        "AND stats_json LIKE '%\"app_status\"%' ORDER BY id DESC LIMIT ?",
+        (_HISTORY_SCANS,),
+    ))
+    out = []
+    for r in reversed(rows):
+        status_map = _json_or(r.get("stats_json"), {}).get("app_status")
+        if not isinstance(status_map, dict):
+            continue
+        out.append({"scan": r["id"], "started": r.get("started"), "status": status_map.get(slug) or "missing"})
+    if not out:
+        return None
+    current = out[-1]["status"]
+    since = out[-1]
+    for tick in reversed(out):
+        if tick["status"] != current:
+            break
+        since = tick
+    return {
+        "ticks": out,
+        "current": current,
+        # None when the status never changed inside the recorded window.
+        "since": since if since is not out[0] else None,
+        "first": out[0],
+    }
+
 
 def _dates_from(assoc: dict) -> bool:
     """Whether an association's resource dates count for its app.
@@ -222,6 +329,7 @@ def app_detail(
         # callout's "other apps" links and the Overview "Related apps" list.
         resource_ids = [a["resource_id"] for a in assoc_rows if a.get("resource_id") is not None]
         owner_map = _owner_map(conn, resource_ids, latest=assoc_scan)
+        history = _status_history(conn, slug)
     finally:
         conn.close()
 
@@ -308,6 +416,8 @@ def app_detail(
         sections=sections,
         related_apps=related_apps,
         resources_by_type=resources_by_type,
+        wiring=_wiring(assoc_rows, app["domains"]),
+        history=history,
         removed=bool(latest_scan and app.get("last_seen") is not None and app["last_seen"] < latest_scan),
     )
 

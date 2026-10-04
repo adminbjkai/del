@@ -2701,3 +2701,76 @@ def test_settings_shows_scan_failure_reason(authed_client, settings_env):
     response = authed_client.get('/settings')
     assert 'discovery sources failed: docker' in response.text
     assert 'id="scan-strip"' in response.text
+
+
+# ---------------------------------------------------------------------------
+# App detail overview: wiring lanes and status by scan (2026-10-04)
+# ---------------------------------------------------------------------------
+
+def test_wiring_lanes_group_own_resources_and_skip_excluded():
+    from del_app.web.apps import _wiring
+
+    rows = [
+        {"resource_type": "port", "resource_display": "127.0.0.1:8075", "resource_state": "listen",
+         "resource_key": "tcp:127.0.0.1:8075"},
+        {"resource_type": "container", "resource_display": "web", "resource_state": "exited",
+         "resource_data": {"state": "exited"}, "port_mappings": [{"host": "8080", "container": "80/tcp"}]},
+        {"resource_type": "systemd_unit", "resource_display": "x.service", "resource_state": "active"},
+        {"resource_type": "bind_mount", "resource_display": "/a -> web:/a", "data_loss_risk": "data"},
+        {"resource_type": "volume", "resource_display": "x_data", "data_loss_risk": "data"},
+        {"resource_type": "env_file", "resource_display": "x/.env", "data_loss_risk": "config"},
+        {"resource_type": "volume", "resource_display": "excluded_vol", "excluded": 1, "data_loss_risk": "data"},
+        {"resource_type": "process", "resource_display": "p1"},
+        {"resource_type": "process", "resource_display": "p2"},
+    ]
+    lanes = {lane["key"]: lane for lane in _wiring(rows, ["x.example.org"])}
+    assert [i["label"] for i in lanes["entry"]["items"]] == ["x.example.org"]
+    listening = lanes["listening"]["items"]
+    assert listening[0]["tone"] == "ok"
+    # a stopped container's published port is not presented as listening
+    assert listening[1]["label"] == "8080 → web" and listening[1]["state"] == "not listening"
+    assert listening[1]["tone"] == "idle"
+    runtime = [i["label"] for i in lanes["runtime"]["items"]]
+    assert runtime == ["web", "x.service", "2 processes"]
+    data = [i["label"] for i in lanes["data"]["items"]]
+    # data-bearing first, volumes before mounts; excluded rows are not the app's
+    assert data == ["x_data", "/a -> web:/a", "x/.env"]
+
+
+def test_wiring_lane_caps_items_and_links_the_rest():
+    from del_app.web.apps import _WIRING_LANE_MAX, _wiring
+
+    rows = [{"resource_type": "volume", "resource_display": f"v{i}", "data_loss_risk": "data"} for i in range(9)]
+    data = next(lane for lane in _wiring(rows, []) if lane["key"] == "data")
+    assert len(data["items"]) == _WIRING_LANE_MAX
+    assert data["more"] == 9 - _WIRING_LANE_MAX and data["more_section"] == "docker"
+
+
+def test_app_detail_shows_status_by_scan(authed_client, settings_env):
+    import json
+
+    from del_app.db import get_db, x
+
+    conn = get_db()
+    try:
+        # A scan from before per-app status was recorded is not a tick.
+        x(conn, "INSERT INTO scans (status, stats_json) VALUES ('done', '{\"apps_total\": 1}')")
+        ids = []
+        for status in ("running", "running", "stopped", "stopped"):
+            ids.append(x(
+                conn, "INSERT INTO scans (status, stats_json) VALUES ('done', ?)",
+                (json.dumps({"app_status": {"hist": status}}),),
+            ))
+        x(
+            conn,
+            "INSERT INTO applications (slug, name, status, kind, first_seen, last_seen) VALUES (?,?,?,?,?,?)",
+            ("hist", "Hist", "stopped", "compose", ids[0], ids[-1]),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    body = authed_client.get("/apps/hist").text
+    assert body.count('class="tick tick-') == 4
+    assert "Status by scan" in body
+    assert f"since scan #{ids[2]}" in body
+    assert "How it is wired" in body

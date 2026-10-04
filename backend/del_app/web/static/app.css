@@ -837,6 +837,43 @@ table.job-steps td, table.table-plain td { font-size: var(--t-sm); }
    6  Feature blocks
    ========================================================================= */
 
+/* --- App detail overview: status strip, wiring -------------------------- */
+.overview-block + .overview-block { margin-top: 1.4rem; }
+.overview-block > .section-group-label:first-child { margin-top: 0; }
+.status-strip { display: flex; flex-wrap: wrap; gap: 3px; margin: 0 0 0.45rem; padding: 0; list-style: none; }
+.tick { width: 7px; height: 1.4rem; border-radius: 1px; background: var(--idle-bg); box-shadow: inset 0 0 0 1px var(--rule); }
+.tick-running { background: var(--ok); box-shadow: none; }
+.tick-stopped { background: var(--warn); box-shadow: none; }
+.tick-absent { background: var(--idle); box-shadow: none; }
+.tick:last-child { outline: 1px solid var(--ink-2); outline-offset: 2px; }
+.strip-note { margin: 0; font-size: var(--t-sm); color: var(--ink-2); }
+
+/* Four lanes read left to right like a riser diagram: traffic in, then what
+   runs, then what it keeps. A chalk connector joins neighbouring lanes. */
+.wiring { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 1.6rem; }
+.wiring-lane { position: relative; min-width: 0; padding-top: 0.45rem; border-top: 2px solid var(--rule); }
+.wiring-lane + .wiring-lane::before {
+  content: ""; position: absolute; top: -2px; left: -1.6rem; width: 1.6rem; height: 2px;
+  background: repeating-linear-gradient(90deg, var(--chalk) 0 4px, transparent 4px 8px); opacity: 0.55;
+}
+.wiring-lane + .wiring-lane::after {
+  content: ""; position: absolute; top: -5px; left: -0.45rem; width: 0; height: 0;
+  border: 4px solid transparent; border-left: 6px solid var(--chalk); opacity: 0.8;
+}
+.wiring-entry { border-top-color: var(--chalk); }
+.wiring-data { border-top-color: var(--hazard); }
+.wiring-title { margin: 0 0 0.45rem; font-size: var(--t-xs); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); }
+.wiring-items { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; gap: 0.15rem; }
+.wiring-item { display: grid; grid-template-columns: auto 1fr; align-items: baseline; column-gap: 0.45rem; padding: 0.22rem 0; min-width: 0; }
+.wiring-item .dot { align-self: center; }
+.wiring-item:not(:has(.dot)) .wiring-label { grid-column: 1 / -1; }
+.wiring-label { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.wiring-kind { grid-column: 2; font-size: var(--t-xs); color: var(--ink-3); }
+.wiring-item:not(:has(.dot)) .wiring-kind { grid-column: 1 / -1; }
+.wiring-item.is-data .wiring-kind { color: var(--hazard); }
+.wiring-more { display: inline-block; margin-top: 0.3rem; font-size: var(--t-sm); }
+.wiring-empty { margin: 0; font-size: var(--t-sm); color: var(--ink-3); }
+
 /* --- Dashboard: site plan ----------------------------------------------- */
 .siteplan { margin-bottom: 1rem; padding: 1rem 1.15rem 1.1rem; background: var(--panel); border: 1px solid var(--rule-soft); border-radius: var(--r2); }
 .siteplan-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1.25rem; margin-bottom: 0.85rem; }
@@ -1216,6 +1253,12 @@ a.stat-card:hover { background: var(--panel-2); color: var(--ink); text-decorati
   table.table-plain, table.job-steps { display: block; overflow-x: auto; }
   .app-gallery[data-view="list"] .app-card-meta { flex-basis: 100%; border-left: 0; border-top: 1px solid var(--rule-soft); }
   .lots { grid-template-columns: repeat(auto-fill, minmax(7.4rem, 1fr)); }
+  .wiring { grid-template-columns: repeat(2, minmax(0, 1fr)); row-gap: 1.2rem; }
+  .wiring-lane:nth-child(odd)::before, .wiring-lane:nth-child(odd)::after { display: none; }
+}
+@media (max-width: 1180px) and (min-width: 901px) {
+  .wiring { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .wiring-lane:nth-child(odd)::before, .wiring-lane:nth-child(odd)::after { display: none; }
 }
 @media (min-width: 901px) {
   .table-show-all { display: none; }

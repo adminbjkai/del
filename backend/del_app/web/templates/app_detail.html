@@ -87,46 +87,86 @@
   </div>
 
   <div class="tabpanel panel" id="panel-overview" role="tabpanel" aria-labelledby="tab-overview" hidden>
-    <dl class="kv">
-      <dt>Kind</dt><dd>{{ (app.get('kind') or '—') | replace('_', ' ') }}</dd>
-      <dt>Domains</dt><dd>{{ m.domain_links(app.get('domains')) }}</dd>
-      <dt>Installed</dt>
-      <dd>
-        {% if app.get('installed_bound') %}on or before {% endif %}<span class="dt">{{ format_dt(app.get('installed_at')) }}</span>
-        {% if app.get('installed_source') %}<span class="faint text-sm">({{ app.get('installed_source') }})</span>{% endif %}
-      </dd>
-      <dt>Last changed</dt>
-      <dd>
-        <span class="dt">{{ format_dt(app.get('last_changed_at')) }}</span>
-        {% if app.get('last_changed_source') %}<span class="faint text-sm">({{ app.get('last_changed_source') }})</span>{% endif %}
-      </dd>
-      <dt>First seen by DEL</dt>
-      <dd title="Scan #{{ app.get('first_seen') or '—' }}"><span class="dt">{{ format_dt(app.get('first_seen_at')) }}</span> <span class="faint text-sm">scan #{{ app.get('first_seen') or '—' }}</span></dd>
-      <dt>Last seen by DEL</dt>
-      <dd title="Scan #{{ app.get('last_seen') or '—' }}"><span class="dt">{{ format_dt(app.get('last_seen_at')) }}</span> <span class="faint text-sm">scan #{{ app.get('last_seen') or '—' }}</span></dd>
-      <dt>Manifest</dt><dd>{% if app.get('manifest_path') %}<span class="mono">{{ app.get('manifest_path') }}</span>{% else %}—{% endif %}</dd>
-      <dt>Resources</dt><dd>{{ app.res_count }}{% if app.excluded_count %} <span class="faint">(+{{ app.excluded_count }} excluded, listed for review)</span>{% endif %}</dd>
-    </dl>
-
-    {% if resources_by_type %}
-    <div class="section-group-label">Resources by type</div>
-    <ul class="relation-list">
-      {% for rt in resources_by_type %}
-      <li>
-        <a class="relation-name" href="{% if rt.section %}#tab-{{ rt.section }}{% else %}/resources/{{ rt.type }}{% endif %}">{{ rt.label }}</a>
-        <span class="relation-aside"><span class="count-pill">{{ rt.count }}</span></span>
-      </li>
-      {% endfor %}
-    </ul>
+    {% if history %}
+    <section class="overview-block" aria-labelledby="history-title">
+      <h2 class="section-group-label" id="history-title">Status by scan</h2>
+      <ol class="status-strip" aria-label="Status in the last {{ history.ticks | length }} recorded scans, oldest first">
+        {% for t in history.ticks %}
+        <li class="tick tick-{{ t.status }}" title="Scan #{{ t.scan }} · {{ format_dt(t.started) }} · {{ 'not in inventory' if t.status == 'missing' else t.status }}"><span class="sr-only">Scan {{ t.scan }}: {{ t.status }}</span></li>
+        {% endfor %}
+      </ol>
+      <p class="strip-note">
+        {% set cur = 'not in the inventory' if history.current == 'missing' else history.current %}
+        {% if history.since %}
+          <strong>{{ cur | capitalize }}</strong> since scan #{{ history.since.scan }} <span class="faint">(<span class="dt">{{ format_dt(history.since.started) }}</span>)</span>.
+        {% else %}
+          <strong>{{ cur | capitalize }}</strong> in every recorded scan since #{{ history.first.scan }}.
+        {% endif %}
+        <span class="faint">Status is recorded once per scan.</span>
+      </p>
+    </section>
     {% endif %}
 
-    {% if related_apps %}
-    <div class="section-group-label">Related apps</div>
-    <p class="faint text-sm mb-1">Apps that share at least one resource with this one.</p>
-    <div class="cluster owner-cluster">
-      {% for ra in related_apps %}<a class="chip owner-chip" href="/apps/{{ ra.slug }}">{{ ra.name }}</a>{% endfor %}
-    </div>
-    {% endif %}
+    <section class="overview-block" aria-labelledby="wiring-title">
+      <h2 class="section-group-label" id="wiring-title">How it is wired</h2>
+      <div class="wiring">
+        {% for lane in wiring %}
+        <div class="wiring-lane wiring-{{ lane.key }}">
+          <h3 class="wiring-title">{{ lane.title }}</h3>
+          {% if lane['items'] %}
+          <ul class="wiring-items">
+            {% for it in lane['items'] %}
+            <li class="wiring-item{% if it.data %} is-data{% endif %}"{% if it.title %} title="{{ it.title }}"{% endif %}>
+              {% if it.tone %}<span class="dot dot-{{ it.tone }}" aria-hidden="true"></span>{% endif %}
+              {% if it.href %}<a class="wiring-label" href="{{ it.href }}" target="_blank" rel="noopener noreferrer">{{ it.label }}</a>
+              {% elif it.section %}<a class="wiring-label" href="#tab-{{ it.section }}">{{ it.label }}</a>
+              {% else %}<span class="wiring-label">{{ it.label }}</span>{% endif %}
+              <span class="wiring-kind">{{ it.kind }}{% if it.state and it.state not in ('found', 'listen', 'enabled') %} · {{ it.state }}{% endif %}{% if it.data %} · data{% endif %}{% if it.shared %} · shared{% endif %}</span>
+            </li>
+            {% endfor %}
+          </ul>
+          {% if lane.more %}<a class="wiring-more" href="#tab-{{ lane.more_section or 'readiness' }}">+{{ lane.more }} more</a>{% endif %}
+          {% else %}
+          <p class="wiring-empty">{{ lane.empty }}</p>
+          {% endif %}
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section class="overview-block" aria-labelledby="record-title">
+      <h2 class="section-group-label" id="record-title">Record</h2>
+      <dl class="kv">
+        <dt>Installed</dt>
+        <dd>
+          {% if app.get('installed_bound') %}on or before {% endif %}<span class="dt">{{ format_dt(app.get('installed_at')) }}</span>
+          {% if app.get('installed_source') %}<span class="faint text-sm">({{ app.get('installed_source') }})</span>{% endif %}
+        </dd>
+        <dt>Last changed</dt>
+        <dd>
+          <span class="dt">{{ format_dt(app.get('last_changed_at')) }}</span>
+          {% if app.get('last_changed_source') %}<span class="faint text-sm">({{ app.get('last_changed_source') }})</span>{% endif %}
+        </dd>
+        <dt>First seen by DEL</dt>
+        <dd><span class="dt">{{ format_dt(app.get('first_seen_at')) }}</span> <span class="faint text-sm">scan #{{ app.get('first_seen') or '—' }}</span></dd>
+        <dt>Last seen by DEL</dt>
+        <dd><span class="dt">{{ format_dt(app.get('last_seen_at')) }}</span> <span class="faint text-sm">scan #{{ app.get('last_seen') or '—' }}</span></dd>
+        <dt>Manifest</dt><dd>{% if app.get('manifest_path') %}{{ m.copy_id(app.get('manifest_path'), 200) }}{% else %}—{% endif %}</dd>
+        {% if resources_by_type %}
+        <dt>Resources</dt>
+        <dd class="cluster">
+          {% for rt in resources_by_type %}<a class="chip" href="{% if rt.section %}#tab-{{ rt.section }}{% else %}/resources/{{ rt.type }}{% endif %}">{{ rt.label }} <span class="count-pill">{{ rt.count }}</span></a>{% endfor %}
+          {% if app.excluded_count %}<span class="faint text-sm">+{{ app.excluded_count }} excluded, listed for review</span>{% endif %}
+        </dd>
+        {% endif %}
+        {% if related_apps %}
+        <dt title="Apps that share at least one resource with this one">Related apps</dt>
+        <dd class="cluster owner-cluster">
+          {% for ra in related_apps %}<a class="chip owner-chip" href="/apps/{{ ra.slug }}">{{ ra.name }}</a>{% endfor %}
+        </dd>
+        {% endif %}
+      </dl>
+    </section>
   </div>
 
   {% for section_key, section_title in section_defs %}
