@@ -21,11 +21,11 @@
   var emptyMsg = $("gallery-empty");
   var countEl = $("gallery-visible-count");
   var KEY = "del.appGallery.v1";
-  var ORDER = ["Favorites", "AI & Automation", "Media & Streaming", "Notes & Knowledge", "Productivity",
-    "Files & Data", "Developer Tools", "Infrastructure", "Security & Identity", "Business & Finance",
-    "Utilities", "Other"];
+  // Section order comes from the server (gallery.py _CATEGORY_ORDER).
+  var ORDER = ["Favorites"].concat((gallery.getAttribute("data-category-order") || "").split("|"));
   var DEFAULTS = { view: "grid", density: "comfortable", width: 250, sort: "category", favorites: {}, hidden: {}, categories: {}, order: [] };
-  var prefs = JSON.parse(JSON.stringify(DEFAULTS));
+  function fresh() { return JSON.parse(JSON.stringify(DEFAULTS)); }
+  var prefs = fresh();
   try {
     var stored = JSON.parse(localStorage.getItem(KEY) || "null");
     if (stored && typeof stored === "object") Object.keys(DEFAULTS).forEach(function (k) { if (stored[k] !== undefined) prefs[k] = stored[k]; });
@@ -33,6 +33,7 @@
   var editing = false, dragged = null, collapsed = {};
 
   function save() { try { localStorage.setItem(KEY, JSON.stringify(prefs)); } catch (e) {} }
+  function commit() { save(); render(); }
   function idOf(card) { return card.getAttribute("data-app-id") || ""; }
   function catOf(card) { return prefs.categories[idOf(card)] || card.getAttribute("data-category") || "Other"; }
   function compare(a, b) {
@@ -142,14 +143,14 @@
     if (star) star.addEventListener("click", function () {
       var id = idOf(card);
       if (prefs.favorites[id]) delete prefs.favorites[id]; else prefs.favorites[id] = true;
-      save(); render();
+      commit();
     });
     var catSel = card.querySelector(".gallery-card-category");
-    if (catSel) catSel.addEventListener("change", function () { prefs.categories[idOf(card)] = catSel.value; save(); render(); });
+    if (catSel) catSel.addEventListener("change", function () { prefs.categories[idOf(card)] = catSel.value; commit(); });
     var hiddenCb = card.querySelector(".gallery-card-hidden");
     if (hiddenCb) hiddenCb.addEventListener("change", function () {
       if (hiddenCb.checked) prefs.hidden[idOf(card)] = true; else delete prefs.hidden[idOf(card)];
-      save(); render();
+      commit();
     });
     card.addEventListener("dragstart", function (e) {
       if (!editing) return;
@@ -164,7 +165,7 @@
       prefs.order = Array.prototype.map.call(gallery.querySelectorAll(".app-launch-card"), idOf);
       prefs.sort = "custom";
       if (sortSel) sortSel.value = "custom";
-      save(); render();
+      commit();
     });
   });
   gallery.addEventListener("dragover", function (e) {
@@ -185,7 +186,8 @@
     if (grid) grid.hidden = open;
     if (open) collapsed[name] = true; else delete collapsed[name];
   });
-  if (search) search.addEventListener("input", render);
+  var searchTimer = 0;
+  if (search) search.addEventListener("input", function () { clearTimeout(searchTimer); searchTimer = setTimeout(render, 80); });
   if (searchOp) searchOp.addEventListener("change", render);
   if (category) category.addEventListener("change", render);
   document.querySelectorAll("[data-category-pill]").forEach(function (pill) {
@@ -194,16 +196,18 @@
       render();
     });
   });
-  if (sortSel) sortSel.addEventListener("change", function () { prefs.sort = sortSel.value; save(); render(); });
+  if (sortSel) sortSel.addEventListener("change", function () { prefs.sort = sortSel.value; commit(); });
   document.querySelectorAll("[data-gallery-view]").forEach(function (b) {
-    b.addEventListener("click", function () { prefs.view = b.getAttribute("data-gallery-view"); save(); render(); });
+    b.addEventListener("click", function () { prefs.view = b.getAttribute("data-gallery-view"); commit(); });
   });
+  // Dragging the slider only moves a CSS variable; the choice is saved once.
   if (widthIn) widthIn.addEventListener("input", function () {
     prefs.width = Number(widthIn.value);
     if (widthOut) widthOut.textContent = prefs.width + "px";
-    save(); render();
+    gallery.style.setProperty("--gallery-card-min", prefs.width + "px");
   });
-  if (densitySel) densitySel.addEventListener("change", function () { prefs.density = densitySel.value; save(); render(); });
+  if (widthIn) widthIn.addEventListener("change", save);
+  if (densitySel) densitySel.addEventListener("change", function () { prefs.density = densitySel.value; commit(); });
   if (layoutToggle) layoutToggle.addEventListener("click", function () {
     editing = !editing;
     if (layoutPanel) layoutPanel.hidden = !editing;
@@ -215,7 +219,7 @@
   if (showHidden) showHidden.addEventListener("change", render);
   if (resetBtn) resetBtn.addEventListener("click", function () {
     if (!window.confirm("Reset this browser’s app gallery layout and card preferences?")) return;
-    prefs = JSON.parse(JSON.stringify(DEFAULTS));
+    prefs = fresh();
     save();
     if (search) search.value = "";
     if (category) category.value = "";

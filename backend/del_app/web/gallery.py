@@ -127,6 +127,9 @@ def _gallery_category(slug: str, name: str, domain: str) -> str:
 
     category = _match_category(" ".join((_strip(slug), _strip(name))))
     if category == "Other" and domain:
+        # A bundled icon already says what kind of app the domain is.
+        category = _ICON_CATEGORY.get(_DOMAIN_STATIC_ICONS.get(domain, ""), "Other")
+    if category == "Other" and domain:
         category = _match_category(domain.split(".", 1)[0].lower())
     return category
 
@@ -275,10 +278,15 @@ def _probe_domains(domains: list[str], *, force: bool = False) -> dict[str, dict
 # dialog on top of the gallery — several times over, for a page the operator
 # is already authenticated to. Proxying means DEL absorbs the 401 and simply
 # serves nothing, letting the card fall back to its initial letter.
+#
+# Two cache layers: memory for this process, and one small file per domain
+# next to the database so a restart does not refetch every icon (each miss
+# costs up to five outbound requests). In-flight lookups are shared per domain.
 _ICON_CACHE: dict[str, dict[str, Any]] = {}
 _ICON_LOCK = threading.Lock()
-_ICON_TTL = 86400          # a favicon changes about never
-_ICON_NEGATIVE_TTL = 3600  # retry failures sooner than successes
+_ICON_INFLIGHT: dict[str, threading.Lock] = {}
+_ICON_TTL = 7 * 86400          # a favicon changes about never
+_ICON_NEGATIVE_TTL = 6 * 3600  # retry failures sooner than successes
 _ICON_TIMEOUT = 4.0
 _ICON_MAX_BYTES = 131072
 _ICON_CACHE_MAX = 256
@@ -327,6 +335,23 @@ _DOMAIN_STATIC_ICONS = {
     "tbl.bjk.ai": "table.svg",
     "n50.bjk.ai": "notion.svg",
     "vnce.bjk.ai": "vnc.svg",
+}
+
+
+# Bundled icons double as a category hint for names no keyword catches.
+_ICON_CATEGORY = {
+    "iptv.svg": "Media & Streaming",
+    "fileshare.svg": "Files & Data",
+    "monitor.svg": "Infrastructure",
+    "vnc.svg": "Infrastructure",
+    "installer.svg": "Developer Tools",
+    "notion.svg": "Notes & Knowledge",
+    "b64.svg": "Utilities",
+    "pdf64.svg": "Utilities",
+    "img2.svg": "Utilities",
+    "editor.svg": "Utilities",
+    "json.svg": "Utilities",
+    "table.svg": "Utilities",
 }
 
 
@@ -419,25 +444,72 @@ def _find_icon(domain: str) -> tuple[bytes, str] | None:
     return None
 
 
-def _cached_icon(domain: str) -> tuple[bytes, str] | None:
-    now = time.monotonic()
-    with _ICON_LOCK:
-        entry = _ICON_CACHE.get(domain)
-        if entry and now < entry["expires"]:
-            return entry["value"]
+def _icon_disk_dir() -> Path:
+    return Path(get_settings().db_path).parent / "icon-cache"
 
-    value = _fetch_icon(domain)
 
+def _icon_disk_path(domain: str) -> Path:
+    # Domains are validated hostnames (see app_icon), safe as file names.
+    return _icon_disk_dir() / f"{domain}.icon"
+
+
+def _disk_icon(domain: str) -> tuple[bool, tuple[bytes, str] | None, float]:
+    """(found, value, age_seconds) from the on-disk cache. A file holds the
+    content type, a newline, then the body; an empty file is a cached miss."""
+    try:
+        path = _icon_disk_path(domain)
+        age = time.time() - path.stat().st_mtime
+        raw = path.read_bytes()
+    except OSError:
+        return False, None, 0.0
+    if not raw:
+        return True, None, age
+    ctype, _, body = raw.partition(b"\n")
+    return True, (body, ctype.decode("ascii", "replace")), age
+
+
+def _store_disk_icon(domain: str, value: tuple[bytes, str] | None) -> None:
+    try:
+        path = _icon_disk_path(domain)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        tmp = path.with_suffix(".tmp")
+        tmp.write_bytes(b"" if value is None else value[1].encode("ascii", "replace") + b"\n" + value[0])
+        tmp.replace(path)
+    except OSError:
+        logger.debug("could not persist icon for %s", domain, exc_info=True)
+
+
+def _remember_icon(domain: str, value: tuple[bytes, str] | None, ttl: float) -> None:
     with _ICON_LOCK:
         _ICON_CACHE.pop(domain, None)
         # Insertion order is age order: evict the oldest entries, not all.
         while len(_ICON_CACHE) >= _ICON_CACHE_MAX:
             del _ICON_CACHE[next(iter(_ICON_CACHE))]
-        _ICON_CACHE[domain] = {
-            "value": value,
-            "expires": now + (_ICON_TTL if value else _ICON_NEGATIVE_TTL),
-        }
-    return value
+        _ICON_CACHE[domain] = {"value": value, "expires": time.monotonic() + ttl}
+
+
+def _cached_icon(domain: str) -> tuple[bytes, str] | None:
+    with _ICON_LOCK:
+        entry = _ICON_CACHE.get(domain)
+        if entry and time.monotonic() < entry["expires"]:
+            return entry["value"]
+        inflight = _ICON_INFLIGHT.setdefault(domain, threading.Lock())
+
+    with inflight:
+        # Another request may have filled the cache while this one waited.
+        with _ICON_LOCK:
+            entry = _ICON_CACHE.get(domain)
+            if entry and time.monotonic() < entry["expires"]:
+                return entry["value"]
+        found, value, age = _disk_icon(domain)
+        ttl = _ICON_TTL if value else _ICON_NEGATIVE_TTL
+        if not (found and age < ttl):
+            value = _fetch_icon(domain)
+            ttl = _ICON_TTL if value else _ICON_NEGATIVE_TTL
+            age = 0.0
+            _store_disk_icon(domain, value)
+        _remember_icon(domain, value, ttl - age)
+        return value
 
 
 def _loopback_targets(upstreams: list[dict] | None) -> list[tuple[str, int]]:
@@ -631,6 +703,7 @@ def view_apps(
         response,
         apps=apps,
         categories=categories,
+        all_categories=[c for c in _CATEGORY_ORDER if c != "Favorites"],
         candidate_count=len(owners),
         unavailable=unavailable,
         excluded_count=len(unavailable),

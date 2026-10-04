@@ -263,9 +263,10 @@ def test_view_apps_only_renders_current_enabled_healthy_domains(
     assert 'href="/view-apps"' in resp.text
 
 
-def test_icon_with_malformed_data_uri_is_a_cached_miss(monkeypatch):
+def test_icon_with_malformed_data_uri_is_a_cached_miss(monkeypatch, tmp_path):
     """A page whose <link rel=icon> holds a broken data: URI must not turn
     /app-icon into a 500 that is retried on every gallery view."""
+    monkeypatch.setattr(gallery, "_icon_disk_dir", lambda: tmp_path)
     calls = []
 
     def fake_get(url, accept, limit):
@@ -280,6 +281,35 @@ def test_icon_with_malformed_data_uri_is_a_cached_miss(monkeypatch):
     first = len(calls)
     assert gallery._cached_icon("sloppy.bjk.ai") is None
     assert len(calls) == first  # the miss was cached
+    gallery._ICON_CACHE.clear()
+
+
+def test_icons_survive_a_restart_on_disk(monkeypatch, tmp_path):
+    """A fetched icon is written next to the database, so a fresh process
+    (empty memory cache) serves it without any outbound request."""
+    monkeypatch.setattr(gallery, "_icon_disk_dir", lambda: tmp_path)
+    calls = []
+
+    def fake_get(url, accept, limit):
+        calls.append(url)
+        if url == "https://persist.bjk.ai/favicon.ico":
+            return 200, "image/x-icon", b"\x00\x00\x01\x00icon-bytes"
+        return None
+
+    monkeypatch.setattr(gallery, "_http_get", fake_get)
+    gallery._ICON_CACHE.clear()
+    first = gallery._cached_icon("persist.bjk.ai")
+    assert first == (b"\x00\x00\x01\x00icon-bytes", "image/x-icon")
+    fetched = len(calls)
+    gallery._ICON_CACHE.clear()  # as after a restart
+    assert gallery._cached_icon("persist.bjk.ai") == first
+    assert len(calls) == fetched
+    # A miss is remembered on disk too.
+    assert gallery._cached_icon("nothing.bjk.ai") is None
+    misses = len(calls)
+    gallery._ICON_CACHE.clear()
+    assert gallery._cached_icon("nothing.bjk.ai") is None
+    assert len(calls) == misses
     gallery._ICON_CACHE.clear()
 
 
@@ -1633,6 +1663,10 @@ def test_a_real_enabled_app_vhost_is_still_actionable():
     ("portracker", "portracker.bjk.ai", "Infrastructure"),
     ("twenty", "twenty.bjk.ai", "Business & Finance"),
     ("homepage", "homepage.bjk.ai", "Infrastructure"),
+    # no keyword hit: the bundled icon for the domain decides
+    ("lives", "lives.bjk.ai", "Media & Streaming"),
+    ("fs2", "fs2.bjk.ai", "Files & Data"),
+    ("mntr", "montr.bjk.ai", "Infrastructure"),
 ])
 def test_gallery_categories_for_previously_misfiled_apps(slug, domain, expected):
     assert gallery._gallery_category(slug, slug.title(), domain) == expected

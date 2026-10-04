@@ -83,7 +83,7 @@
 </div>
 
 {% if apps %}
-<div id="app-gallery" class="app-gallery" data-view="grid" data-density="comfortable">
+<div id="app-gallery" class="app-gallery" data-view="grid" data-density="comfortable" data-category-order="{{ all_categories | join('|') }}">
   {% for category in categories %}
   <section class="gallery-section" data-gallery-section="{{ category }}">
     <div class="gallery-section-heading">
@@ -124,7 +124,7 @@
         <div class="app-card-editor" hidden>
           <label>Category
             <select class="gallery-card-category gallery-select">
-              {% for option in ['AI & Automation', 'Media & Streaming', 'Notes & Knowledge', 'Productivity', 'Files & Data', 'Developer Tools', 'Infrastructure', 'Security & Identity', 'Business & Finance', 'Utilities', 'Other'] %}
+              {% for option in all_categories %}
               <option value="{{ option }}"{% if app.category == option %} selected{% endif %}>{{ option }}</option>
               {% endfor %}
             </select>
