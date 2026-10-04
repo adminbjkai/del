@@ -175,7 +175,7 @@
   <div class="tabpanel" id="panel-{{ section_key }}" role="tabpanel" aria-labelledby="tab-{{ section_key }}" hidden>
     <table class="table" id="app-{{ section_key }}-table" data-empty="No resources in this section." data-page-size="25">
       <caption class="sr-only">{{ section_title }} resources associated with this application.</caption>
-      <thead><tr><th scope="col">Resource</th>{% if section_key in ('shared', 'files', 'processes', 'docker', 'systemd') %}<th scope="col">Type</th>{% endif %}{% if section_key == 'docker' %}<th scope="col">Host port(s)</th><th scope="col">Container port(s)</th>{% endif %}<th scope="col">Confidence</th><th scope="col">Risk</th><th scope="col">Removal</th><th scope="col" data-nosort>Review</th></tr></thead>
+      <thead><tr><th scope="col">Resource</th>{% if section_key in ('shared', 'files', 'processes', 'docker', 'systemd') %}<th scope="col">Type</th>{% endif %}{% if section_key == 'docker' %}<th scope="col" title="Host port → container port">Ports</th>{% endif %}<th scope="col">Confidence</th><th scope="col">Risk</th><th scope="col">Removal</th><th scope="col" data-nosort>Review</th></tr></thead>
       <tbody>
         {% for a in items %}
         <tr>
@@ -185,9 +185,7 @@
           </td>
           {% if section_key in ('shared', 'files', 'processes', 'docker', 'systemd') %}<td data-filter-value="{{ a.get('resource_type') }}">{{ resource_type_label(a.get('resource_type'), singular=true) }}</td>{% endif %}
           {% if section_key == 'docker' %}
-          {% set mappings = a.get('port_mappings') %}
-          <td>{{ mappings | map(attribute='host') | list | join(', ') if mappings else '—' }}</td>
-          <td>{{ mappings | map(attribute='container') | list | join(', ') if mappings else '—' }}</td>
+          {{ m.ports_cell(a.get('port_mappings')) }}
           {% endif %}
           <td data-filter-value="{{ a.get('level') }}" data-sort-value="{{ a.get('confidence') }}">{{ m.confidence(a) }}</td>
           <td data-filter-value="{{ a.get('data_loss_risk') }}">{{ a.get('data_loss_risk') or '—' }}</td>

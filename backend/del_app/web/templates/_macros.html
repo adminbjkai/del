@@ -25,6 +25,17 @@
   {% if value %}<span class="mono trunc" title="{{ value }}">{{ value }}</span>{% else %}—{% endif %}
 {%- endmacro %}
 
+{# Published ports as "host → container" (an unpublished port shows alone),
+   one per line; sorts by the first host port. #}
+{% macro ports_cell(mappings) -%}
+  {% set first = (mappings or [{}])[0] %}
+  <td class="nowrap" data-sort-value="{{ first.get('host') or '' }}">
+    {%- if mappings -%}
+      {%- for pm in mappings -%}{% if not loop.first %}<br>{% endif %}{% if pm.get('host') %}{{ pm.get('host') }} <span class="faint">→</span> {% endif %}<span class="{{ 'faint' if pm.get('host') else '' }}">{{ pm.get('container') }}</span>{%- endfor -%}
+    {%- else -%}—{%- endif -%}
+  </td>
+{%- endmacro %}
+
 {% macro joinlist(items, sep=', ') -%}
   {% if items %}{{ items | join(sep) }}{% else %}—{% endif %}
 {%- endmacro %}

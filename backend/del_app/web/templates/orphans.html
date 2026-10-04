@@ -78,17 +78,20 @@
   </summary>
   <div class="section-body">
     <button type="button" class="btn btn-sm btn-ghost" data-export-table="orphans-{{ g.type }}-table" title="Export the filtered rows as CSV">Export CSV</button>
-    {# Volumes (and some others) use the key as the display name: skip the
-       duplicate column when no row differs. #}
-    {% set ns = namespace(key_differs=false) %}
-    {% for r in g.rows %}{% if r.display and r.display != r.key %}{% set ns.key_differs = true %}{% endif %}{% endfor %}
+    {# Volumes use the key as the display name and directories the key as the
+       path: skip a column that would only repeat another on every row. #}
+    {% set ns = namespace(key_differs=false, path_differs=false) %}
+    {% for r in g.rows %}
+      {% if r.display and r.display != r.key %}{% set ns.key_differs = true %}{% endif %}
+      {% if r.path and r.path != r.key %}{% set ns.path_differs = true %}{% endif %}
+    {% endfor %}
     <table id="orphans-{{ g.type }}-table" class="table" data-empty="No orphaned {{ g.label|lower }} in this view. Primary: run a scan. Secondary: show system and expected too." data-page-size="25">
       <caption class="sr-only">Unassociated {{ g.label|lower }} from the latest scan, with why each one is listed.</caption>
       <thead>
         <tr>
           <th scope="col">Display</th>
           {% if ns.key_differs %}<th scope="col">Key</th>{% endif %}
-          <th scope="col">Path</th>
+          {% if ns.path_differs %}<th scope="col">Path</th>{% endif %}
           <th scope="col">State</th>
           <th scope="col">Class</th>
           <th scope="col">Why listed</th>
@@ -108,7 +111,7 @@
             {% endif %}
           </td>
           {% if ns.key_differs %}<td>{{ m.trunc(r.key) }}</td>{% endif %}
-          <td>{{ m.trunc(r.path) }}</td>
+          {% if ns.path_differs %}<td>{{ m.trunc(r.path) }}</td>{% endif %}
           <td data-filter-value="{{ r.state }}">{{ r.state or '—' }}</td>
           <td data-filter-value="{{ r.bucket_label }}">
             {% if r.bucket == 'actionable' %}

@@ -93,7 +93,7 @@
 {% if res_type == 'container' %}
 <table id="{{ table_id }}" class="table" data-empty="{{ empty }}"{% if prefill %} data-prefill="{{ prefill }}"{% endif %}>
   <caption class="sr-only">{{ res_label }} from the latest scan, with the application(s) that own each one.</caption>
-  <thead><tr><th scope="col">Name</th><th scope="col">State/health</th><th scope="col">Image</th><th scope="col">Host port(s)</th><th scope="col">Container port(s)</th><th scope="col">Compose project</th><th scope="col">Owner app(s)</th><th scope="col">Shared</th>{% if ask_rows %}<th scope="col" data-nosort>Ask</th>{% endif %}</tr></thead>
+  <thead><tr><th scope="col">Name</th><th scope="col">State/health</th><th scope="col">Image</th><th scope="col" title="Host port → container port">Ports</th><th scope="col">Compose project</th><th scope="col">Owner app(s)</th><th scope="col">Shared</th>{% if ask_rows %}<th scope="col" data-nosort>Ask</th>{% endif %}</tr></thead>
   <tbody>
     {% for r in rows %}
     {% set mappings = r.data.get('port_mappings') %}
@@ -108,8 +108,7 @@
         {% endif %}
       </td>
       <td>{{ m.trunc(r.data.get('image')) }}</td>
-      <td>{{ mappings | map(attribute='host') | list | join(', ') if mappings else '—' }}</td>
-      <td>{{ mappings | map(attribute='container') | list | join(', ') if mappings else '—' }}</td>
+      {{ m.ports_cell(mappings) }}
       <td>{{ r.data.get('compose_project') or '—' }}</td>
       <td>{{ m.owner_cell(r) }}</td>
       <td data-filter-value="{{ 'yes' if r.shared else 'no' }}">{% if r.shared %}<span class="badge badge-amber">shared</span>{% else %}no{% endif %}</td>
@@ -148,7 +147,7 @@
     {% for r in rows %}
     {% set using = r.data.get('containers_using') or [] %}
     <tr>
-      <td>{{ r.display or r.key }}</td>
+      <td>{{ m.trunc(r.display or r.key) }}</td>
       <td>{{ m.trunc(r.path or r.data.get('mountpoint')) }}</td>
       <td>{{ m.joinlist(using) }}</td>
       <td data-filter-value="{{ 'orphan' if (r.data.get('orphan_candidate') or not using) else 'no' }}">{% if r.data.get('orphan_candidate') or not using %}<span class="badge badge-amber">orphan</span>{% else %}no{% endif %}</td>
@@ -280,9 +279,11 @@
   <tbody>
     {% for r in rows %}
     <tr>
-      <td class="mono">{{ r.data.get('schedule') or '—' }}</td>
+      {# run-parts scripts (/etc/cron.daily/...) carry a frequency and a
+         script path instead of a crontab schedule and command line. #}
+      <td class="mono">{{ r.data.get('schedule') or r.data.get('frequency') or '—' }}</td>
       <td data-filter-value="{{ r.data.get('user') }}">{{ r.data.get('user') or '—' }}</td>
-      <td>{{ m.trunc(r.data.get('command')) }}</td>
+      <td>{{ m.trunc(r.data.get('command') or (r.path if r.data.get('script') else none)) }}</td>
       <td>{{ m.trunc(r.data.get('source')) }}</td>
       <td>{{ m.owner_cell(r) }}</td>
     </tr>

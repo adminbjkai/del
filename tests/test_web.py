@@ -2810,3 +2810,29 @@ def test_settings_page_shows_scan_trend(authed_client, settings_env):
     body = authed_client.get("/settings").text
     assert body.count('<figure class="trend">') == 3
     assert "Applications over the last 3 completed scans" in body
+
+
+def test_cron_table_shows_run_parts_scripts(authed_client, settings_env):
+    """/etc/cron.daily scripts have a frequency and a script, not a crontab
+    schedule and command; the table must not render them as dashes."""
+    import json
+
+    from del_app.db import get_db, x
+
+    conn = get_db()
+    try:
+        scan_id = x(conn, "INSERT INTO scans (status) VALUES ('done')")
+        x(
+            conn,
+            "INSERT INTO resources (type, key, display, path, state, data_json, first_seen, last_seen) "
+            "VALUES ('cron_entry', ?, ?, ?, 'found', ?, ?, ?)",
+            ("/etc/cron.daily/logrotate", "[daily] logrotate", "/etc/cron.daily/logrotate",
+             json.dumps({"source": "/etc/cron.daily", "frequency": "daily", "script": "logrotate"}),
+             scan_id, scan_id),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+    body = authed_client.get("/resources/cron_entry").text
+    assert '<td class="mono">daily</td>' in body
+    assert "/etc/cron.daily/logrotate" in body

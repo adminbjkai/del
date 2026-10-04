@@ -758,13 +758,13 @@ table.table { width: 100%; border-collapse: separate; border-spacing: 0; font-va
 .table caption { text-align: left; }
 .table th {
   position: sticky; top: 0; z-index: 2;
-  height: 2.2rem; padding: 0 0.7rem;
+  height: 2.2rem; padding: 0 0.6rem;
   background: var(--panel-2); border-bottom: 1px solid var(--rule);
   color: var(--ink-2); font-size: var(--t-sm); font-weight: 600; text-align: left; white-space: nowrap;
 }
 .table-block .table thead th:first-child { border-top-left-radius: 0; }
 .table td {
-  padding: 0.42rem 0.7rem; border-bottom: 1px solid var(--rule-soft);
+  padding: 0.42rem 0.6rem; border-bottom: 1px solid var(--rule-soft);
   vertical-align: middle; font-size: var(--t-md); overflow-wrap: break-word;
 }
 .table tbody tr:last-child td { border-bottom: 0; }
@@ -775,9 +775,15 @@ table.table { width: 100%; border-collapse: separate; border-spacing: 0; font-va
 .table .row-muted td { color: var(--ink-3); }
 .table .row-danger td:first-child { box-shadow: inset 3px 0 0 var(--hazard); }
 .table .row-warning td:first-child { box-shadow: inset 3px 0 0 var(--warn); }
-.table .trunc { display: inline-block; max-width: 20rem; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; vertical-align: bottom; }
+/* Long machine values: one line, ellipsis, but able to shrink with the column
+   (break-all keeps the min-content width small) so tables fit instead of
+   scrolling sideways. */
+.table .trunc {
+  display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 1; line-clamp: 1;
+  overflow: hidden; word-break: break-all; min-width: 6rem; max-width: 26rem;
+}
 .table td.nowrap { white-space: nowrap; }
-.table td.td-prose { min-width: 16rem; }
+.table td.td-prose { min-width: 14rem; }
 .table .muted.mono, .table .mono { font-size: 0.82rem; }
 html[data-density="compact"] .table td { padding-top: 0.22rem; padding-bottom: 0.22rem; font-size: var(--t-sm); }
 html[data-density="compact"] .table th { height: 1.95rem; }
@@ -797,14 +803,18 @@ html[data-density="compact"] .table th { height: 1.95rem; }
 th[aria-sort="ascending"] .th-sort-btn, th[aria-sort="descending"] .th-sort-btn { color: var(--ink); }
 th[aria-sort="ascending"] .th-sort-btn::after { opacity: 1; transform: rotate(-135deg) translate(-1px, -1px); }
 th[aria-sort="descending"] .th-sort-btn::after { opacity: 1; }
+/* The filter button overlays the header's end instead of reserving width in
+   every column; it shows on hover/focus, or stays when a filter is active. */
 .th-filter-btn {
-  display: inline-grid; place-items: center; width: 1.45rem; height: 1.45rem; margin-left: 0.1rem;
-  border: 0; border-radius: var(--r1); background: none; color: var(--ink-3); cursor: pointer; opacity: 0;
+  position: absolute; right: 0.3rem; top: 50%; transform: translateY(-50%);
+  display: inline-grid; place-items: center; width: 1.45rem; height: 1.45rem;
+  border: 0; border-radius: var(--r1); background: var(--panel-2); color: var(--ink-3); cursor: pointer; opacity: 0;
   transition: opacity var(--ease);
 }
+th.num .th-filter-btn { right: auto; left: 0.3rem; }
 .th-filter-btn .ico { width: 0.85rem; height: 0.85rem; }
 th:hover .th-filter-btn, .th-filter-btn:focus-visible, .th-filter-btn[aria-expanded="true"] { opacity: 1; }
-.th-filter-btn:hover { background: var(--panel); color: var(--ink); }
+.th-filter-btn:hover { background: var(--panel); color: var(--ink); box-shadow: 0 0 0 1px var(--rule); }
 .th-filter-btn.is-active { opacity: 1; color: var(--chalk); background: var(--chalk-soft); }
 .th-resizer { position: absolute; top: 0; right: 0; bottom: 0; width: 6px; cursor: col-resize; }
 .th-resizer:hover { background: var(--chalk-soft); }
@@ -1282,6 +1292,18 @@ a.stat-card:hover { background: var(--panel-2); color: var(--ink); text-decorati
   .gallery-toolbar > * { flex: 1 1 100%; }
   .gallery-grid { grid-template-columns: 1fr; }
 }
+
+/* Page-to-page navigation crossfades the content while the sidebar and the
+   right rail stay put (same-origin, Chromium/Safari; others just navigate). */
+@media (prefers-reduced-motion: no-preference) {
+  @view-transition { navigation: auto; }
+  .sidebar { view-transition-name: del-sidebar; }
+  .glossary-rail { view-transition-name: del-rail; }
+  ::view-transition-old(root) { animation: 90ms ease-out both vt-out; }
+  ::view-transition-new(root) { animation: 160ms cubic-bezier(0.2, 0, 0, 1) 40ms both vt-in; }
+}
+@keyframes vt-out { to { opacity: 0; } }
+@keyframes vt-in { from { opacity: 0; transform: translateY(4px); } }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: 0.01ms !important; animation-iteration-count: 1 !important; transition-duration: 0.01ms !important; scroll-behavior: auto !important; }
