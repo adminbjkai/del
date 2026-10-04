@@ -20,6 +20,52 @@ logger = logging.getLogger("del_app.web.settings")
 
 router = APIRouter()
 
+_TREND_SCANS = 90
+_TREND_W, _TREND_H = 240.0, 48.0
+_TREND_SERIES = (
+    ("apps_total", "Applications", "line", ""),
+    ("resources_total", "Resources", "line", ""),
+    ("duration_seconds", "Scan time", "bars", "s"),
+)
+
+
+def _scan_trend(rows: list[dict]) -> list[dict]:
+    """Small multiples over recent completed scans (oldest first): one SVG-
+    ready series per figure scans record in stats_json. Failed scans and
+    scans missing a figure are left out of that series, never drawn as 0."""
+    out = []
+    for key, label, mark, unit in _TREND_SERIES:
+        pts = [
+            (r["id"], r.get("started"), float(r["stats"][key]))
+            for r in rows
+            if isinstance((r.get("stats") or {}).get(key), (int, float))
+        ]
+        if len(pts) < 2:
+            continue
+        values = [v for _, _, v in pts]
+        lo, hi = min(values), max(values)
+        # Lines get a floor below the minimum so small changes stay visible;
+        # bars start at zero so their heights compare honestly.
+        base = 0.0 if mark == "bars" else lo - max((hi - lo) * 0.25, 1.0)
+        span = (hi - base) or 1.0
+        step = _TREND_W / len(pts)
+        marks = []
+        for i, (sid, started, v) in enumerate(pts):
+            h = (v - base) / span * (_TREND_H - 4)
+            marks.append({
+                "scan": sid, "started": started, "value": v,
+                "x": round(i * step, 2), "w": round(step, 2),
+                "cx": round(i * step + step / 2, 2), "y": round(_TREND_H - h, 2), "h": round(h, 2),
+            })
+        out.append({
+            "key": key, "label": label, "mark": mark, "unit": unit,
+            "latest": values[-1], "lo": lo, "hi": hi, "count": len(pts),
+            "first_scan": pts[0][0], "marks": marks,
+            "points": " ".join(f"{m['cx']},{m['y']}" for m in marks),
+            "w": _TREND_W, "h": _TREND_H,
+        })
+    return out
+
 
 @router.get("/settings", response_class=HTMLResponse)
 def settings_view(
@@ -29,9 +75,14 @@ def settings_view(
     conn = get_db(read_snapshot=True)
     try:
         recent_scans = _rows(q(conn, "SELECT * FROM scans ORDER BY id DESC LIMIT 25"))
+        trend_rows = _rows(q(
+            conn,
+            "SELECT id, started, stats_json FROM scans WHERE status = 'done' ORDER BY id DESC LIMIT ?",
+            (_TREND_SCANS,),
+        ))
     finally:
         conn.close()
-    for scan in recent_scans:
+    for scan in recent_scans + trend_rows:
         scan["stats"] = _json_or(scan.get("stats_json"), {})
     return _render(
         "settings.html",
@@ -40,6 +91,7 @@ def settings_view(
         settings=settings.model_dump(),
         scan_interval_hours=settings.scan_interval_hours,
         recent_scans=recent_scans,
+        trend=_scan_trend(list(reversed(trend_rows))),
         assistant_status=assistant_web.current_status(),
         user=user,
     )

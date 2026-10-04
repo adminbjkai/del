@@ -874,6 +874,20 @@ table.job-steps td, table.table-plain td { font-size: var(--t-sm); }
 .wiring-more { display: inline-block; margin-top: 0.3rem; font-size: var(--t-sm); }
 .wiring-empty { margin: 0; font-size: var(--t-sm); color: var(--ink-3); }
 
+/* --- Settings: scan trend small multiples ------------------------------- */
+.trend-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); gap: 0.8rem; margin: 0.2rem 0 1rem; }
+.trend { margin: 0; padding: 0.65rem 0.75rem 0.5rem; background: var(--well); border: 1px solid var(--rule-soft); border-radius: var(--r2); }
+.trend figcaption { display: flex; align-items: baseline; justify-content: space-between; gap: 0.5rem; margin-bottom: 0.35rem; }
+.trend-label { font-size: var(--t-sm); color: var(--ink-2); }
+.trend-value { font-size: var(--t-xl); font-weight: 600; font-variant-numeric: tabular-nums; }
+.trend-chart { display: block; width: 100%; height: 3.2rem; overflow: visible; }
+.trend-line { fill: none; stroke: var(--chalk); stroke-width: 1.6; stroke-linejoin: round; }
+.trend-bar { fill: var(--idle); opacity: 0.55; }
+.trend-bar.is-latest { fill: var(--chalk); opacity: 1; }
+.trend-hit { fill: transparent; stroke: none; }
+.trend-hit:hover { fill: var(--chalk-soft); }
+.trend-range { display: flex; justify-content: space-between; margin-top: 0.25rem; font-size: var(--t-xs); color: var(--ink-3); font-variant-numeric: tabular-nums; }
+
 /* --- Dashboard: site plan ----------------------------------------------- */
 .siteplan { margin-bottom: 1rem; padding: 1rem 1.15rem 1.1rem; background: var(--panel); border: 1px solid var(--rule-soft); border-radius: var(--r2); }
 .siteplan-head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.5rem 1.25rem; margin-bottom: 0.85rem; }

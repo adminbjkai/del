@@ -27,6 +27,28 @@
       rescans while the resource's safety classification stays the same. A scan left running by a restart
       is marked failed when the service starts.
     </p>
+    {% if trend %}
+    <div class="trend-grid">
+      {% for t in trend %}
+      <figure class="trend">
+        <figcaption>
+          <span class="trend-label">{{ t.label }}</span>
+          <b class="trend-value">{{ "%g" | format(t.latest) }}{{ t.unit }}</b>
+        </figcaption>
+        <svg class="trend-chart" viewBox="0 0 {{ t.w }} {{ t.h }}" preserveAspectRatio="none" role="img"
+             aria-label="{{ t.label }} over the last {{ t.count }} completed scans: from {{ '%g' | format(t.lo) }} to {{ '%g' | format(t.hi) }}{{ t.unit }}, latest {{ '%g' | format(t.latest) }}{{ t.unit }}">
+          {% if t.mark == 'bars' %}
+            {% for p in t.marks %}<rect class="trend-bar{% if loop.last %} is-latest{% endif %}" x="{{ p.x }}" y="{{ p.y }}" width="{{ [p.w - 1, 0.5] | max }}" height="{{ p.h }}"/>{% endfor %}
+          {% else %}
+            <polyline class="trend-line" points="{{ t.points }}" vector-effect="non-scaling-stroke"/>
+          {% endif %}
+          {% for p in t.marks %}<rect class="trend-hit" x="{{ p.x }}" y="0" width="{{ p.w }}" height="{{ t.h }}"><title>Scan #{{ p.scan }} · {{ format_dt(p.started) }} · {{ "%g" | format(p.value) }}{{ t.unit }}</title></rect>{% endfor %}
+        </svg>
+        <div class="trend-range"><span>#{{ t.first_scan }}</span><span>{{ "%g" | format(t.lo) }}–{{ "%g" | format(t.hi) }}{{ t.unit }}</span><span>now</span></div>
+      </figure>
+      {% endfor %}
+    </div>
+    {% endif %}
     <table class="table" id="scan-history" data-empty="No scans yet." data-page-size="25">
       <caption class="sr-only">The most recent inventory scans and their outcome.</caption>
       <thead><tr><th scope="col">Scan</th><th scope="col">Started</th><th scope="col">Finished</th><th scope="col">Status</th><th scope="col">Outcome</th></tr></thead>

@@ -2774,3 +2774,39 @@ def test_app_detail_shows_status_by_scan(authed_client, settings_env):
     assert "Status by scan" in body
     assert f"since scan #{ids[2]}" in body
     assert "How it is wired" in body
+
+
+def test_scan_trend_skips_missing_figures_and_bars_start_at_zero():
+    from del_app.web.settings import _scan_trend
+
+    rows = [
+        {"id": 1, "started": "2026-10-01 00:00:00", "stats": {"apps_total": 10, "duration_seconds": 4.0}},
+        {"id": 2, "started": "2026-10-02 00:00:00", "stats": {}},  # e.g. no stats recorded
+        {"id": 3, "started": "2026-10-03 00:00:00", "stats": {"apps_total": 12, "duration_seconds": 8.0}},
+    ]
+    by_key = {t["key"]: t for t in _scan_trend(rows)}
+    assert "resources_total" not in by_key  # fewer than two points: no chart
+    apps = by_key["apps_total"]
+    assert [p["scan"] for p in apps["marks"]] == [1, 3]  # scan 2 is left out, not drawn as 0
+    assert apps["latest"] == 12 and apps["lo"] == 10 and apps["hi"] == 12
+    bars = by_key["duration_seconds"]["marks"]
+    # zero-based bars: 8 s is twice as tall as 4 s
+    assert abs(bars[1]["h"] - 2 * bars[0]["h"]) < 0.01
+
+
+def test_settings_page_shows_scan_trend(authed_client, settings_env):
+    import json
+
+    from del_app.db import get_db, x
+
+    conn = get_db()
+    try:
+        for n in (5, 6, 7):
+            x(conn, "INSERT INTO scans (status, stats_json) VALUES ('done', ?)",
+              (json.dumps({"apps_total": n, "resources_total": n * 10, "duration_seconds": 1.5}),))
+        conn.commit()
+    finally:
+        conn.close()
+    body = authed_client.get("/settings").text
+    assert body.count('<figure class="trend">') == 3
+    assert "Applications over the last 3 completed scans" in body
