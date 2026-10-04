@@ -200,6 +200,46 @@ def require_user(request: Request) -> User:
     return user
 
 
+def _request_token_hash(request: Request) -> str | None:
+    cookie = request.cookies.get(SESSION_COOKIE_NAME)
+    token = unsign_token(cookie) if cookie else None
+    return hashlib.sha256(token.encode()).hexdigest() if token else None
+
+
+def list_sessions(request: Request, user_id: int) -> list[dict]:
+    """This user's unexpired sessions, newest first; the request's own is
+    flagged `current`. Token hashes never leave this function."""
+    current = _request_token_hash(request)
+    conn = get_db()
+    try:
+        rows = q(
+            conn,
+            "SELECT token_hash, created, expires, ip FROM sessions "
+            "WHERE user_id = ? AND expires > ? ORDER BY created DESC",
+            (user_id, datetime.utcnow().isoformat()),
+        )
+    finally:
+        conn.close()
+    return [
+        {"created": r["created"], "expires": r["expires"], "ip": r["ip"], "current": r["token_hash"] == current}
+        for r in rows
+    ]
+
+
+def end_other_sessions(request: Request, user_id: int) -> int:
+    """Sign this user out everywhere except the requesting browser."""
+    current = _request_token_hash(request)
+    conn = get_db()
+    try:
+        cur = conn.execute(
+            "DELETE FROM sessions WHERE user_id = ? AND token_hash != ?", (user_id, current or ""),
+        )
+        conn.commit()
+        return cur.rowcount
+    finally:
+        conn.close()
+
+
 def logout_session(request: Request, resp: Response) -> None:
     """Delete the session row and clear the cookie."""
     cookie = request.cookies.get(SESSION_COOKIE_NAME)

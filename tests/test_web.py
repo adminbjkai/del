@@ -2859,3 +2859,38 @@ def test_next_scan_is_finish_plus_interval_or_due():
             assert _next_scan(conn, fresh, 0) is None  # auto-scan off
         finally:
             conn.close()
+
+
+def test_settings_lists_sessions_and_ends_only_the_others(authed_client, settings_env):
+    import hashlib
+
+    from del_app.db import get_db, q, x
+
+    token = _with_csrf(authed_client)
+    current_hash = hashlib.sha256(b"test-session-token").hexdigest()
+    conn = get_db()
+    try:
+        x(conn, "INSERT INTO users (id, username, password_hash) VALUES (1, 'tester', 'x')")
+        x(conn, "INSERT INTO users (id, username, password_hash) VALUES (2, 'other', 'x')")
+        for h, uid, ip in ((current_hash, 1, "203.0.113.1"), ("h-old", 1, "198.51.100.7"),
+                           ("h-phone", 1, None), ("h-someone", 2, "192.0.2.2")):
+            x(conn, "INSERT INTO sessions (token_hash, user_id, expires, ip) VALUES (?, ?, '2999-01-01T00:00:00', ?)",
+              (h, uid, ip))
+        x(conn, "INSERT INTO sessions (token_hash, user_id, expires) VALUES ('h-expired', 1, '2000-01-01T00:00:00')")
+        conn.commit()
+    finally:
+        conn.close()
+
+    body = authed_client.get("/settings").text
+    assert body.count('<span class="badge badge-ok">this browser</span>') == 1
+    assert "198.51.100.7" in body and "192.0.2.2" not in body  # only my own sessions
+
+    assert authed_client.post("/settings/sessions/end-others", data={"csrf_token": "bad"}).status_code == 403
+    resp = authed_client.post("/settings/sessions/end-others", data={"csrf_token": token}, follow_redirects=False)
+    assert resp.status_code == 303 and "Signed+out+3+other+sessions" in resp.headers["location"]
+    conn = get_db()
+    try:
+        left = {r["token_hash"] for r in q(conn, "SELECT token_hash FROM sessions")}
+    finally:
+        conn.close()
+    assert left == {current_hash, "h-someone"}

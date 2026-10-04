@@ -67,6 +67,32 @@
   </div>
 </details>
 
+<details class="section" id="account" data-remember open>
+  <summary><h2>Account</h2><span class="section-hint">signed in as {{ user.username }}</span></summary>
+  <div class="section-body">
+    <table class="table table-plain" id="session-list">
+      <caption class="sr-only">Your active sign-ins.</caption>
+      <thead><tr><th scope="col">Signed in</th><th scope="col">Expires</th><th scope="col">From</th><th scope="col"></th></tr></thead>
+      <tbody>
+        {% for sess in sessions %}
+        <tr>
+          <td><span class="dt">{{ format_dt(sess.created) }}</span></td>
+          <td><span class="dt">{{ format_dt(sess.expires) }}</span></td>
+          <td class="mono">{{ sess.ip or '—' }}</td>
+          <td>{% if sess.current %}<span class="badge badge-ok">this browser</span>{% endif %}</td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+    {% if sessions | rejectattr('current') | list %}
+    <form method="post" action="/settings/sessions/end-others" class="mt-3" data-submit-guard="Signing out…">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
+      <button type="submit" class="btn btn-sm" data-confirm="Sign out every other browser that is signed in as {{ user.username }}?">Sign out other sessions</button>
+    </form>
+    {% endif %}
+  </div>
+</details>
+
 <details class="section" id="assistant-settings" data-remember open>
   <summary><h2>Assistant</h2><span class="section-hint">read-only chat over the inventory</span></summary>
   <div class="section-body">

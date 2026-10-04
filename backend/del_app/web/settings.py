@@ -93,8 +93,21 @@ def settings_view(
         recent_scans=recent_scans,
         trend=_scan_trend(list(reversed(trend_rows))),
         assistant_status=assistant_web.current_status(),
+        sessions=auth.list_sessions(request, user.id),
         user=user,
     )
+
+
+@router.post("/settings/sessions/end-others")
+def end_other_sessions(
+    request: Request, user: User = Depends(auth.require_user), csrf_token: str = Form("")
+) -> Response:
+    if not _require_csrf(request, csrf_token):
+        return _csrf_response()
+    ended = auth.end_other_sessions(request, user.id)
+    auditlog.audit(user.id, "sessions.end_others", f"user:{user.id}", {"ended": ended})
+    noun = "session" if ended == 1 else "sessions"
+    return RedirectResponse(url=f"/settings?flash=Signed+out+{ended}+other+{noun}#account", status_code=303)
 
 
 def _background_scan() -> None:
