@@ -448,6 +448,19 @@ body.is-panel-resizing { cursor: col-resize; user-select: none; }
 .page-actions { display: flex; flex-wrap: wrap; align-items: center; gap: 0.45rem; margin-left: auto; }
 .page-lede { max-width: 72ch; margin: 0 0 1.1rem; color: var(--ink-2); font-size: var(--t-md); }
 
+/* Dashboard title block, as in the corner of a drawing sheet: ruled cells,
+   small caps labels, values in the mono face. */
+.title-block {
+  display: grid; grid-auto-flow: column; grid-auto-columns: max-content;
+  margin: 0 0 0 auto; border: 1px solid var(--rule); border-radius: var(--r1);
+  outline: 1px solid var(--rule-soft); outline-offset: 3px; background: var(--panel);
+}
+.title-block > div { padding: 0.35rem 0.75rem 0.4rem; border-left: 1px solid var(--rule); }
+.title-block > div:first-child { border-left: 0; }
+.title-block dt { font-size: 0.68rem; font-weight: 600; letter-spacing: 0.09em; text-transform: uppercase; color: var(--ink-3); }
+.title-block dd { margin: 0.1rem 0 0; font-family: var(--mono); font-size: 0.84rem; white-space: nowrap; }
+.title-block .tb-aside { color: var(--ink-3); }
+
 .meta-row { display: flex; flex-wrap: wrap; align-items: baseline; gap: 0.35rem 1.4rem; margin: 0 0 0.9rem; font-size: var(--t-sm); }
 .meta { display: inline-flex; align-items: baseline; gap: 0.4rem; min-width: 0; }
 .meta-k { color: var(--ink-3); }
@@ -1260,6 +1273,12 @@ a.stat-card:hover { background: var(--panel-2); color: var(--ink); text-decorati
   .content { padding: 1rem 0.85rem 5.5rem; }
   h1 { font-size: var(--t-2xl); }
   .page-actions { margin-left: 0; }
+  .title-block { margin-left: 0; grid-auto-flow: row; grid-template-columns: repeat(2, minmax(0, 1fr)); width: 100%; }
+  .title-block > div { border-left: 0; border-top: 1px solid var(--rule); }
+  .title-block > div:nth-child(-n+2) { border-top: 0; }
+  .title-block > div:nth-child(even) { border-left: 1px solid var(--rule); }
+  .title-block > div:last-child:nth-child(odd) { grid-column: 1 / -1; }
+  .title-block dd { white-space: normal; }
   .figures, .stat-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .figure, .stat-card { border-bottom: 1px solid var(--rule-soft); }
   .subnav { flex-direction: column; gap: 0.4rem; }

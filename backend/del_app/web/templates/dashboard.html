@@ -2,12 +2,19 @@
 {% import "_macros.html" as m %}
 {% block title %}Dashboard{% endblock %}
 {% block content %}
+{% set sb = scan_block or {} %}
 <div class="page-header">
   <h1>{{ host_name }}</h1>
-  <div class="page-actions">
-    <a class="btn btn-sm btn-ghost" href="/apps">All applications</a>
-    <a class="btn btn-sm btn-ghost" href="/orphans">Review orphans</a>
-  </div>
+  {# Drawing title block: which survey this sheet shows. #}
+  <dl class="title-block" aria-label="About this survey">
+    <div><dt>Scan</dt><dd>{% if sb.get('id') %}<a href="/settings#scan-now">#{{ sb.get('id') }}</a>{% else %}none yet{% endif %}</dd></div>
+    <div><dt>Taken</dt><dd><span class="dt">{{ format_dt(sb.get('finished')) }}</span>{% if sb.get('age') %} <span class="tb-aside">{{ sb.get('age') }}</span>{% endif %}</dd></div>
+    <div><dt>Took</dt><dd>{{ sb.get('duration') or '—' }}</dd></div>
+    <div><dt>Auto-scan</dt><dd>{% if scan_interval_hours %}every {{ '%g' | format(scan_interval_hours) }} h{% else %}off{% endif %}</dd></div>
+    {% if next_scan %}
+    <div title="The scheduler checks every 10 minutes and rescans once the inventory is older than the interval"><dt>Next scan</dt><dd>{% if next_scan.due %}due{% else %}after <span class="dt">{{ format_dt(next_scan.at) }}</span>{% endif %}</dd></div>
+    {% endif %}
+  </dl>
 </div>
 <p class="page-lede">Every application on this host, from the latest completed scan. Open a lot to see what it owns and plan its removal.</p>
 

@@ -3,6 +3,7 @@ figures strip, what changed since the previous scan, apps that need
 attention, and recent jobs."""
 from __future__ import annotations
 
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request, Response
@@ -10,6 +11,7 @@ from fastapi.responses import HTMLResponse
 
 from del_app import auth
 from del_app.auth import User
+from del_app.config import get_settings
 from del_app.db import get_db, q
 from del_app.web.docker_df import docker_df
 from del_app.web.orphans import _actionable_orphan_count
@@ -144,6 +146,21 @@ def _changes(conn, latest: int | None) -> dict | None:
     }
 
 
+def _next_scan(conn, latest: int | None, interval_hours: float) -> dict | None:
+    """When the scheduler will next rescan: the latest completed scan's finish
+    time plus the interval (it checks every 10 minutes after that)."""
+    if latest is None or interval_hours <= 0:
+        return None
+    row = q(conn, "SELECT finished FROM scans WHERE id = ?", (latest,))
+    try:
+        finished = datetime.strptime(str(row[0]["finished"]), "%Y-%m-%d %H:%M:%S")
+    except (IndexError, TypeError, ValueError):
+        return None
+    at = finished + timedelta(hours=interval_hours)
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    return {"at": at.strftime("%Y-%m-%d %H:%M:%S"), "due": at <= now}
+
+
 @router.get("/", response_class=HTMLResponse)
 def dashboard(
     request: Request, response: Response, user: User = Depends(auth.require_user)
@@ -197,6 +214,7 @@ def dashboard(
         dir_bytes = _disk_usage_bytes(conn, latest)
         attention = _attention_apps(conn, latest)
         changes = _changes(conn, latest)
+        next_scan = _next_scan(conn, latest, get_settings().scan_interval_hours)
     finally:
         conn.close()
 
@@ -226,5 +244,7 @@ def dashboard(
         changes=changes,
         recent_jobs=recent_jobs,
         attention=attention,
+        scan_interval_hours=get_settings().scan_interval_hours,
+        next_scan=next_scan,
         user=user,
     )

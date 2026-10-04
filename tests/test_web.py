@@ -2836,3 +2836,26 @@ def test_cron_table_shows_run_parts_scripts(authed_client, settings_env):
     body = authed_client.get("/resources/cron_entry").text
     assert '<td class="mono">daily</td>' in body
     assert "/etc/cron.daily/logrotate" in body
+
+
+def test_next_scan_is_finish_plus_interval_or_due():
+    from del_app.db import get_db, x
+    from del_app.web.dashboard import _next_scan
+
+    import tempfile, os
+    from del_app.db import run_migrations
+
+    with tempfile.TemporaryDirectory() as d:
+        path = os.path.join(d, "t.db")
+        run_migrations(path)
+        conn = get_db(path)
+        try:
+            old = x(conn, "INSERT INTO scans (status, finished) VALUES ('done', '2020-01-01 00:00:00')")
+            fresh = x(conn, "INSERT INTO scans (status, finished) VALUES ('done', datetime('now'))")
+            conn.commit()
+            assert _next_scan(conn, old, 6) == {"at": "2020-01-01 06:00:00", "due": True}
+            upcoming = _next_scan(conn, fresh, 6)
+            assert upcoming["due"] is False
+            assert _next_scan(conn, fresh, 0) is None  # auto-scan off
+        finally:
+            conn.close()
