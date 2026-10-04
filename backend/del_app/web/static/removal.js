@@ -5,6 +5,14 @@
   var DEL = window.DEL || {};
   var escapeHtml = DEL.util.escapeHtml;
   function $(id) { return document.getElementById(id); }
+  // Same wording as formatting._seconds on the server.
+  function seconds(v) {
+    var s = Number(v);
+    if (v === null || v === undefined || v === "" || !isFinite(s) || s < 0) return "—";
+    if (s < 1) return Math.round(s * 1000) + " ms";
+    if (s < 60) return s.toFixed(1) + "s";
+    return (s / 60).toFixed(1) + "m";
+  }
 
   // --- Plan builder: "Complete removal (everything)" ticks every option ----
   var preset = $("preset-complete-removal");
@@ -110,7 +118,7 @@
       row.querySelector(".step-state").innerHTML = '<span class="badge status-' + escapeHtml(step.state) +
         (step.state === "running" ? " is-live" : "") + '">' + escapeHtml(step.state) + "</span>";
       row.querySelector(".step-exit").textContent = step.exit_code == null ? "—" : String(step.exit_code);
-      row.querySelector(".step-duration").textContent = step.duration || "—";
+      row.querySelector(".step-duration").textContent = seconds(step.duration);
       row.querySelector(".step-output").innerHTML = step.output_sanitized
         ? '<details><summary>output</summary><pre class="output">' + escapeHtml(step.output_sanitized) + "</pre></details>"
         : "—";

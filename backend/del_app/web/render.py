@@ -15,6 +15,7 @@ from del_app import auth
 from del_app.db import get_db
 from del_app.web.formatting import (
     _duration,
+    _seconds,
     _format_dt,
     _human_size,
     _iso_sort_key,
@@ -152,6 +153,7 @@ def _csrf_response() -> JSONResponse:
 # ---------------------------------------------------------------------------
 templates.env.globals["human_size"] = _human_size
 templates.env.globals["duration"] = _duration
+templates.env.globals["seconds"] = _seconds
 templates.env.globals["format_dt"] = _format_dt
 templates.env.globals["relative_dt"] = _relative_dt
 templates.env.globals["iso_sort"] = _iso_sort_key

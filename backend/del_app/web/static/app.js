@@ -1068,7 +1068,14 @@
     a.addEventListener("click", function () { if (isMobile()) closeMobileNav(); });
   });
   var shellTimer = null;
-  window.addEventListener("resize", function () { clearTimeout(shellTimer); shellTimer = setTimeout(syncShellMode, 100); });
+  window.addEventListener("resize", function () {
+    clearTimeout(shellTimer);
+    shellTimer = setTimeout(function () {
+      syncShellMode();
+      // Wide enough for the rail: the Help sheet hands the glossary back.
+      if (wideRail()) closeGlossary();
+    }, 100);
+  });
 
   // =========================================================================
   // Right rail: Help (context glossary) and Ask (assistant dock)

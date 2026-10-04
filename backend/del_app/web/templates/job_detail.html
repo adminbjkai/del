@@ -68,7 +68,7 @@
         <td class="mono">{{ s.get('operation') }}</td>
         <td class="step-state"><span class="badge status-{{ s.get('state') }}">{{ s.get('state') }}</span></td>
         <td class="step-exit">{{ s.get('exit_code') if s.get('exit_code') is not none else '—' }}</td>
-        <td class="step-duration">{{ s.get('duration') }}</td>
+        <td class="step-duration">{{ seconds(s.get('duration')) }}</td>
         <td class="step-output">
           {% if s.get('output_sanitized') %}
           <details><summary>output</summary><pre class="output">{{ s.get('output_sanitized') }}</pre></details>

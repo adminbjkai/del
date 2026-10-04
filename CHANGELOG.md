@@ -32,6 +32,15 @@ Tables:
 - Cron entries now show `/etc/cron.daily|weekly|…` scripts with their
   frequency and script path instead of rows of dashes.
 
+Fixes:
+- Phones: the navigation drawer's links sat under the dimming backdrop and
+  could not be tapped (a stacking-context bug, present before this release).
+- The Help sheet closes and returns the glossary to the rail when the window
+  grows past the rail breakpoint.
+- Job step durations read "2 ms" / "4.3s" / "1.5m" instead of raw seconds
+  like `0.001521`.
+- Settings' scan history hides the Finished column on narrow screens.
+
 Accuracy and safety:
 - An unknown username now costs the same argon2 check as a wrong password, so
   login timing no longer reveals which usernames exist.

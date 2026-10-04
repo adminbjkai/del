@@ -51,13 +51,13 @@
     {% endif %}
     <table class="table" id="scan-history" data-empty="No scans yet." data-page-size="25">
       <caption class="sr-only">The most recent inventory scans and their outcome.</caption>
-      <thead><tr><th scope="col">Scan</th><th scope="col">Started</th><th scope="col">Finished</th><th scope="col">Status</th><th scope="col">Outcome</th></tr></thead>
+      <thead><tr><th scope="col">Scan</th><th scope="col">Started</th><th scope="col" data-priority="low">Finished</th><th scope="col">Status</th><th scope="col">Outcome</th></tr></thead>
       <tbody>
         {% for s in recent_scans %}
         <tr>
           <td data-sort-value="{{ s.get('id') }}">#{{ s.get('id') }}</td>
           <td data-sort-value="{{ iso_sort(s.get('started')) }}"><span class="dt">{{ format_dt(s.get('started')) }}</span></td>
-          <td data-sort-value="{{ iso_sort(s.get('finished')) }}"><span class="dt">{{ format_dt(s.get('finished')) }}</span></td>
+          <td data-priority="low" data-sort-value="{{ iso_sort(s.get('finished')) }}"><span class="dt">{{ format_dt(s.get('finished')) }}</span></td>
           <td data-filter-value="{{ s.get('status') }}">{{ m.state(s.get('status')) }}</td>
           <td>{% set stats = s.get('stats') or {} %}{% if stats.get('error') or stats.get('reason') %}<span class="text-sm">{{ stats.get('error') or stats.get('reason') }}</span>{% elif s.get('status') == 'done' %}{{ stats.get('apps_total', '—') }} apps, {{ stats.get('resources_total', '—') }} resources{% if stats.get('duration_seconds') is not none %}, {{ stats.get('duration_seconds') }}s{% endif %}{% else %}—{% endif %}</td>
         </tr>

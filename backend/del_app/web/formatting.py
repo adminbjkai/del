@@ -237,6 +237,21 @@ def _app_dates(resource_rows: list[dict], first_seen_at: Any = None) -> dict:
     return out
 
 
+def _seconds(value: Any) -> str:
+    """A step duration in seconds (float) as '12 ms', '4.2s' or '1.5m'."""
+    try:
+        secs = float(value)
+    except (TypeError, ValueError):
+        return "—"
+    if secs < 0:
+        return "—"
+    if secs < 1:
+        return f"{secs * 1000:.0f} ms"
+    if secs < 60:
+        return f"{secs:.1f}s"
+    return f"{secs / 60:.1f}m"
+
+
 def _duration(started: Any, finished: Any) -> str:
     """Human duration between two ISO/sqlite datetime strings, or '—'."""
     s = _parse_dt(started)

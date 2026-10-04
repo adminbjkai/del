@@ -1267,7 +1267,9 @@ a.stat-card:hover { background: var(--panel-2); color: var(--ink); text-decorati
     background: var(--side); border-right: 1px solid var(--rule); box-shadow: var(--shadow);
   }
   .sidebar.open .nav-drawer { display: flex; }
-  .nav-backdrop { z-index: 55; }
+  /* Below the sidebar (50): the drawer lives inside the sidebar's stacking
+     context, so a higher backdrop covered the drawer's own links. */
+  .nav-backdrop { z-index: 45; }
   .nav-links a, .nav-button { min-height: 2.6rem; }
   .main-wrap { flex-direction: column; align-items: stretch; }
   .content { padding: 1rem 0.85rem 5.5rem; }

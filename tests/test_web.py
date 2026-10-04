@@ -2931,3 +2931,12 @@ def test_icon_links_are_only_followed_on_the_same_https_site(monkeypatch, tmp_pa
     assert gallery._cached_icon("site.bjk.ai") == (b"\x89PNG-ok", "image/png")
     assert not any(u.startswith(("file:", "http:")) or "elsewhere" in u for u in fetched)
     gallery._ICON_CACHE.clear()
+
+
+def test_step_durations_read_as_time_not_raw_floats():
+    from del_app.web.formatting import _seconds
+
+    assert _seconds(0.001521) == "2 ms"
+    assert _seconds(4.3) == "4.3s"
+    assert _seconds(90) == "1.5m"
+    assert _seconds(None) == "—" and _seconds("x") == "—"
