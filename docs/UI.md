@@ -47,8 +47,11 @@ survey sheets and site plans rather than a generic admin kit.
   something is about to be deleted for real — the `LIVE` tag, the execute panel
   in live mode, the complete-removal box. Dry runs stay calm.
 - **Motion** answers actions (sheets, popovers, the scan sweep) plus one
-  first-visit reveal of the dashboard site plan; `prefers-reduced-motion`
-  turns all of it off.
+  first-visit reveal of the dashboard site plan. Moving between pages is a
+  cross-document view transition (`@view-transition { navigation: auto }`):
+  the content fades and settles while the sidebar and right rail stay put
+  (they carry their own `view-transition-name`); browsers without support
+  just navigate. `prefers-reduced-motion` turns all of it off.
 - **Themes.** `data-theme` on `<html>`, set before paint from
   `localStorage["del.theme"]`, else `prefers-color-scheme`, else dark; a
   no-JS `@media (prefers-color-scheme: light)` block covers the rest. Toggle:
@@ -76,7 +79,8 @@ survey sheets and site plans rather than a generic admin kit.
   **Ask** (assistant dock). It starts collapsed on every page; "Ask" links
   anywhere open the Ask tab with a drafted question. Below 1280px Help and Ask
   are floating buttons that open bottom sheets (Esc or the close button
-  dismisses them).
+  dismisses them). The glossary exists once per page: opening the Help sheet
+  moves it from the rail into the sheet and closing puts it back.
 - **Resize handles** beside the sidebar and rail on desktop: drag, or focus
   and use Left/Right (Shift for bigger steps), double-click to reset. Widths
   persist; handles hide when their panel is collapsed and on mobile.
@@ -94,6 +98,8 @@ survey sheets and site plans rather than a generic admin kit.
 </div>
 <div class="meta-row"><span class="meta"><span class="meta-k">Kind</span> compose</span></div>
 <p class="page-lede">One or two sentences: what this page is for.</p>
+<!-- the dashboard puts a dl.title-block (scan, taken, took, auto-scan,
+     next scan) where other pages have .page-actions -->
 <details class="explain"><summary>How rows relate</summary><div class="explain-body">…</div></details>
 …panels / sections / tables…
 ```
@@ -109,6 +115,10 @@ survey sheets and site plans rather than a generic admin kit.
 | `.callout` + `-info` / `-warn` / `-danger` (+ `.callout-title`) | Notices. `.flash-ok` / `.flash-error` for banners. |
 | `.meta-row` / `.meta` / `.meta-k` | Compact facts under a title. |
 | `.kv` (`<dl>`) | Key/value grid. |
+| `dl.title-block` > `div` > `dt` + `dd` | Dashboard drawing title block: ruled cells, small-caps labels, mono values. |
+| `.status-strip` > `li.tick.tick-<status>` | App Overview "Status by scan": one bar per recorded scan, newest outlined. |
+| `.wiring` > `.wiring-lane.wiring-<key>` > `.wiring-item` (`.is-data`) | App Overview "How it is wired": four lanes (reached at, listens on, runs as, keeps data in) joined by chalk connectors; built by `apps._wiring`. |
+| `.trend-grid` > `figure.trend` > `svg.trend-chart` | Settings scan trend small multiples (inline SVG: `.trend-line`, `.trend-bar`, hover `.trend-hit` with a `<title>` per scan). |
 | `.siteplan` > `a.lot` (`.is-running` etc., `.has-warning`, `.is-protected`) | Dashboard site plan tiles. |
 | `.figures` | Dashboard figure strip; `.stat-grid` > `a.stat-card` on Orphans. |
 | `.subnav`, `.jump-nav` | Sibling views (resource types); in-page anchor chips. |
@@ -134,9 +144,13 @@ chips for status-like columns (Status, Kind, State, Class, Active, Type …), a
 Columns menu (show/hide columns, compact rows, reset), pagination
 (25/50/100/250/All), drag-to-resize columns, CSV export of the filtered rows,
 and clickable rows (a click anywhere opens the row's first link;
-Ctrl/Cmd-click opens a new tab). Tables wider than their container scroll
-horizontally with a sticky header. Tables with ≤ 10 rows get a minimal
-toolbar unless they have an export button or `data-toolbar`.
+Ctrl/Cmd-click opens a new tab). Column filter buttons overlay the end of the
+header on hover instead of reserving width. Long machine values go through
+`m.trunc()` (`.trunc`): one line with an ellipsis and the full value in the
+tooltip, able to shrink to 6rem with its column, so tables fit their container;
+only a table that still cannot fit scrolls horizontally. Published ports use
+`m.ports_cell()` ("host → container", one per line). Tables with ≤ 10 rows get
+a minimal toolbar unless they have an export button.
 
 | Attribute | Effect |
 |---|---|
@@ -145,7 +159,6 @@ toolbar unless they have an export button or `data-toolbar`.
 | `data-empty="…"` | Message when nothing matches. |
 | `data-search-placeholder="…"` | Search box placeholder. |
 | `data-prefill="…"` | Initial search text. |
-| `data-toolbar` | Full toolbar even for ≤ 10 rows. |
 | `th[data-nosort]` | Not sortable or filterable (action columns such as **Ask**). |
 | `th[data-priority="low"]` / `td[data-priority="low"]` | Hidden on narrow screens until "Show all columns". |
 | `td[data-sort-value]` | Sort key. Dates use `iso_sort()`; numbers, sizes (`1.5 GB`) and durations (`42s`, `1.5m`) are parsed. Columns that are ≥ 85% numeric right-align. |

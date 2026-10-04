@@ -17,7 +17,16 @@ usage including Docker volumes, Docker's reclaimable space), what changed since
 the previous scan, apps that need review, and recent jobs. A **scan stamp** in
 the sidebar shows which completed scan every page is reading, how old it is,
 and runs a new scan in place; optional automatic scans keep it fresh
-(`scan_interval_hours` in `config/del.toml`, off by default).
+(`scan_interval_hours` in `config/del.toml`, off by default); the dashboard's
+title block shows the scan, when it ran, how long it took and when the next
+automatic one is due.
+
+Each **application page** opens on an overview: its status in every recent
+scan, and how it is wired — the domains that reach it, the ports it listens on,
+what runs it and where it keeps data (data-bearing storage first) — above its
+install/change record and per-type resource tabs. **Settings** charts
+applications, resources and scan time over the last 90 scans, and lists your
+active sign-ins with a "sign out other sessions" action.
 
 The authenticated **View Apps** tab at `/view-apps` is a homelab-style launcher
 for current, enabled domains that pass a live HTTPS check. It supports search,

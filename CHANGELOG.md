@@ -1,5 +1,63 @@
 # Changelog
 
+## 2026.10.04
+
+Refinement pass: tables that fit, an application overview that explains the
+app at a glance, scan history you can see, and a few fixes found on the way.
+
+New and more convenient:
+- Application overview: **Status by scan** (one bar per recorded scan, and
+  since when the current status holds) and **How it is wired** — four lanes
+  from the domains that reach the app, through the ports it listens on (a
+  stopped container's published port shows as not listening) and what runs
+  it, to where it keeps data (data-bearing storage first, in orange). The
+  Overview no longer repeats the header facts; resource counts are chips.
+- Dashboard **title block**: scan number, when it was taken, how long it took,
+  the auto-scan interval and when the next automatic scan is due. It replaces
+  two buttons that duplicated the sidebar.
+- Settings: **scan trend** small multiples (applications, resources, scan time
+  over the last 90 completed scans; scans missing a figure are left out, never
+  drawn as zero) and an **Account** section listing your active sign-ins with
+  **Sign out other sessions**.
+- Page changes crossfade while the sidebar and rail stay put (view
+  transitions; off under reduced motion).
+
+Tables:
+- No more sideways scrolling at desktop widths: long values clamp to one line
+  and shrink with their column (full value in the tooltip), filter buttons
+  overlay the header instead of reserving width, Docker tables show one
+  **Ports** column ("8124 → 8000/tcp"), and Orphans hides the Key or Path
+  column when it would only repeat another column on every row (volumes,
+  directories). The Containers state cell is one line.
+- Cron entries now show `/etc/cron.daily|weekly|…` scripts with their
+  frequency and script path instead of rows of dashes.
+
+Accuracy and safety:
+- An unknown username now costs the same argon2 check as a wrong password, so
+  login timing no longer reveals which usernames exist.
+- The icon proxy follows `<link rel="icon">` targets only on the same site over
+  https (urllib would otherwise also open `file://` or another host).
+- The test suite imported `/apps/del/backend` no matter where it ran, so a
+  worktree or CI checkout tested the deployed code; it now tests its own
+  checkout.
+
+Lighter:
+- Favicons are cached on disk next to the database (7 days, misses 6 hours)
+  and concurrent lookups for one domain share a fetch, so a restart no longer
+  triggers up to five outbound requests per gallery domain.
+- The help glossary is rendered once per page instead of twice (rail and
+  mobile sheet now share it).
+- View Apps search is debounced, the card-width slider no longer rebuilds the
+  gallery on every tick, and the category list has one source (the server)
+  instead of three copies; bundled icons also file obvious apps (IPTV, file
+  share, monitor) out of "Other".
+- Removed: the never-used `settings` table (migration 005), an unused halting-
+  stage constant, `assistant.is_enabled`, an unused CSRF helper, the dead
+  `data-toolbar` switch, an ignored `trunc` width argument, a duplicated CSS
+  rule; code comments no longer cite the untracked `docs/INTERFACES.md`.
+
+Upgrade: run `./scripts/del-admin migrate` (005), then restart `del-web`.
+
 ## 2026.10.03
 
 A lighter, calmer, more accurate UI ("survey sheet"), with the same features.
