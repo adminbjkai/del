@@ -103,6 +103,17 @@
       if (key && /^del\.ag\d\.colstate\.|^del\.(glossaryCollapsed|rightRailTab)$/.test(key)) localStorage.removeItem(key);
     }
   } catch (e) {}
+  try { sessionStorage.removeItem("del.siteplanSeen"); } catch (e) {}
+
+  // Apps opened this browser, newest first. The command palette lists them.
+  (function rememberApp() {
+    var slug = document.body.getAttribute("data-app") || "";
+    if (!slug) return;
+    var list = store.json("del.recentApps");
+    if (!Array.isArray(list)) list = [];
+    list = [slug].concat(list.filter(function (s) { return s !== slug; })).slice(0, 8);
+    store.set("del.recentApps", JSON.stringify(list));
+  })();
 
   // =========================================================================
   // Sort values: one parser for sorting, numeric filters and CSV order.
@@ -1104,6 +1115,8 @@
 
   function setRailTab(tab) {
     tab = tab === "ask" ? "ask" : "help";
+    // Prompts and targets load on the first open, not on every page.
+    if (tab === "ask" && DEL.assistant && DEL.assistant.ensure) DEL.assistant.ensure();
     $$(".rail-tab").forEach(function (btn) {
       var on = btn.getAttribute("data-rail-tab") === tab;
       btn.classList.toggle("is-active", on);
@@ -1345,23 +1358,68 @@
   });
 
   // =========================================================================
-  // Dashboard site plan: one reveal on load; group switch (kind / status)
+  // Dashboard site plan: filter, and the kind / status switch
   // =========================================================================
   var siteplan = document.getElementById("siteplan");
   if (siteplan) {
-    $$(".lot", siteplan).forEach(function (lot, i) { lot.style.setProperty("--i", String(Math.min(i, 120))); });
-    if (!sessionStorage.getItem("del.siteplanSeen")) {
-      siteplan.classList.add("is-revealing");
-      try { sessionStorage.setItem("del.siteplanSeen", "1"); } catch (e) {}
-      setTimeout(function () { siteplan.classList.remove("is-revealing"); }, 1600);
-    }
+    var planFilter = document.getElementById("siteplan-filter");
+    var planCount = document.getElementById("siteplan-count");
+    var planEmpty = document.getElementById("siteplan-empty");
+    var planLots = $$(".lot", siteplan);
     var groupBtns = $$("[data-siteplan-group]", siteplan);
+    function activeView() {
+      var views = $$("[data-siteplan-view]", siteplan);
+      for (var i = 0; i < views.length; i++) if (!views[i].hidden) return views[i];
+      return views[0] || null;
+    }
+    function applyPlanFilter() {
+      var q = planFilter ? planFilter.value.trim().toLowerCase() : "";
+      planLots.forEach(function (lot) {
+        var hay = (lot.getAttribute("data-find") || "").toLowerCase();
+        lot.parentElement.hidden = !!(q && hay.indexOf(q) === -1);
+      });
+      $$(".siteplan-group", siteplan).forEach(function (group) {
+        var shown = 0;
+        $$("li", group).forEach(function (li) { if (!li.hidden) shown += 1; });
+        group.hidden = shown === 0;
+        var c = $(".siteplan-group-count", group);
+        if (c) {
+          var n = q ? shown : Number(c.getAttribute("data-count") || shown);
+          c.textContent = n + (n === 1 ? " app" : " apps");
+        }
+      });
+      var view = activeView();
+      var visible = 0;
+      var total = 0;
+      if (view) {
+        $$("li", view).forEach(function (li) { total += 1; if (!li.hidden) visible += 1; });
+      }
+      if (planCount) planCount.textContent = q ? (visible + " of " + total) : "";
+      if (planEmpty) planEmpty.hidden = !q || visible > 0;
+    }
     function showGroup(mode) {
       groupBtns.forEach(function (b) { b.setAttribute("aria-pressed", b.getAttribute("data-siteplan-group") === mode ? "true" : "false"); });
       $$("[data-siteplan-view]", siteplan).forEach(function (v) { v.hidden = v.getAttribute("data-siteplan-view") !== mode; });
       store.set("del.siteplanGroup", mode);
+      applyPlanFilter();
     }
     groupBtns.forEach(function (b) { b.addEventListener("click", function () { showGroup(b.getAttribute("data-siteplan-group")); }); });
+    if (planFilter) {
+      planFilter.addEventListener("input", applyPlanFilter);
+      planFilter.addEventListener("keydown", function (e) {
+        if (e.key === "Escape" && planFilter.value) {
+          e.stopPropagation();
+          planFilter.value = "";
+          applyPlanFilter();
+          return;
+        }
+        if (e.key !== "Enter") return;
+        e.preventDefault();
+        var view = activeView();
+        var first = view && $("li:not([hidden]) .lot", view);
+        if (first) location.href = first.getAttribute("href");
+      });
+    }
     if (groupBtns.length) showGroup(store.get("del.siteplanGroup", "kind") === "status" ? "status" : "kind");
   }
 
@@ -1428,12 +1486,29 @@
       group("Pages", pages.filter(function (p) { return !q || has(p.title, q) || has(p.url, q); }), function (p) {
         return icon("page") + escapeHtml(p.title) + (p.keys ? '<span class="cmdk-meta"><kbd>g</kbd><kbd>' + escapeHtml(p.keys) + "</kbd></span>" : "");
       });
+      var recentSlugs = {};
+      var recent = [];
+      if (!q && apps) {
+        var wanted = store.json("del.recentApps");
+        var bySlug = {};
+        apps.forEach(function (a) { bySlug[a.slug] = a; });
+        if (Array.isArray(wanted)) {
+          wanted.forEach(function (slug) {
+            if (bySlug[slug] && recent.length < 6) recent.push(bySlug[slug]);
+          });
+        }
+        recent.forEach(function (a) { recentSlugs[a.slug] = true; });
+      }
+      function appEntry(a) { return { title: a.name, url: a.url, status: a.status }; }
+      function appHtml(a) {
+        return icon("app") + escapeHtml(a.title) + '<span class="cmdk-meta"><span class="badge status-' + escapeHtml(a.status || "unknown") + '">' + escapeHtml(a.status || "") + "</span></span>";
+      }
+      group("Recent", recent.map(appEntry), appHtml);
       var appList = (apps || []).filter(function (a) {
+        if (!q && recentSlugs[a.slug]) return false;
         return !q || has(a.name, q) || has(a.slug, q) || has((a.domains || []).join(" "), q);
       });
-      group("Applications", appList.slice(0, q ? 40 : 8).map(function (a) { return { title: a.name, url: a.url, status: a.status }; }), function (a) {
-        return icon("app") + escapeHtml(a.title) + '<span class="cmdk-meta"><span class="badge status-' + escapeHtml(a.status || "unknown") + '">' + escapeHtml(a.status || "") + "</span></span>";
-      });
+      group("Applications", appList.slice(0, q ? 40 : 8).map(appEntry), appHtml);
       if (q) {
         var sites = [];
         (apps || []).forEach(function (a) {
@@ -1519,7 +1594,7 @@
     if (e.key === "/") {
       // The page's own search first; otherwise the first table search that is
       // actually on screen (not inside a closed section or hidden tab).
-      var filter = $("#gallery-search") || $$(".table-filter").filter(function (el) {
+      var filter = $("#siteplan-filter") || $("#gallery-search") || $$(".table-filter").filter(function (el) {
         return el.getClientRects().length > 0 && !el.closest("details:not([open])");
       })[0];
       if (filter) { e.preventDefault(); filter.focus(); filter.select(); }

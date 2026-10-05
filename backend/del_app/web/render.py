@@ -81,6 +81,34 @@ def glossary_ctx(path: str) -> str:
     return "general"
 
 
+def _scan_is_stale(finished: str | None) -> bool:
+    """True when this inventory is older than the auto-scan interval.
+
+    Automatic scans off (interval 0 or unset) uses a day, which is the same
+    clock the dashboard uses for "next scan": naive UTC, matching SQLite's
+    `datetime('now')`. A missing or unparseable finish time is not called stale.
+    """
+    from datetime import datetime, timedelta, timezone
+
+    from del_app.config import get_settings
+
+    if not finished:
+        return False
+    try:
+        at = datetime.strptime(str(finished), "%Y-%m-%d %H:%M:%S")
+    except (TypeError, ValueError):
+        return False
+    interval = get_settings().scan_interval_hours
+    try:
+        hours = float(interval) if interval else 24.0
+    except (TypeError, ValueError):
+        hours = 24.0
+    if hours <= 0:
+        hours = 24.0
+    now = datetime.now(timezone.utc).replace(tzinfo=None)
+    return now - at >= timedelta(hours=hours)
+
+
 def _scan_block() -> dict:
     """The sidebar's scan stamp: latest completed scan and whether one runs now.
     Never fails a page render: a broken DB just shows an empty stamp."""
@@ -106,6 +134,7 @@ def _scan_block() -> dict:
             finished=row["finished"],
             age=_relative_dt(row["finished"]) or "just now",
             duration=_duration(row["started"], row["finished"]),
+            stale=_scan_is_stale(row["finished"]),
         )
     return block
 

@@ -10,6 +10,10 @@
 <div class="page-header">
   <h1>{{ name }} {{ m.state(app.get('status')) }}{% if app.get('protected') %} <span class="badge badge-blue" title="DEL will not build a removal plan">{{ i.icon('shield') }}protected</span>{% endif %}</h1>
   <div class="page-actions">
+    {% set domains = app.get('domains') or [] %}
+    {% if domains | length == 1 %}
+    <a class="btn btn-sm btn-ghost" href="https://{{ domains[0] }}" target="_blank" rel="noopener noreferrer" data-open-site title="Open {{ domains[0] }} in a new tab">Open site</a>
+    {% endif %}
     <a class="btn btn-sm btn-ghost" href="/manifests/{{ app.get('slug') }}">Edit manifest</a>
     {% if assistant_on %}
     <a class="btn btn-sm btn-ghost" href="/assistant?scope=app&amp;target={{ app.get('slug') | urlencode }}" data-ask-scope="app" data-ask-target="{{ app.get('slug') }}" title="Ask the read-only assistant about this application">Ask the assistant</a>

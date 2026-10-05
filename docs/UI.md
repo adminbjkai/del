@@ -13,7 +13,7 @@ Files (all in `backend/del_app/web/static/`, served from `/static/` under CSP
 | `app.css` | The only stylesheet (sections 1–7 listed at its top), including the assistant and gallery. |
 | `theme-init.js` | Blocking `<head>` script: sets `data-theme` / `data-density` before first paint. |
 | `app.js` | Shell, tables, palette, shortcuts, scan stamp, toasts, small behaviours. Exposes `window.DEL`. |
-| `assistant.js` | Ask dock and `/assistant` page. |
+| `assistant.js` | Ask dock and `/assistant` page. The dock fetches prompts and targets when Ask is opened, not on every page. |
 | `removal.js` | Plan and job pages only: plan presets, the execute gate, the live job poller. |
 | `gallery.js` | View Apps only: search, categories, favourites, layout, drag order. |
 | `fonts/` | Barlow Semi Condensed 400/500/600 and IBM Plex Mono 400 (woff2 subsets, OFL licences alongside). |
@@ -46,9 +46,8 @@ survey sheets and site plans rather than a generic admin kit.
 - **One loud element: the hazard stripe.** Yellow/black tape appears only where
   something is about to be deleted for real — the `LIVE` tag, the execute panel
   in live mode, the complete-removal box. Dry runs stay calm.
-- **Motion** answers actions (sheets, popovers, the scan sweep) plus one
-  first-visit reveal of the dashboard site plan. Moving between pages is a
-  cross-document view transition (`@view-transition { navigation: auto }`):
+- **Motion** answers actions (sheets, popovers, the scan sweep). Moving between
+  pages is a cross-document view transition (`@view-transition { navigation: auto }`):
   the content fades and settles while the sidebar and right rail stay put
   (they carry their own `view-transition-name`); browsers without support
   just navigate. `prefers-reduced-motion` turns all of it off.
@@ -69,7 +68,9 @@ survey sheets and site plans rather than a generic admin kit.
   `g` shortcut. Collapses to icons on desktop; below 900px it is a drawer
   behind the menu button with a backdrop.
 - **Scan stamp** (`#scan-block`): the inventory's completed scan number, its
-  age and duration, and a run button. Starting a scan here (or from Settings)
+  age and duration, and a run button. It is marked stale (a warn dot and the
+  word "stale") when that scan is older than `scan_interval_hours`, or older
+  than a day when automatic scans are off. Starting a scan here (or from Settings)
   posts `/scan` with `Accept: application/json`, shows a toast, and the stamp
   polls every 2.5 s while discovery runs (sweep bar + elapsed time), then
   reloads the page when the new inventory is published.
@@ -119,7 +120,7 @@ survey sheets and site plans rather than a generic admin kit.
 | `.status-strip` > `li.tick.tick-<status>` | App Overview "Status by scan": one bar per recorded scan, newest outlined. |
 | `.wiring` > `.wiring-lane.wiring-<key>` > `.wiring-item` (`.is-data`) | App Overview "How it is wired": four lanes (reached at, listens on, runs as, keeps data in) joined by chalk connectors; built by `apps._wiring`. |
 | `.trend-grid` > `figure.trend` > `svg.trend-chart` | Settings scan trend small multiples (inline SVG: `.trend-line`, `.trend-bar`, hover `.trend-hit` with a `<title>` per scan). |
-| `.siteplan` > `a.lot` (`.is-running` etc., `.has-warning`, `.is-protected`) | Dashboard site plan tiles. |
+| `.siteplan` > `a.lot` (`.is-running` etc., `.has-warning`, `.is-protected`) | Dashboard site plan tiles. `#siteplan-filter` narrows them by `data-find` (name, slug, kind, status, enabled domains). Enter opens the first match in the visible grouping. |
 | `.figures` | Dashboard figure strip; `.stat-grid` > `a.stat-card` on Orphans. |
 | `.subnav`, `.jump-nav` | Sibling views (resource types); in-page anchor chips. |
 | `.tabs` > `[role=tablist]` > `[role=tab]` + `[role=tabpanel]` | ARIA tabs: roving tabindex, arrows/Home/End, `#tab-id` deep links. |
@@ -171,9 +172,9 @@ a minimal toolbar unless they have an export button.
 
 | Key | Action |
 |---|---|
-| Ctrl/Cmd + K | Command palette: pages, applications, "Open site" domains, actions (run scan, theme, help, ask, export, collapse sidebar). |
+| Ctrl/Cmd + K | Command palette: pages, applications, "Open site" domains, actions (run scan, theme, help, ask, export, collapse sidebar). With an empty query, apps opened in this browser (`del.recentApps`) are listed first. |
 | `g` then `d` `v` `a` `r` `o` `j` `k` `s` | Dashboard, View Apps, Applications, Resources, Orphans, Jobs, Assistant, Settings. |
-| `/` | Focus the page's table search (or the gallery search). |
+| `/` | On the dashboard, focus the site-plan filter. Otherwise the gallery search, then the first visible table search. |
 | `t` | Toggle theme. |
 | `?` | Shortcuts dialog. |
 | Esc | Close the open popover, dialog, sheet or Ask panel. |
@@ -188,11 +189,13 @@ Shortcuts are ignored while typing in a field.
 | `del.sidebarCollapsed`, `del.sidebarWidth`, `del.rightRailWidth` | Shell layout. |
 | `del.table.<table id>` (or `del.table.<path>\|<caption>`) | Sort, page size, hidden columns, column widths. Search text and filters are not kept. |
 | `del.sections.<path>` | Open/closed `details.section[data-remember]`. |
-| `del.siteplanGroup` | Dashboard site plan grouping (kind or status). `sessionStorage del.siteplanSeen` limits the reveal to once per session. |
+| `del.siteplanGroup` | Dashboard site plan grouping (kind or status). The filter text is not kept. |
+| `del.recentApps` | Up to eight application slugs opened in this browser, newest first, for the command palette. |
 | `del.appGallery.v1` | View Apps favourites, hidden apps, categories, order, view, density, card width, sort. |
 
 Keys from older layouts (`del.agN.colstate.*`, `del.glossaryCollapsed`,
-`del.rightRailTab`) are deleted on load.
+`del.rightRailTab`, and the retired `sessionStorage` key `del.siteplanSeen`)
+are deleted on load.
 
 ## Accessibility
 

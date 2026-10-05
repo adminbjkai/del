@@ -12,14 +12,18 @@ a complete-removal plan and runs it live immediately, behind a single confirm
 dialog. DEL cannot remove itself.
 
 The **dashboard** draws the host as a site plan: every application is a tile
-grouped by kind or status, next to figures (orphans, shared resources, disk
+grouped by kind or status, with a filter for name, slug, kind, status and
+enabled site names. Next to it are the figures (orphans, shared resources, disk
 usage including Docker volumes, Docker's reclaimable space), what changed since
 the previous scan, apps that need review, and recent jobs. A **scan stamp** in
 the sidebar shows which completed scan every page is reading, how old it is,
-and runs a new scan in place; optional automatic scans keep it fresh
-(`scan_interval_hours` in `config/del.toml`, off by default); the dashboard's
-title block shows the scan, when it ran, how long it took and when the next
-automatic one is due.
+and runs a new scan in place. It is marked stale when the inventory is older
+than `scan_interval_hours` (or a day, when automatic scans are off). Optional
+automatic scans keep it fresh (`scan_interval_hours` in `config/del.toml`, off
+by default); the dashboard's title block shows the scan, when it ran, how long
+it took and when the next automatic one is due. An application with exactly one
+enabled domain has an **Open site** action; several domains stay as links, so
+DEL does not guess which one to open.
 
 Each **application page** opens on an overview: its status in every recent
 scan, and how it is wired — the domains that reach it, the ports it listens on,
@@ -43,9 +47,11 @@ assets cached as immutable) in a dark cyanotype or light drafting-film theme
 (`localStorage["del.theme"]`, else the OS `prefers-color-scheme`, else dark).
 Every inventory table has search, sorting, per-column filters, quick filter
 chips, a column chooser, pagination and CSV export. `Ctrl`/`Cmd`+`K` opens a
-command palette for pages, applications, their sites and actions; `g` then a
-letter jumps between pages, `/` focuses the table search, `t` toggles the theme
-and `?` lists every shortcut. See [docs/UI.md](docs/UI.md).
+command palette for pages, applications, their sites and actions; apps opened
+in this browser are listed first. `g` then a letter jumps between pages, `/`
+focuses the site-plan filter on the dashboard (Enter opens the first match)
+and otherwise the table or gallery search, `t` toggles the theme and `?` lists
+every shortcut. See [docs/UI.md](docs/UI.md).
 
 The **Assistant** is a read-only Q&A over the latest inventory (Ollama Cloud
 `glm-5.3-flash`): a dedicated page at `/assistant` plus an **Ask** tab in the

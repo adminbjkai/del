@@ -153,6 +153,128 @@ def test_dashboard_app_count_excludes_stale_scan_apps(authed_client, settings_en
     assert '<span class="figure-value">1</span>' in resp.text
 
 
+def test_site_plan_filter_uses_enabled_domains_only(authed_client, settings_env):
+    """The site-plan finder matches enabled sites. A disabled copy and an
+    excluded association must not contribute a name."""
+    import json
+
+    from del_app.db import get_db, x
+
+    conn = get_db()
+    try:
+        scan_id = x(conn, "INSERT INTO scans (status) VALUES ('done')")
+        app_id = x(
+            conn,
+            "INSERT INTO applications (slug, name, status, kind, last_seen) VALUES (?,?,?,?,?)",
+            ("plot-app", "Plot App", "running", "compose", scan_id),
+        )
+
+        def add_site(key, domain, enabled):
+            return x(
+                conn,
+                "INSERT INTO resources (type, key, display, state, data_json, first_seen, last_seen) "
+                "VALUES ('nginx_site',?,?,?,?,?,?)",
+                (key, key, "enabled" if enabled else "available", json.dumps({
+                    "enabled": enabled, "server_names": [domain],
+                }), scan_id, scan_id),
+            )
+
+        live = add_site("plot-live", "plot.example", True)
+        disabled = add_site("plot-off", "hidden.example", False)
+        excluded = add_site("plot-ex", "excluded.example", True)
+        x(conn, "INSERT INTO associations (app_id, resource_id, confidence) VALUES (?,?,?)", (app_id, live, 95))
+        x(conn, "INSERT INTO associations (app_id, resource_id, confidence) VALUES (?,?,?)", (app_id, disabled, 95))
+        x(conn, "INSERT INTO associations (app_id, resource_id, confidence, excluded) VALUES (?,?,?,?)", (app_id, excluded, 95, 1))
+        conn.commit()
+    finally:
+        conn.close()
+
+    page = authed_client.get("/")
+    assert page.status_code == 200
+    assert 'id="siteplan-filter"' in page.text
+    assert 'data-find="Plot App plot-app compose running plot.example"' in page.text
+    assert "hidden.example" not in page.text
+    assert "excluded.example" not in page.text
+
+    palette = authed_client.get("/palette.json").json()
+    row = next(a for a in palette["apps"] if a["slug"] == "plot-app")
+    assert row["domains"] == ["plot.example"]
+
+
+def test_scan_stamp_marks_an_old_inventory_stale(authed_client, settings_env):
+    from datetime import datetime, timezone
+
+    from del_app.db import get_db, x
+
+    conn = get_db()
+    try:
+        x(conn, "INSERT INTO scans (status, finished) VALUES ('done', '2020-01-01 00:00:00')")
+        conn.commit()
+    finally:
+        conn.close()
+    old = authed_client.get("/")
+    assert 'id="scan-block"' in old.text
+    assert "is-stale" in old.text
+    assert "scan-stale" in old.text
+
+    conn = get_db()
+    try:
+        fresh = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M:%S")
+        x(conn, "INSERT INTO scans (status, finished) VALUES ('done', ?)", (fresh,))
+        conn.commit()
+    finally:
+        conn.close()
+    # The newer completed scan is the one the stamp reads.
+    assert "is-stale" not in authed_client.get("/").text
+
+
+def test_one_domain_app_has_open_site_and_is_remembered(authed_client, settings_env):
+    import json
+
+    from del_app.db import get_db, x
+
+    conn = get_db()
+    try:
+        scan_id = x(conn, "INSERT INTO scans (status) VALUES ('done')")
+
+        def add_app(slug, name):
+            return x(
+                conn,
+                "INSERT INTO applications (slug, name, status, kind, last_seen) VALUES (?,?,?,?,?)",
+                (slug, name, "running", "compose", scan_id),
+            )
+
+        def add_site(app_id, domain):
+            rid = x(
+                conn,
+                "INSERT INTO resources (type, key, display, state, data_json, first_seen, last_seen) "
+                "VALUES ('nginx_site',?,?,?,?,?,?)",
+                (domain, domain, "enabled", json.dumps({
+                    "enabled": True, "server_names": [domain],
+                }), scan_id, scan_id),
+            )
+            x(conn, "INSERT INTO associations (app_id, resource_id, confidence) VALUES (?,?,?)", (app_id, rid, 95))
+
+        one = add_app("onesite", "One Site")
+        two = add_app("twosite", "Two Site")
+        add_site(one, "onesite.example")
+        add_site(two, "one.example")
+        add_site(two, "two.example")
+        conn.commit()
+    finally:
+        conn.close()
+
+    single = authed_client.get("/apps/onesite")
+    assert 'data-app="onesite"' in single.text
+    assert 'data-open-site' in single.text
+    assert 'href="https://onesite.example"' in single.text
+    many = authed_client.get("/apps/twosite")
+    assert 'data-app="twosite"' in many.text
+    assert "data-open-site" not in many.text
+    assert "one.example" in many.text and "two.example" in many.text
+    assert 'data-app="' not in authed_client.get("/apps").text
+
+
 def test_apps_list_200(authed_client):
     resp = authed_client.get("/apps")
     assert resp.status_code == 200

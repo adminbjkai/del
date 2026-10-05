@@ -16,7 +16,7 @@
     {% endif %}
   </dl>
 </div>
-<p class="page-lede">Every application on this host, from the latest completed scan. Open a lot to see what it owns and plan its removal.</p>
+<p class="page-lede">Every application on this host, from the latest completed scan. Filter the site plan, or open a lot to see what it owns and plan its removal.</p>
 
 {% set lots_total = stats.get('apps', 0) %}
 <section class="siteplan" id="siteplan" aria-labelledby="siteplan-title">
@@ -28,9 +28,18 @@
       {% endif %}{% endfor %}
       {% if site_plan.kind | map(attribute='lots') | sum(start=[]) | selectattr('warn_count') | list %}<li><span class="lot-flag" aria-hidden="true"></span> weak claims to review</li>{% endif %}
     </ul>
-    <div class="btn-group siteplan-switch" role="group" aria-label="Group lots by">
-      <button type="button" class="btn btn-sm" data-siteplan-group="kind" aria-pressed="true">By kind</button>
-      <button type="button" class="btn btn-sm" data-siteplan-group="status" aria-pressed="false">By status</button>
+    <div class="siteplan-tools">
+      {% if lots_total %}
+      <label class="siteplan-find">
+        <span class="sr-only">Filter the site plan by name, site, kind or status</span>
+        <input type="search" id="siteplan-filter" placeholder="Name, site, or kind" autocomplete="off" autocapitalize="off" spellcheck="false" aria-controls="siteplan" enterkeyhint="go">
+      </label>
+      <span class="siteplan-count" id="siteplan-count" aria-live="polite"></span>
+      {% endif %}
+      <div class="btn-group siteplan-switch" role="group" aria-label="Group lots by">
+        <button type="button" class="btn btn-sm" data-siteplan-group="kind" aria-pressed="true">By kind</button>
+        <button type="button" class="btn btn-sm" data-siteplan-group="status" aria-pressed="false">By status</button>
+      </div>
     </div>
   </div>
   {% if lots_total %}
@@ -38,12 +47,13 @@
   <div data-siteplan-view="{{ mode }}"{% if mode != 'kind' %} hidden{% endif %}>
     {% for g in site_plan[mode] %}
     <div class="siteplan-group">
-      <div class="siteplan-group-label"><b>{{ g.name | replace("_", " ") }}</b>{{ g.lots | length }} app{{ 's' if g.lots | length != 1 else '' }}</div>
+      <div class="siteplan-group-label"><b>{{ g.name | replace("_", " ") }}</b><span class="siteplan-group-count" data-count="{{ g.lots | length }}">{{ g.lots | length }} app{{ 's' if g.lots | length != 1 else '' }}</span></div>
       <ul class="lots">
         {% for lot in g.lots %}
         <li><a class="lot is-{{ lot.status }}{% if lot.warn_count %} has-warning{% endif %}{% if lot.protected %} is-protected{% endif %}"
                href="/apps/{{ lot.slug }}"
-               title="{{ lot.name }}: {{ lot.status }}, {{ lot.kind }}, {{ lot.res_count }} resource{{ 's' if lot.res_count != 1 else '' }}{% if lot.warn_count %}, {{ lot.warn_count }} weak claim{{ 's' if lot.warn_count != 1 else '' }}{% endif %}{% if lot.protected %}, protected{% endif %}">
+               data-find="{{ lot.name }} {{ lot.slug }} {{ lot.kind }} {{ lot.status }} {{ lot.domains | join(' ') }}"
+               title="{{ lot.name }}: {{ lot.status }}, {{ lot.kind }}{% if lot.domains %}, {{ lot.domains | join(', ') }}{% endif %}, {{ lot.res_count }} resource{{ 's' if lot.res_count != 1 else '' }}{% if lot.warn_count %}, {{ lot.warn_count }} weak claim{{ 's' if lot.warn_count != 1 else '' }}{% endif %}{% if lot.protected %}, protected{% endif %}">
           <span class="lot-name">{{ lot.name }}</span><span class="lot-count">{{ lot.res_count }}</span>
         </a></li>
         {% endfor %}
@@ -52,6 +62,7 @@
     {% endfor %}
   </div>
   {% endfor %}
+  <p class="siteplan-empty" id="siteplan-empty" hidden>No lots match.</p>
   {% else %}
   {{ m.empty_state('No inventory yet. Run a scan from the scan stamp in the sidebar.') }}
   {% endif %}

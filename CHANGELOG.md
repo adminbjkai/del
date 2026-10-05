@@ -1,5 +1,38 @@
 # Changelog
 
+## 2026.10.05
+
+A tighter survey sheet: the site plan is something you can find a lot in,
+the figures read as an instrument rather than a row of stat cards, and a
+page no longer starts the assistant just by being opened.
+
+New and more convenient:
+- **Site plan filter.** Name, slug, kind, status, or an enabled site. Disabled
+  nginx copies and excluded associations are not searchable names. Enter opens
+  the first matching lot. `/` focuses this filter on the dashboard. The text
+  is not remembered.
+- **Recent apps** in the command palette (empty query), from the applications
+  this browser has opened (`del.recentApps`, eight kept, six shown). Recorded
+  from `/apps/<slug>` and its plan page.
+- **Open site** on an application that has exactly one enabled domain. More
+  than one stays as links in the header, so DEL does not pick a site for you.
+- The **scan stamp** says stale, with a warn dot, when the inventory is older
+  than the auto-scan interval, or older than a day when automatic scans are off.
+
+Leaner:
+- The Ask dock fetches prompts and targets when Ask is opened. Other pages
+  no longer do that work on every navigation. `/assistant` still starts immediately.
+- Enabled nginx server names are read through one helper (`enabled_server_names`,
+  `enabled_domains_by_app`) for the apps list, the site plan and the palette.
+- The first-visit staggered lot animation is gone, and so is
+  `sessionStorage del.siteplanSeen`.
+
+The figure strip and the orphan stat strip use the same mono title-block
+figures, and the lots sit on the survey grid. Counts, removal, and the table
+engine are unchanged.
+
+Upgrade: restart `del-web`. No migration.
+
 ## 2026.10.04
 
 Refinement pass: tables that fit, an application overview that explains the

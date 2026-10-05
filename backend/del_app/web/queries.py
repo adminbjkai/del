@@ -88,6 +88,46 @@ def _json_or(value, default):
         return default
 
 
+def enabled_server_names(data: Any) -> list[str]:
+    """Server names of an enabled nginx site.
+
+    Disabled and stale sites-available copies contribute nothing. This is the
+    one rule the apps list, the dashboard site plan and the command palette
+    all use, so a non-enabled name cannot leak into a filter or a launcher.
+    """
+    if not isinstance(data, dict) or not data.get("enabled", False):
+        return []
+    names = data.get("server_names") or []
+    return [sn for sn in names if isinstance(sn, str) and sn]
+
+
+def enabled_domains_by_app(conn, app_ids: list[int], latest: int | None) -> dict[int, list[str]]:
+    """Enabled-site domains for these apps in one scan. Excluded associations
+    are not the app's. No completed scan means no domains (nothing to scope to)."""
+    if not app_ids or latest is None:
+        return {}
+    id_ph = ",".join("?" for _ in app_ids)
+    rows = _rows(q(
+        conn,
+        f"""
+        SELECT a.app_id AS app_id, r.data_json AS data_json
+        FROM associations a
+        JOIN resources r ON r.id = a.resource_id
+        WHERE a.excluded = 0 AND a.app_id IN ({id_ph})
+          AND r.type = 'nginx_site' AND r.last_seen = ?
+        """,
+        tuple(app_ids) + (int(latest),),
+    ))
+    found: dict[int, set[str]] = {}
+    for row in rows:
+        aid = row.get("app_id")
+        if aid is None:
+            continue
+        for name in enabled_server_names(_json_or(row.get("data_json"), {})):
+            found.setdefault(int(aid), set()).add(name)
+    return {aid: sorted(names) for aid, names in found.items()}
+
+
 def _latest_scan_id(conn) -> int | None:
     """Latest *completed* scan id. Thin wrapper over db.latest_done_scan_id so
     tests can monkeypatch it on this module; both call sites share one

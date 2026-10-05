@@ -231,8 +231,14 @@ blocks guarded by element checks:
   the dashboard site plan grouping.
 - The command palette (`<dialog id="cmdk">`, Ctrl/Cmd+K): pages from the
   sidebar, applications from `GET /palette.json` (fetched once, best-effort),
-  their domains as "Open site", and actions; plus `g`-key navigation, `/`, `t`
+  up to six of those the browser has opened (`localStorage["del.recentApps"]`),
+  their domains as "Open site", and actions; plus `g`-key navigation, `/`
+  (site-plan filter on the dashboard, otherwise table or gallery search), `t`
   and `?` shortcuts.
+- The dashboard site plan filters in the browser on `data-find` (name, slug,
+  kind, status, enabled domains). Enter opens the first visible lot. The scan
+  stamp adds `is-stale` when the inventory is older than the auto-scan
+  interval, or 24 hours when that interval is off.
 
 `removal.js` holds the plan page's complete-removal preset and the execute gate
 (typed confirmation for volume deletion, live-mode styling), and the job poller
@@ -244,7 +250,8 @@ layout, drag order in `localStorage["del.appGallery.v1"]`).
 The Assistant is a **read-only** inventory chat (`docs/ASSISTANT.md`): Ollama
 Cloud model, no helper or planner access, suggested prompts per scope (general
 / app / orphans / resource type / resource). It lives on `/assistant` and as the
-Ask tab of the right rail on every other authenticated page.
+Ask tab of the right rail on every other authenticated page. The dock does not
+request prompts or targets until that tab is opened.
 
 ## Data model (SQLite)
 

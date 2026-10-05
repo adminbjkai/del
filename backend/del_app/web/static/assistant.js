@@ -1,5 +1,7 @@
-/* DEL assistant page: scope/target picker, prompt cards, NDJSON streaming
-   transcript. Page-only script; registers window.DEL.assistant = { init }. */
+/* DEL assistant: scope/target picker, prompt cards, NDJSON streaming
+   transcript. Registers window.DEL.assistant. The /assistant page starts
+   immediately; the right-rail dock waits for DEL.assistant.ensure(), so
+   other pages do not fetch prompts and targets on every navigation. */
 (function () {
   "use strict";
 
@@ -524,15 +526,21 @@
 
   window.DEL = window.DEL || {};
   var live = null;
+  function ensure() {
+    if (live) return live;
+    var root = document.getElementById("assistant-page") || document.getElementById("assistant-dock");
+    if (!root) return null;
+    live = init(root);
+    return live;
+  }
   window.DEL.assistant = {
     init: init,
+    ensure: ensure,
     renderMarkdown: renderMarkdown,
     applyAsk: function (scope, target, rtype, draft) {
-      if (live && live.applyAsk) live.applyAsk(scope, target, rtype, draft);
+      var current = ensure();
+      if (current && current.applyAsk) current.applyAsk(scope, target, rtype, draft);
     },
   };
-  var page = document.getElementById("assistant-page");
-  var dock = document.getElementById("assistant-dock");
-  if (page) live = init(page);
-  else if (dock) live = init(dock);
+  if (document.getElementById("assistant-page")) ensure();
 })();

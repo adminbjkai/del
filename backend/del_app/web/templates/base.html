@@ -18,7 +18,7 @@
 {% import "_icons.html" as i %}
 {% set path = request.url.path %}
 {% set on_assistant = path.startswith('/assistant') %}
-<body data-glossary="{{ glossary_ctx(path) }}">
+<body data-glossary="{{ glossary_ctx(path) }}"{% if path.startswith('/apps/') and path.split('/')|length > 2 and path.split('/')[2] %} data-app="{{ path.split('/')[2] }}"{% endif %}>
   <a class="skip-link" href="#main-content">Skip to main content</a>
   <div class="layout glossary-collapsed" id="app-layout">
     <nav class="sidebar" id="sidebar" aria-label="Main">
@@ -68,12 +68,12 @@
         </div>
         <div class="sidebar-foot">
           {% set sb = scan_block or {} %}
-          <div class="scan-block{% if sb.get('running') %} is-running{% endif %}" id="scan-block"
+          <div class="scan-block{% if sb.get('running') %} is-running{% endif %}{% if sb.get('stale') and not sb.get('running') %} is-stale{% endif %}" id="scan-block"
                data-running="{{ 'true' if sb.get('running') else 'false' }}"
                data-started="{{ sb.get('started') or '' }}" role="status" aria-live="polite">
             <div class="scan-block-head">
-              <a class="scan-block-title" href="/settings#scan-now" title="Scan history and settings">
-                <span class="dot dot-{{ 'info' if sb.get('running') else ('ok' if sb.get('id') else 'idle') }}" aria-hidden="true"></span>
+              <a class="scan-block-title" href="/settings#scan-now" title="{% if sb.get('stale') %}Inventory is older than the scan interval. {% endif %}Scan history and settings">
+                <span class="dot dot-{{ 'info' if sb.get('running') else ('warn' if sb.get('stale') else ('ok' if sb.get('id') else 'idle')) }}" aria-hidden="true"></span>
                 <span class="nav-label">{% if sb.get('id') %}Scan #{{ sb.get('id') }}{% else %}No scan yet{% endif %}</span>
               </a>
               <form method="post" action="/scan" class="scan-run-form" data-submit-guard="">
@@ -86,7 +86,7 @@
               {% if sb.get('running') %}
                 <span id="scan-block-elapsed">Scanning…</span>
               {% elif sb.get('id') %}
-                <span title="{{ format_dt(sb.get('finished')) }}">{{ sb.get('age') }}</span><span>{{ sb.get('duration') }}</span>
+                <span title="{{ format_dt(sb.get('finished')) }}">{{ sb.get('age') }}</span>{% if sb.get('stale') %}<span class="scan-stale">stale</span>{% endif %}<span>{{ sb.get('duration') }}</span>
               {% else %}
                 <span>Run one to fill the inventory</span>
               {% endif %}
@@ -188,8 +188,8 @@
       <button type="button" class="icon-btn" data-dialog-close aria-label="Close">{{ i.icon('close') }}</button>
     </div>
     <dl class="shortcut-list">
-      <dt><kbd>Ctrl</kbd> <kbd>K</kbd></dt><dd>Search pages, apps and actions</dd>
-      <dt><kbd>/</kbd></dt><dd>Filter the table on this page</dd>
+      <dt><kbd>Ctrl</kbd> <kbd>K</kbd></dt><dd>Search pages, apps and actions. Apps you opened recently are listed first.</dd>
+      <dt><kbd>/</kbd></dt><dd>Filter the site plan on the dashboard, otherwise the table or gallery search. Enter opens the first matching lot.</dd>
       <dt><kbd>g</kbd> then <kbd>d</kbd> <kbd>v</kbd> <kbd>a</kbd> <kbd>r</kbd> <kbd>o</kbd> <kbd>j</kbd> <kbd>k</kbd> <kbd>s</kbd></dt>
       <dd>Go to Dashboard, View Apps, Applications, Resources, Orphans, Jobs, Assistant, Settings</dd>
       <dt><kbd>t</kbd></dt><dd>Switch light / dark</dd>

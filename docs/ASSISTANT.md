@@ -278,10 +278,12 @@ The new JSON-POST + `X-CSRF-Token` convention is documented in `SECURITY.md`
 
 - Global **Help|Ask** right rail on every authenticated page (`base.html`):
   Help is the glossary; Ask embeds `_assistant_dock.html` except on `/assistant`
-  itself (full page there). Page-scoped defaults come from the current route
-  (app, orphans, resource type/row). Mobile **Ask** FAB opens the rail.
-- Sidebar nav entry "Assistant" in the **Help** group (with Docs), palette page
-  entry, glossary context `assistant`.
+  itself (full page there). The dock's prompt and target requests start when
+  Ask is opened (`DEL.assistant.ensure`), not on every other page. Page-scoped
+  defaults come from the current route (app, orphans, resource type/row).
+  Mobile **Ask** FAB opens the rail.
+- Sidebar nav entry "Assistant" in the **Help** group, palette page entry,
+  glossary context `assistant`.
 - `/assistant` layout: left column (scope chips: General / Application / Orphans /
   Resource type / Resource; target select shown for the scoped modes, resource
   mode has a type select then a searchable resource select; prompt cards for the
@@ -299,8 +301,9 @@ The new JSON-POST + `X-CSRF-Token` convention is documented in `SECURITY.md`
 - Settings page: "Assistant" panel showing enabled/configured/model/key source and
   the Test connection form.
 - No inline scripts or handlers (nginx CSP `script-src 'self'`). `assistant.js`
-  registers `window.DEL.assistant = { init }` and self-initialises on
-  `#assistant-page` or `#assistant-dock`. CSRF for JSON posts is the `csrf-token`
+  registers `window.DEL.assistant = { init, ensure }` and self-initialises on
+  `#assistant-page`. `#assistant-dock` starts on `ensure()` (Ask tab, Ask FAB,
+  an Ask link, or `applyAsk`). CSRF for JSON posts is the `csrf-token`
   meta in `base.html`. Read-only: no helper, no planner, no inventory writes.
   Key file `/apps/del/config/ollama-api-key.txt` is mode `0600` (refused if wider).
 

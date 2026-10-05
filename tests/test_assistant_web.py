@@ -542,6 +542,14 @@ def test_static_assets_served(anon_client):
     assert js.status_code == 200
     assert js.headers["content-type"].startswith("application/javascript")
     assert "window.DEL.assistant" in js.text
+    # The dock must not fetch prompts on pages that only embed it.
+    assert "function ensure(" in js.text
+    assert "else if (dock)" not in js.text
+    appjs = anon_client.get("/static/app.js")
+    assert appjs.status_code == 200
+    assert "siteplan-filter" in appjs.text
+    assert "del.recentApps" in appjs.text
+    assert 'setItem("del.siteplanSeen"' not in appjs.text
     # The assistant's styles live in app.css (one stylesheet for every page).
     css = anon_client.get("/static/app.css")
     assert css.status_code == 200

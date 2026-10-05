@@ -22,6 +22,7 @@ from del_app.web.queries import (
     _json_or,
     _latest_scan_id,
     _rows,
+    enabled_domains_by_app,
 )
 from del_app.web.render import _render
 
@@ -62,8 +63,15 @@ def _attention_apps(conn, latest: int | None) -> list[dict[str, Any]]:
     ]
 
 
-def _site_plan(apps: list[dict], aggregates: dict[int, dict]) -> dict[str, list[dict]]:
-    """Lots grouped two ways (by kind, by status) for the site-plan switch."""
+def _site_plan(
+    apps: list[dict], aggregates: dict[int, dict], domains: dict[int, list[str]] | None = None,
+) -> dict[str, list[dict]]:
+    """Lots grouped two ways (by kind, by status) for the site-plan switch.
+
+    `domains` is enabled nginx names only (see enabled_domains_by_app). They
+    are filter text and the lot tooltip, not a second launcher.
+    """
+    domains = domains or {}
     lots = []
     for a in sorted(apps, key=lambda a: (a["name"] or a["slug"]).lower()):
         agg = aggregates.get(a["id"], {})
@@ -76,6 +84,7 @@ def _site_plan(apps: list[dict], aggregates: dict[int, dict]) -> dict[str, list[
             "protected": bool(a.get("protected")),
             "res_count": agg.get("res_count", 0),
             "warn_count": agg.get("warn_count", 0),
+            "domains": domains.get(a["id"], []),
         })
 
     def group(field: str, order: list[str]) -> list[dict]:
@@ -215,11 +224,12 @@ def dashboard(
         attention = _attention_apps(conn, latest)
         changes = _changes(conn, latest)
         next_scan = _next_scan(conn, latest, get_settings().scan_interval_hours)
+        domain_map = enabled_domains_by_app(conn, [a["id"] for a in apps], latest)
     finally:
         conn.close()
 
     df = docker_df()
-    site_plan = _site_plan(apps, aggregates)
+    site_plan = _site_plan(apps, aggregates, domain_map)
     status_counts = {g["name"]: len(g["lots"]) for g in site_plan["status"]}
     stats = {
         "apps": len(apps),

@@ -13,6 +13,8 @@ from del_app.web.formatting import _app_dates, _level
 from del_app.web.queries import (
     RESOURCE_TYPE_LABELS,
     _app_aggregates,
+    enabled_domains_by_app,
+    enabled_server_names,
     resource_type_label,
     _json_or,
     _latest_scan_id,
@@ -237,11 +239,7 @@ def apps_list(
         if d.get("excluded"):
             continue
         if d["type"] == "nginx_site":
-            # Only enabled sites contribute domains: non-enabled/stale
-            # sites-available copies must never leak their server_names.
-            if not data.get("enabled", False):
-                continue
-            for sn in data.get("server_names", []) or []:
+            for sn in enabled_server_names(data):
                 domains.setdefault(aid, set()).add(sn)
         elif d["type"] == "port":
             p = data.get("port")
@@ -493,29 +491,7 @@ def palette_json(user: User = Depends(auth.require_user)) -> JSONResponse:
             params = (latest,)
         apps_sql += " ORDER BY name COLLATE NOCASE"
         app_rows = _rows(q(conn, apps_sql, params))
-        slug_to_id = {a["slug"]: a["id"] for a in app_rows}
-        app_ids = list(slug_to_id.values())
-
-        domains_by_app: dict[int, set] = {}
-        if app_ids and latest is not None:
-            id_ph = ",".join("?" for _ in app_ids)
-            site_rows = _rows(q(
-                conn,
-                f"""
-                SELECT a.app_id AS app_id, r.data_json AS data_json
-                FROM associations a
-                JOIN resources r ON r.id = a.resource_id
-                WHERE a.excluded = 0 AND a.app_id IN ({id_ph})
-                  AND r.type = 'nginx_site' AND r.last_seen = ?
-                """,
-                tuple(app_ids) + (latest,),
-            ))
-            for r in site_rows:
-                data = _json_or(r.get("data_json"), {})
-                if not data.get("enabled", False):
-                    continue
-                for sn in data.get("server_names", []) or []:
-                    domains_by_app.setdefault(r["app_id"], set()).add(sn)
+        domains_by_app = enabled_domains_by_app(conn, [a["id"] for a in app_rows], latest)
     finally:
         conn.close()
 
@@ -524,7 +500,7 @@ def palette_json(user: User = Depends(auth.require_user)) -> JSONResponse:
             "slug": a["slug"],
             "name": a["name"],
             "status": a.get("status"),
-            "domains": sorted(domains_by_app.get(slug_to_id.get(a["slug"]), set())),
+            "domains": domains_by_app.get(a["id"], []),
             "url": f"/apps/{a['slug']}",
         }
         for a in app_rows
