@@ -106,7 +106,7 @@
   </aside>
 
   <section class="card assistant-main">
-    <div class="assistant-transcript" id="assistant-transcript" aria-live="polite" aria-label="Transcript">
+    <div class="assistant-transcript" id="assistant-transcript" aria-label="Transcript">
       {% if conversation %}
         {% for msg in conversation.get('messages', []) %}
         <div class="assistant-msg assistant-msg-{{ msg.get('role') }}"{% if msg.get('role') == 'assistant' %} data-md{% endif %}>{{ msg.get('content') }}</div>

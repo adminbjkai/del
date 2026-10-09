@@ -108,6 +108,29 @@
     if (pill) pill.textContent = String(table.tBodies[0].rows.length);
     return row;
   }
+  // Write a cell only when its text actually changed: an unchanged value must
+  // not touch the DOM, so a re-render never disturbs selection or a scrolled
+  // <details> the operator has opened.
+  function setText(el, value) {
+    if (el && el.textContent !== value) el.textContent = value;
+  }
+  function setHtml(el, html) {
+    if (el && el.__delHtml !== html) { el.innerHTML = html; el.__delHtml = html; }
+  }
+  // Step output lives in a <details> the operator may have expanded. Only
+  // rebuild it when the sanitized text changed, and keep it open when it was.
+  function setStepOutput(cell, text) {
+    if (!cell) return;
+    var open = false;
+    var det = cell.querySelector("details");
+    if (det) open = det.open;
+    var wanted = text ? String(text) : "";
+    if (cell.__delOut === wanted) return;
+    cell.__delOut = wanted;
+    if (!wanted) { cell.textContent = "—"; return; }
+    cell.innerHTML = '<details><summary>output</summary><pre class="output">' + escapeHtml(wanted) + "</pre></details>";
+    if (open) { var d = cell.querySelector("details"); if (d) d.open = true; }
+  }
   function apply(data) {
     if (statusEl && data.status) {
       statusEl.textContent = data.status;
@@ -115,13 +138,11 @@
     }
     (data.steps || []).forEach(function (step) {
       var row = stepRow(step);
-      row.querySelector(".step-state").innerHTML = '<span class="badge status-' + escapeHtml(step.state) +
-        (step.state === "running" ? " is-live" : "") + '">' + escapeHtml(step.state) + "</span>";
-      row.querySelector(".step-exit").textContent = step.exit_code == null ? "—" : String(step.exit_code);
-      row.querySelector(".step-duration").textContent = seconds(step.duration);
-      row.querySelector(".step-output").innerHTML = step.output_sanitized
-        ? '<details><summary>output</summary><pre class="output">' + escapeHtml(step.output_sanitized) + "</pre></details>"
-        : "—";
+      setHtml(row.querySelector(".step-state"), '<span class="badge status-' + escapeHtml(step.state) +
+        (step.state === "running" ? " is-live" : "") + '">' + escapeHtml(step.state) + "</span>");
+      setText(row.querySelector(".step-exit"), step.exit_code == null ? "—" : String(step.exit_code));
+      setText(row.querySelector(".step-duration"), seconds(step.duration));
+      setStepOutput(row.querySelector(".step-output"), step.output_sanitized);
     });
     if (fill && data.progress) {
       var pct = data.progress.pct || 0;

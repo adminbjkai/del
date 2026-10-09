@@ -357,6 +357,24 @@
     });
 
     // ----- transcript helpers -----
+    // The transcript is no longer a live region (streaming rewrote it every
+    // frame, so a screen reader re-announced the growing answer). Announce only
+    // the finished answer, once, through this off-screen polite node.
+    var announce = {
+      el: null,
+      say: function (text) {
+        if (!text) return;
+        if (!this.el) {
+          this.el = document.createElement("div");
+          this.el.className = "sr-only";
+          this.el.setAttribute("aria-live", "polite");
+          this.el.setAttribute("role", "status");
+          document.body.appendChild(this.el);
+        }
+        this.el.textContent = "";
+        this.el.textContent = text;
+      },
+    };
     function bubble(role, text) {
       var empty = $("assistant-empty");
       if (empty) empty.remove();
@@ -407,6 +425,7 @@
       bubble("user", message);
       var reply = bubble("assistant", "");
       reply.classList.add("is-streaming");
+      reply.setAttribute("aria-busy", "true");
       var text = "";
       var pending = false;
       function paint() {
@@ -499,14 +518,19 @@
         return pump();
       }).then(function () {
         reply.classList.remove("is-streaming");
+        reply.removeAttribute("aria-busy");
         paint();
         if (!text) reply.textContent = "(no answer)";
+        announce.say(text ? "Answer ready." : "No answer.");
       }).catch(function (err) {
         if (err && err.name === "AbortError") {
           reply.classList.remove("is-streaming");
+          reply.removeAttribute("aria-busy");
           text += (text ? "\n\n" : "") + "_(stopped)_";
           paint();
         } else {
+          reply.classList.remove("is-streaming");
+          reply.removeAttribute("aria-busy");
           fail(err && err.message ? err.message : "Request failed");
         }
       }).then(function () {

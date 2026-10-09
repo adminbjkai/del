@@ -36,4 +36,11 @@ jobs:
           node-version: "22"
       - name: Check application JavaScript syntax
         run: |
-          for f in backend/del_app/web/static/*.js; do node --check "$f"; done
+          shopt -s nullglob
+          files=(backend/del_app/web/static/*.js)
+          if [ ${#files[@]} -eq 0 ]; then
+            echo "No application JavaScript found under backend/del_app/web/static/" >&2
+            exit 1
+          fi
+          for f in "${files[@]}"; do node --check "$f"; done
+          echo "Checked ${#files[@]} JavaScript file(s)."

@@ -32,6 +32,7 @@
     bolt: '<path d="M13 2 4 14h7l-1 8 9-12h-7l1-8Z"/>',
     external: '<path d="M14 4h6v6"/><path d="M20 4 11 13"/><path d="M19 14v5a1 1 0 0 1-1 1H5a1 1 0 0 1-1-1V6a1 1 0 0 1 1-1h5"/>',
     download: '<path d="M12 4v11"/><path d="m7 10 5 5 5-5"/><path d="M5 20h14"/>',
+    copy: '<rect x="9" y="9" width="11" height="11" rx="1.5"/><path d="M5 15V5a1 1 0 0 1 1-1h10"/>',
   };
   function icon(name) {
     return '<svg class="ico" viewBox="0 0 24 24" aria-hidden="true" focusable="false">' + (ICONS[name] || "") + "</svg>";
@@ -226,11 +227,21 @@
     var lastFocused = null, active = false;
     function onKeydown(e) {
       if (e.key !== "Tab" || !active) return;
-      var items = focusableIn(getContainer());
+      var container = getContainer();
+      var items = focusableIn(container);
       if (!items.length) return;
       var first = items[0], last = items[items.length - 1];
-      if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
-      else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+      var cur = document.activeElement;
+      // Focus sitting outside the container (the dialog box itself, a backdrop,
+      // or a non-focusable child) would let Tab escape the trap: pull it back
+      // to the appropriate edge instead of doing nothing.
+      if (!container || !container.contains(cur)) {
+        e.preventDefault();
+        (e.shiftKey ? last : first).focus();
+        return;
+      }
+      if (e.shiftKey && cur === first) { e.preventDefault(); last.focus(); }
+      else if (!e.shiftKey && cur === last) { e.preventDefault(); first.focus(); }
     }
     return {
       activate: function () {
@@ -1162,15 +1173,27 @@
       var on = btn.getAttribute("data-rail-tab") === tab;
       btn.classList.toggle("is-active", on);
       btn.setAttribute("aria-selected", on ? "true" : "false");
+      btn.tabIndex = on ? 0 : -1;   // roving tabindex, like the other tablists
     });
     $$("[data-rail-panel]").forEach(function (panel) { panel.hidden = panel.getAttribute("data-rail-panel") !== tab; });
     if (layout) layout.classList.toggle("ask-open", tab === "ask");
     if (tab === "ask") setRailCollapsed(false);
+    if (askFab) askFab.setAttribute("aria-expanded", tab === "ask" ? "true" : "false");
   }
-  $$(".rail-tab").forEach(function (btn) {
-    btn.addEventListener("click", function () { setRailTab(btn.getAttribute("data-rail-tab")); });
-  });
   var askFab = document.getElementById("assistant-fab");
+  var railTabs = $$(".rail-tab");
+  railTabs.forEach(function (btn, idx) {
+    btn.addEventListener("click", function () { setRailTab(btn.getAttribute("data-rail-tab")); });
+    btn.addEventListener("keydown", function (e) {
+      var dir = (e.key === "ArrowRight" || e.key === "ArrowDown") ? 1
+        : (e.key === "ArrowLeft" || e.key === "ArrowUp") ? -1 : 0;
+      if (!dir) return;
+      e.preventDefault();
+      var next = railTabs[(idx + dir + railTabs.length) % railTabs.length];
+      setRailTab(next.getAttribute("data-rail-tab"));
+      next.focus();
+    });
+  });
   if (askFab) askFab.addEventListener("click", function () { setRailTab("ask"); });
 
   // Ask links keep a real /assistant href as a fallback; with a dock on the
@@ -1252,7 +1275,7 @@
   var scanBlock = document.getElementById("scan-block");
   if (scanBlock) {
     var scanMeta = document.getElementById("scan-block-meta");
-    var scanStarted = null, scanWasRunning = false, scanFailures = 0;
+    var scanStarted = null, scanWasRunning = false, scanFailures = 0, scanIdleReads = 0;
     var settingsLive = document.getElementById("scan-strip-live");
     var settingsElapsed = document.getElementById("scan-strip-elapsed");
     var runButtons = $$("#scan-block-run, #run-scan-btn");
@@ -1279,9 +1302,14 @@
           scanFailures = 0;
           if (data && data.running) {
             scanWasRunning = true;
+            scanIdleReads = 0;
             setRunning(true, data.started);
             setTimeout(pollScan, 2500);
           } else if (scanWasRunning) {
+            // The scan row can lag a moment right after start; require two
+            // consecutive idle reads before reloading so the in-place progress
+            // UI is not cut short by one stale response.
+            if (++scanIdleReads < 2) { setTimeout(pollScan, 2500); return; }
             // Fresh inventory: reload once so every number on the page is current.
             location.reload();
           } else {
@@ -1308,13 +1336,15 @@
           .then(function (data) {
             if (data.started) {
               scanWasRunning = true;
+              scanIdleReads = 0;
               scanStarted = Date.now();
               setRunning(true);
               showToast("Scan started", "ok");
+              setTimeout(pollScan, 1200);
             } else {
               showToast(data.error || "Could not start a scan", "error");
+              runButtons.forEach(function (b) { b.disabled = false; });
             }
-            setTimeout(pollScan, 1200);
           })
           .catch(function () { runButtons.forEach(function (b) { b.disabled = false; }); showToast("Could not start a scan", "error"); });
       });
@@ -1664,6 +1694,7 @@
     } else if (e.key === "]" || e.key === "h") {
       e.preventDefault();
       if (railCollapseBtn && wideRail()) railCollapseBtn.click();
+      else if (glossarySheet && !glossarySheet.hidden) closeGlossary();
       else if (glossaryFab) glossaryFab.click();
     } else if (e.key === "c") {
       e.preventDefault();
