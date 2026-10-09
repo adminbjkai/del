@@ -38,6 +38,10 @@ def login_submit(
     if user_id is None:
         return RedirectResponse(url="/login?error=Invalid+credentials", status_code=303)
 
+    # A genuine sign-in must not count toward the lockout (repeat logins, or
+    # several people behind one NAT, would otherwise lock the account out).
+    auth.clear_attempts(ip)
+
     redirect = RedirectResponse(url="/", status_code=303)
     auth.login_session(redirect, user_id, ip=ip)
     auditlog.audit(user_id, "login", "session", {"ip": ip})

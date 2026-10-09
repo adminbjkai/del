@@ -204,3 +204,27 @@ def test_rate_limiter_forgets_idle_ips(monkeypatch):
     clock[0] += auth.RATE_LIMIT_WINDOW_SECONDS + 1
     assert not auth.rate_limited("203.0.113.9")
     assert "203.0.113.9" not in auth._login_attempts
+
+
+def test_successful_login_clears_the_rate_limit(monkeypatch):
+    """Genuine sign-ins must not count toward the lockout: repeated logins, or
+    several people behind one NAT, would otherwise lock the account out."""
+    from del_app import auth
+
+    monkeypatch.setattr(auth, "_login_attempts", {})
+    for _ in range(auth.RATE_LIMIT_MAX):
+        auth.record_attempt("198.51.100.7")
+    assert auth.rate_limited("198.51.100.7")
+    auth.clear_attempts("198.51.100.7")
+    assert not auth.rate_limited("198.51.100.7")
+
+
+def test_rate_limiter_dict_stays_bounded(monkeypatch):
+    """Under a distributed-IP spray the dict must not grow without bound."""
+    from del_app import auth
+
+    monkeypatch.setattr(auth, "_login_attempts", {})
+    monkeypatch.setattr(auth, "RATE_LIMIT_MAX_IPS", 10)
+    for i in range(50):
+        auth.record_attempt("10.0.0.%d" % i)
+    assert len(auth._login_attempts) <= 10

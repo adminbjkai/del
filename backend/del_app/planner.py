@@ -273,7 +273,14 @@ def _classify(row: sqlite3.Row) -> tuple[str, bool, str | None]:
         return level, False, "excluded by user"
 
     if removal_eligible == "blocked":
-        return level, False, "blocked: not safely removable"
+        # correlate marks every shared row "blocked", which would otherwise
+        # make per-resource approval of a shared resource a dead end even
+        # though the documented contract is "removable when not excluded and
+        # not shared-and-unapproved". An explicit approval releases a shared
+        # row that is otherwise confidently owned; every other blocked reason
+        # (excluded, possible/unrelated, low confidence) stays refused.
+        if not (shared and approved and level in ("confirmed", "high", "manual")):
+            return level, False, "blocked: not safely removable"
 
     if level == "probable":
         return level, False, "requires per-resource approval"

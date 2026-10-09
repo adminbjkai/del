@@ -92,11 +92,18 @@ def load_all(*, strict: bool = False) -> dict[str, Manifest]:
 
 
 def save(m: Manifest) -> None:
-    """Write a manifest to manifests_dir/<slug>.yaml, creating the directory
-    if needed."""
+    """Write a manifest to manifests_dir/<slug>.yaml atomically.
+
+    Written to a temp file and os.replace()d into place, so a crash, a power
+    loss, or a scan reading the file mid-write can never leave a torn YAML —
+    which load_all(strict=True) treats as fatal and would block every scan."""
     manifests_dir = _manifests_dir()
     os.makedirs(manifests_dir, exist_ok=True)
     path = _path_for(m.id)
-    with open(path, "w") as f:
+    tmp = path + ".tmp"
+    with open(tmp, "w") as f:
         yaml.safe_dump(m.model_dump(exclude_none=True), f, sort_keys=False)
+        f.flush()
+        os.fsync(f.fileno())
+    os.replace(tmp, path)
 

@@ -2773,6 +2773,23 @@ def test_scan_records_manifest_path(settings_env):
     assert "_source_path" not in loaded.model_dump()
 
 
+def test_manifest_save_is_atomic_no_temp_left_behind(settings_env):
+    """save() writes via a temp file + os.replace, so a crash mid-write can
+    never leave a torn YAML (which load_all(strict=True) would treat as fatal
+    and block every scan)."""
+    from del_app import manifests
+
+    m = manifests.Manifest(id="atomicapp", name="Atomic", volumes=["vol1"])
+    manifests.save(m)
+    loaded = manifests.load_all()["atomicapp"]
+    assert loaded.name == "Atomic"
+    assert loaded.volumes == ["vol1"]
+    # No .tmp siblings survive a successful save.
+    import os
+    d = get_settings().manifests_dir
+    assert not [f for f in os.listdir(d) if f.endswith(".tmp")]
+
+
 def test_healthz_checks_schema_and_returns_unavailable(settings_env):
     from del_app.db import get_db
     from del_app.main import create_app

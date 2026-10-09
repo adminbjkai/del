@@ -994,7 +994,11 @@ def build_apps(
             else:
                 evidence = [Evidence(source="nginx_src", statement=f"proxy_pass port {matched_ports} matches published container port", weight=85)]
             name_hit = any(
-                _slugify(app.name) in _slugify(sn) or _slugify(sn).split(".")[0] == slug
+                # _slugify replaces dots with dashes, so split the RAW server
+                # name on "." before slugifying: _slugify(sn).split(".")[0]
+                # would return the whole slugified string and the first-label
+                # match could only ever fire on a full match.
+                _slugify(app.name) in _slugify(sn) or _slugify(sn.split(".")[0]) == slug
                 for sn in server_names
             )
             if name_hit:
@@ -1112,13 +1116,22 @@ def build_apps(
         app.domains.update(manifest.domains)
 
         by_key = {r.key: r for r in resources}
-        for key_list in (
-            manifest.compose, manifest.volumes, manifest.host_paths, manifest.systemd_units,
-            manifest.nginx, manifest.cron, manifest.repositories,
+        for field, key_list in (
+            ("compose", manifest.compose), ("volumes", manifest.volumes),
+            ("host_paths", manifest.host_paths), ("systemd_units", manifest.systemd_units),
+            ("nginx", manifest.nginx), ("cron", manifest.cron),
+            ("repositories", manifest.repositories),
         ):
             for key in key_list:
                 r = by_key.get(key)
                 if r is None:
+                    # A manifest is the operator's "always win" input, so a key
+                    # that matches no discovered resource must be visible rather
+                    # than silently ignored (it just never applies).
+                    logger.warning(
+                        "manifest %s: %s key %r matches no discovered resource",
+                        slug, field, key,
+                    )
                     continue
                 app.add(
                     r,

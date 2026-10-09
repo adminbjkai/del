@@ -338,7 +338,11 @@ def job_detail(
             """,
             (job_id,),
         )
-        job = _rows(rows)[0] if rows else {"id": job_id, "status": "unknown"}
+        if not rows:
+            # A missing job is a 404, consistent with /jobs/{id}/status; a
+            # fabricated status:"unknown" page hid the difference.
+            raise HTTPException(status_code=404, detail=f"no such job: {job_id}")
+        job = _rows(rows)[0]
         steps = _rows(
             q(conn, "SELECT * FROM job_steps WHERE job_id = ? ORDER BY seq", (job_id,))
         )

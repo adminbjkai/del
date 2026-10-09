@@ -1,5 +1,53 @@
 # Changelog
 
+## 2026.10.09 (c)
+
+Deep-audit hardening pass: three parallel read-only audits (backend, frontend,
+security/docs); every finding re-verified against the code before fixing.
+
+Backend correctness & resilience:
+- **Job can no longer stick in `running`.** The terminal step write, its commit,
+  its audit call and the final job-status write now run inside guards. A failure
+  there (full disk, a lock past busy_timeout, an audit append error) marks the
+  job failed instead of killing the worker thread with the job advertised as
+  running forever.
+- **Concurrent live jobs are serialized.** `create_job`'s guard-plus-INSERT now
+  runs under `BEGIN IMMEDIATE`, closing a check-then-insert race that let two
+  submits start live jobs on the same steps.
+- **Shared + explicitly approved resources can be planned.** correlate marks
+  every shared row `blocked`, which made per-resource approval a dead end even
+  though the documented contract is "removable when not excluded and not
+  shared-and-unapproved". An approval now releases an otherwise-confident shared
+  row; unapproved shared rows stay refused.
+- **Manifest writes are atomic** (temp file + fsync + `os.replace`), so a torn
+  YAML can no longer block every subsequent scan. Keys that match no discovered
+  resource are now logged instead of silently ignored.
+- **Login rate limiter** forgets an IP's attempts on a successful sign-in (genuine
+  repeated logins no longer count toward the lockout) and its dict is bounded.
+- **Unbatched `IN (...)` queries** on the apps list and assistant aggregates now
+  chunk at 400, matching the rest of the codebase's 999-parameter discipline.
+- **nginx first-label name match** fixed (`_slugify(sn.split('.')[0])`): the
+  intended 85→90 confidence bump never fired for multi-label server names.
+- Step-output redaction also covers bare `Bearer <token>`; `/jobs/{id}` returns
+  404 for a missing job, consistent with `/jobs/{id}/status`.
+
+Frontend (from the frontend audit; each verified first):
+- Live job output is no longer rebuilt on every poll — an opened `<details>` and
+  text selection survive; cells are written only when their value changed.
+- Focus trap contains Tab from the container/backdrop; rail Help/Ask tabs gain
+  roving tabindex + arrow keys; the Ask fab reports `aria-expanded`.
+- The scan poll waits for two consecutive idle reads before reloading, and a
+  failed start no longer schedules a poll.
+- `h`/`]` toggles (not just opens) the mobile Help sheet.
+- The assistant transcript is no longer a live region (it re-announced the
+  streaming answer every frame); a finished answer is announced once, and the
+  streaming bubble is `aria-busy` until done.
+- Gallery hover quick-actions are no longer `aria-hidden` while focusable.
+- CI's JavaScript gate fails when no files are found instead of passing silently.
+
+Tests: 493 passed, 2 skipped (`pytest -W error`). Pyflakes and `node --check`
+clean. Upgrade: restart `del-web`. No migration.
+
 ## 2026.10.09 (b)
 
 Review pass: repair the regression the telemetry commit left behind, finish the

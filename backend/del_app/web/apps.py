@@ -207,23 +207,29 @@ def apps_list(
         app_ids = [a["id"] for a in apps if a.get("id") is not None]
         agg_map = _app_aggregates(conn, app_ids)
         if app_ids:
-            id_ph = ",".join("?" for _ in app_ids)
-            detail_sql = f"""
-                SELECT a.app_id AS app_id, r.type AS type, r.data_json AS data_json,
-                       a.shared AS shared, a.excluded AS excluded, a.evidence_json AS evidence_json
-                FROM associations a
-                JOIN resources r ON r.id = a.resource_id
-                WHERE a.app_id IN ({id_ph})
-                  AND r.type IN ('nginx_site', 'port', 'container', 'directory', 'systemd_unit')
-            """
-            detail_params: list[Any] = list(app_ids)
-            # Not scoped in ?show=removed: a removed app's resources carry a
-            # stale last_seen too, and filtering them out would blank the
-            # domains/ports on exactly the rows that view exists to show.
-            if latest is not None and not show_removed:
-                detail_sql += " AND r.last_seen = ?"
-                detail_params.append(int(latest))
-            detail = _rows(q(conn, detail_sql, tuple(detail_params)))
+            # Chunk at 400 like every other IN(...) helper: SQLite's legacy
+            # 999-parameter limit would otherwise raise 'too many SQL
+            # variables' once the applications table grows past it.
+            detail = []
+            for start in range(0, len(app_ids), 400):
+                chunk = app_ids[start:start + 400]
+                id_ph = ",".join("?" for _ in chunk)
+                detail_sql = f"""
+                    SELECT a.app_id AS app_id, r.type AS type, r.data_json AS data_json,
+                           a.shared AS shared, a.excluded AS excluded, a.evidence_json AS evidence_json
+                    FROM associations a
+                    JOIN resources r ON r.id = a.resource_id
+                    WHERE a.app_id IN ({id_ph})
+                      AND r.type IN ('nginx_site', 'port', 'container', 'directory', 'systemd_unit')
+                """
+                detail_params: list[Any] = list(chunk)
+                # Not scoped in ?show=removed: a removed app's resources carry a
+                # stale last_seen too, and filtering them out would blank the
+                # domains/ports on exactly the rows that view exists to show.
+                if latest is not None and not show_removed:
+                    detail_sql += " AND r.last_seen = ?"
+                    detail_params.append(int(latest))
+                detail.extend(_rows(q(conn, detail_sql, tuple(detail_params))))
         else:
             detail = []
     finally:

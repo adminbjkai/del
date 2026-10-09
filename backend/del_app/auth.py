@@ -286,6 +286,9 @@ def check_csrf(request: Request, submitted: str) -> bool:
 _login_attempts: dict[str, list[float]] = {}
 RATE_LIMIT_MAX = 5
 RATE_LIMIT_WINDOW_SECONDS = 60
+# Under a distributed-IP attack the dict would otherwise grow without bound
+# (entries are only pruned when that same IP is seen again).
+RATE_LIMIT_MAX_IPS = 10000
 
 
 def rate_limited(ip: str) -> bool:
@@ -301,4 +304,22 @@ def rate_limited(ip: str) -> bool:
 
 def record_attempt(ip: str) -> None:
     """Record a login attempt for this IP."""
+    if ip not in _login_attempts and len(_login_attempts) >= RATE_LIMIT_MAX_IPS:
+        # Bounded memory: drop the IPs with no attempt inside the window
+        # (the common case) and, failing that, the oldest-seen entry.
+        now = time.time()
+        for stale in [
+            k for k, v in _login_attempts.items()
+            if not any(now - t < RATE_LIMIT_WINDOW_SECONDS for t in v)
+        ]:
+            _login_attempts.pop(stale, None)
+        while len(_login_attempts) >= RATE_LIMIT_MAX_IPS:
+            oldest = min(_login_attempts, key=lambda k: max(_login_attempts[k], default=0.0))
+            _login_attempts.pop(oldest, None)
     _login_attempts.setdefault(ip, []).append(time.time())
+
+
+def clear_attempts(ip: str) -> None:
+    """Forget this IP's attempts after a successful login, so repeated genuine
+    sign-ins (or two people behind one NAT) cannot trip the lockout."""
+    _login_attempts.pop(ip, None)

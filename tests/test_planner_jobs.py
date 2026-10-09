@@ -141,6 +141,41 @@ def test_shared_approved_volume_becomes_step_when_option_and_approval_present(se
     assert plan.est_reclaim_bytes >= 1000
 
 
+def test_shared_approved_volume_is_a_step_even_when_correlate_marked_it_blocked(settings_env):
+    """correlate sets removal_eligible='blocked' on every shared row. An
+    explicit per-resource approval must still let a confidently-owned shared
+    resource become a step; the 'blocked' check used to shadow that path and
+    make the approve affordance a dead end."""
+    conn = get_db()
+    app_id = _insert_app(conn, "shared-blocked")
+    vol_id = _insert_resource(conn, "volume", "blocked_vol", data={"size_bytes": 500})
+    _insert_assoc(conn, app_id, vol_id, confidence=95, shared=1, approved=1,
+                  removal_eligible="blocked")
+    conn.close()
+
+    plan = planner.build_plan("shared-blocked", {"remove_named_volumes": True})
+
+    volume_steps = [s for s in plan.steps if s.operation == "volume_rm"]
+    assert len(volume_steps) == 1
+    assert volume_steps[0].args["volume_name"] == "blocked_vol"
+    assert "blocked_vol" not in plan.preserved
+
+
+def test_shared_unapproved_blocked_row_stays_refused(settings_env):
+    """The M1 release must not weaken the default: a shared, unapproved row
+    still marked blocked is preserved, never a step."""
+    conn = get_db()
+    app_id = _insert_app(conn, "shared-still-blocked")
+    vol_id = _insert_resource(conn, "volume", "still_blocked_vol", data={"size_bytes": 500})
+    _insert_assoc(conn, app_id, vol_id, confidence=95, shared=1, approved=0,
+                  removal_eligible="blocked")
+    conn.close()
+
+    plan = planner.build_plan("shared-still-blocked", {"remove_named_volumes": True})
+    assert not any(s.operation == "volume_rm" for s in plan.steps)
+    assert "still_blocked_vol" in plan.preserved
+
+
 def test_volume_step_absent_unless_remove_named_volumes_set(settings_env):
     conn = get_db()
     app_id = _insert_app(conn, "app3")
@@ -547,6 +582,31 @@ def test_unexpected_exception_mid_step_fails_job_instead_of_corrupting_state(
     assert by_op["container_stop"] == "failed"
 
 
+def test_terminal_step_write_failure_marks_job_failed(settings_env, monkeypatch):
+    """If recording a step's terminal state raises (e.g. a full disk while
+    writing output), the worker must not die with the job left 'running'
+    forever — it must mark the job failed."""
+    _patch_audit(monkeypatch)
+    monkeypatch.setattr(jobs, "helper_client", _FakeHelper())
+
+    def _boom(text):
+        raise OSError("no space left on device")
+
+    monkeypatch.setattr(jobs, "sanitize_output", _boom)
+
+    steps = [
+        PlanStep(seq=1, stage="quiesce", operation="container_stop",
+                  args={"container_id": "c1"}, description="stop", reversible=True, danger="safe"),
+    ]
+    plan_id = _persist_manual_plan("diskap", steps)
+    job_id = jobs.create_job(plan_id, "live", user_id=1)
+
+    jobs._run_job(job_id, None)  # must not raise
+
+    status = jobs.job_status(job_id)
+    assert status["status"] == "failed"
+
+
 def test_live_volume_removal_without_confirm_phrase_is_refused(settings_env, monkeypatch):
     _patch_audit(monkeypatch)
     fake = _FakeHelper()
@@ -693,6 +753,14 @@ def test_sanitize_output_redacts_secrets():
     assert "abc123" not in sanitized
     assert "password=***" in sanitized
     assert "token=***" in sanitized
+
+
+def test_sanitize_output_redacts_bearer_tokens():
+    """A bare 'Authorization: Bearer <token>' has no key=value shape, so the
+    word=value regex never sees it."""
+    sanitized = jobs.sanitize_output("Authorization: Bearer abc123.def456 done")
+    assert "abc123" not in sanitized
+    assert "done" in sanitized
 
 
 def test_validate_removal_uses_preserved_to_skip_checks(monkeypatch):

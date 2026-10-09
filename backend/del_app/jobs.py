@@ -42,7 +42,10 @@ logger = logging.getLogger("del_app.jobs")
 
 CONFIRM_VOLUMES_PHRASE = "y"
 
-_SECRET_RE = re.compile(r"(?i)(password|token|secret|key)=\S+")
+_SECRET_RE = re.compile(r"(?i)(password|passwd|token|secret|api[_-]?key|access[_-]?key)=\S+")
+# A bare 'Authorization: Bearer <token>' carries no 'key=value' shape, so the
+# regex above never sees it; redact the credential that follows 'Bearer'.
+_BEARER_RE = re.compile(r"(?i)\bbearer\s+\S+")
 
 # Failures in these stages attempt an automatic restore from the backups
 # recorded earlier in this job before the job is marked failed.
@@ -145,7 +148,7 @@ def sanitize_output(text: str) -> str:
     persisted or logged."""
     if not text:
         return text
-    return _SECRET_RE.sub(r"\1=***", text)
+    return _BEARER_RE.sub("bearer ***", _SECRET_RE.sub(r"\1=***", text))
 
 
 class JobError(Exception):
@@ -162,21 +165,37 @@ def create_job(plan_id: int, mode: str, user_id: int) -> int:
     try:
         plan = verify_plan(plan_id, conn)
         if mode == "live":
-            active = q(
+            # The guard and the INSERT must be one atomic unit, or two
+            # concurrent submits can both pass the SELECT before either
+            # INSERTs and start two live jobs on the same steps. BEGIN
+            # IMMEDIATE takes the write lock up front so the second waits.
+            conn.execute("BEGIN IMMEDIATE")
+            try:
+                active = q(
+                    conn,
+                    "SELECT id FROM jobs WHERE plan_id = ? AND mode = 'live' "
+                    "AND status IN ('pending', 'running')",
+                    (plan_id,),
+                )
+                if active:
+                    conn.rollback()
+                    raise JobError(
+                        f"plan {plan_id} already has an active live job "
+                        f"(id={active[0]['id']}); refusing a concurrent live run")
+                job_id = x(
+                    conn,
+                    "INSERT INTO jobs (plan_id, mode, status, user_id) VALUES (?, ?, 'pending', ?)",
+                    (plan_id, mode, user_id),
+                )
+            except BaseException:
+                conn.rollback()
+                raise
+        else:
+            job_id = x(
                 conn,
-                "SELECT id FROM jobs WHERE plan_id = ? AND mode = 'live' "
-                "AND status IN ('pending', 'running')",
-                (plan_id,),
+                "INSERT INTO jobs (plan_id, mode, status, user_id) VALUES (?, ?, 'pending', ?)",
+                (plan_id, mode, user_id),
             )
-            if active:
-                raise JobError(
-                    f"plan {plan_id} already has an active live job "
-                    f"(id={active[0]['id']}); refusing a concurrent live run")
-        job_id = x(
-            conn,
-            "INSERT INTO jobs (plan_id, mode, status, user_id) VALUES (?, ?, 'pending', ?)",
-            (plan_id, mode, user_id),
-        )
         for step in plan.steps:
             x(
                 conn,
@@ -394,23 +413,42 @@ def _run_job(job_id: int, confirm_phrase: str | None) -> None:
                 exit_code = 1
                 logger.exception("job %s step seq %s raised", job_id, step["seq"])
 
-            # A completed backup must be recorded before any deletion runs, so
-            # a later failure in this job has something to roll back to.
-            if ok and mode == "live" and step["operation"] in _BACKUP_OPS:
-                _record_backup(conn, job_id, step["operation"], args)
+            # Persist the terminal state of this step. Everything from here on
+            # — recording a completed backup, sanitizing the output, the step
+            # UPDATE and its audit — can fail (full disk, a lock beyond
+            # busy_timeout, an audit-log append). Guarding all of it keeps such
+            # a failure from killing the worker thread with the job still
+            # advertised as 'running' forever, which only a restart would fix.
+            try:
+                # A completed backup must be recorded before any deletion runs,
+                # so a later failure in this job has something to roll back to.
+                if ok and mode == "live" and step["operation"] in _BACKUP_OPS:
+                    _record_backup(conn, job_id, step["operation"], args)
 
-            output = sanitize_output(output)
-            state = "done" if ok else "failed"
-            x(
-                conn,
-                "UPDATE job_steps SET state = ?, exit_code = ?, output_sanitized = ?, finished = ? WHERE id = ?",
-                (state, exit_code, output, _now(), step["id"]),
-            )
-            conn.commit()
-            auditlog.audit(
-                user_id, f"step_{state}", f"job:{job_id}:seq:{step['seq']}",
-                {"operation": step["operation"], "exit_code": exit_code},
-            )
+                output = sanitize_output(output)
+                state = "done" if ok else "failed"
+                x(
+                    conn,
+                    "UPDATE job_steps SET state = ?, exit_code = ?, output_sanitized = ?, finished = ? WHERE id = ?",
+                    (state, exit_code, output, _now(), step["id"]),
+                )
+                conn.commit()
+                auditlog.audit(
+                    user_id, f"step_{state}", f"job:{job_id}:seq:{step['seq']}",
+                    {"operation": step["operation"], "exit_code": exit_code},
+                )
+            except BaseException:
+                logger.exception(
+                    "job %s step seq %s: failed to record terminal step state",
+                    job_id, step["seq"],
+                )
+                job_failed = True
+                try:
+                    _mark_job(conn, job_id, "failed", finished=True)
+                    conn.commit()
+                except Exception:
+                    logger.exception("job %s: could not mark failed after terminal write failure", job_id)
+                break
 
             if not ok:
                 job_failed = True
@@ -427,9 +465,20 @@ def _run_job(job_id: int, confirm_phrase: str | None) -> None:
                     )
 
         final_status = "failed" if job_failed else "success"
-        _mark_job(conn, job_id, final_status, finished=True)
-        conn.commit()
-        auditlog.audit(user_id, f"job_{final_status}", f"job:{job_id}", {})
+        try:
+            _mark_job(conn, job_id, final_status, finished=True)
+            conn.commit()
+            auditlog.audit(user_id, f"job_{final_status}", f"job:{job_id}", {})
+        except BaseException:
+            # The same reasoning as the per-step terminal write: a failure here
+            # must not leave the job advertised as 'running'. Retry the status
+            # write once, on its own, and log if even that fails.
+            logger.exception("job %s: failed to record terminal status %r", job_id, final_status)
+            try:
+                _mark_job(conn, job_id, final_status, finished=True)
+                conn.commit()
+            except Exception:
+                logger.exception("job %s: job left without a terminal status", job_id)
     finally:
         conn.close()
 
