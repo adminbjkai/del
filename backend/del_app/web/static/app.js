@@ -49,7 +49,19 @@
     var s = Math.max(0, Math.round(ms / 1000));
     return s < 60 ? s + "s" : Math.floor(s / 60) + "m " + (s % 60) + "s";
   }
-  DEL.util = { escapeHtml: escapeHtml, store: store, icon: icon, parseUtc: parseUtc };
+
+  // Binary byte sizes with one decimal for GB and up, matching the server's
+  // human_size figures so the two never disagree.
+  function formatBytes(bytes) {
+    if (bytes == null || isNaN(bytes)) return "—";
+    var b = Number(bytes);
+    if (b < 1024) return b + " B";
+    var units = ["KB", "MB", "GB", "TB", "PB"];
+    var i = -1;
+    do { b /= 1024; i++; } while (b >= 1024 && i < units.length - 1);
+    return (b >= 100 || i < 2 ? b.toFixed(0) : b.toFixed(1)) + " " + units[i];
+  }
+  DEL.util = { escapeHtml: escapeHtml, store: store, icon: icon, parseUtc: parseUtc, formatBytes: formatBytes };
 
   // =========================================================================
   // Toasts (DEL.toast) — aria-live notifications
@@ -1753,9 +1765,14 @@
       if (telemetryRefresh) telemetryRefresh.disabled = true;
       fetch("/api/telemetry", { credentials: "same-origin", headers: { "Accept": "application/json" } })
         .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
-        .then(renderTelemetry)
-        .catch(function () {
-          // A failed read stays quiet rather than showing a broken strip.
+        .then(function (data) {
+          if (!data || data.ok !== true) throw new Error("bad payload");
+          return renderTelemetry(data);
+        })
+        .catch(function (err) {
+          // A failed or malformed read stays quiet rather than showing a broken
+          // strip — but is logged, so a JS fault is not silently masked.
+          if (window.console && console.warn) console.warn("DEL telemetry failed:", err);
           if (telemetryUpdated) telemetryUpdated.textContent = "telemetry unavailable";
         })
         .then(function () { if (telemetryRefresh) telemetryRefresh.disabled = false; });
