@@ -136,9 +136,16 @@ def _latest_scan_id(conn) -> int | None:
     return latest_done_scan_id(conn)
 
 
-def _scan_started_map(conn) -> dict[int, str]:
+def _scan_started_map(conn, scan_ids: tuple[int, ...] | list[int] | None = None) -> dict[int, str]:
     """scan_id -> started timestamp (sqlite datetime string)."""
-    rows = _rows(q(conn, "SELECT id, started FROM scans"))
+    if scan_ids is not None:
+        ids = [int(i) for i in set(scan_ids) if i is not None]
+        if not ids:
+            return {}
+        ph = ",".join("?" for _ in ids)
+        rows = _rows(q(conn, f"SELECT id, started FROM scans WHERE id IN ({ph})", tuple(ids)))
+    else:
+        rows = _rows(q(conn, "SELECT id, started FROM scans"))
     out: dict[int, str] = {}
     for r in rows:
         sid = r.get("id")
@@ -174,6 +181,26 @@ def _disk_usage_bytes(conn, latest_scan: int | None) -> int:
     size field is present, if any). Read-only."""
     if latest_scan is None:
         return 0
+    try:
+        row = conn.execute(
+            """
+            SELECT COALESCE(SUM(
+                CASE 
+                    WHEN type = 'directory' THEN CAST(json_extract(data_json, '$.size_kb') AS INTEGER) * 1024
+                    WHEN type = 'volume' THEN CAST(json_extract(data_json, '$.size_bytes') AS INTEGER)
+                    ELSE 0 
+                END
+            ), 0) AS total_bytes
+            FROM resources
+            WHERE last_seen = ? AND type IN ('directory', 'volume')
+            """,
+            (latest_scan,),
+        ).fetchone()
+        if row and row["total_bytes"] is not None:
+            return int(row["total_bytes"])
+    except Exception:
+        pass
+    # Fallback to python parsing if json_extract is unavailable in minimal sqlite build
     rows = _rows(
         q(
             conn,

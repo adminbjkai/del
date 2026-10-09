@@ -177,7 +177,6 @@ def apps_list(
     conn = get_db(read_snapshot=True)
     try:
         latest = _latest_scan_id(conn)
-        scan_times = _scan_started_map(conn)
         sql = "SELECT * FROM applications WHERE 1=1"
         params: list[Any] = []
         if not show_removed and latest is not None:
@@ -192,6 +191,9 @@ def apps_list(
             params.append(status)
         sql += " ORDER BY name COLLATE NOCASE"
         apps = _rows(q(conn, sql, tuple(params)))
+
+        relevant_scans = [a.get("first_seen") for a in apps] + [a.get("last_seen") for a in apps]
+        scan_times = _scan_started_map(conn, relevant_scans)
 
         # Per-app aggregates: resource count, warning count (possible / low
         # confidence associations), plus domains & ports from associated
@@ -299,7 +301,7 @@ def app_detail(
             raise HTTPException(status_code=404, detail=f"no such application: {slug}")
         app = found[0]
         latest_scan = _latest_scan_id(conn)
-        scan_times = _scan_started_map(conn)
+        scan_times = _scan_started_map(conn, (app.get("first_seen"), app.get("last_seen")))
         # Only show associations to resources still present as of the latest
         # scan; otherwise a resource removed in an earlier scan (stale
         # last_seen) would keep showing up here forever.
@@ -492,6 +494,24 @@ def palette_json(user: User = Depends(auth.require_user)) -> JSONResponse:
         apps_sql += " ORDER BY name COLLATE NOCASE"
         app_rows = _rows(q(conn, apps_sql, params))
         domains_by_app = enabled_domains_by_app(conn, [a["id"] for a in app_rows], latest)
+
+        ports_by_app: dict[int, list[str]] = {}
+        if app_rows and latest is not None:
+            app_id_list = [a["id"] for a in app_rows]
+            for offset in range(0, len(app_id_list), 400):
+                chunk = app_id_list[offset:offset + 400]
+                ph = ",".join("?" for _ in chunk)
+                port_rows = conn.execute(f"""
+                    SELECT a.app_id, r.data_json
+                    FROM associations a
+                    JOIN resources r ON r.id = a.resource_id
+                    WHERE a.app_id IN ({ph}) AND r.type = 'port' AND a.excluded = 0 AND r.last_seen = ?
+                """, (*chunk, latest)).fetchall()
+                for pr in port_rows:
+                    pdata = _json_or(pr["data_json"], {})
+                    port_num = pdata.get("port")
+                    if port_num is not None:
+                        ports_by_app.setdefault(pr["app_id"], []).append(str(port_num))
     finally:
         conn.close()
 
@@ -501,6 +521,7 @@ def palette_json(user: User = Depends(auth.require_user)) -> JSONResponse:
             "name": a["name"],
             "status": a.get("status"),
             "domains": domains_by_app.get(a["id"], []),
+            "ports": ports_by_app.get(a["id"], []),
             "url": f"/apps/{a['slug']}",
         }
         for a in app_rows

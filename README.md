@@ -33,25 +33,28 @@ applications, resources and scan time over the last 90 scans, and lists your
 active sign-ins with a "sign out other sessions" action.
 
 The authenticated **View Apps** tab at `/view-apps` is a homelab-style launcher
-for current, enabled domains that pass a live HTTPS check. It supports search,
-categories, favorites, grid/list layouts, card sizing, density, hiding, and drag
-ordering; personal layout preferences stay in browser local storage and do not
-change DEL inventory or removal data. Domains that fail the check — or show only
-a login page while nothing listens behind it — are listed under **Unavailable**
-with the reason. Card icons are proxied through DEL's own `/app-icon/{domain}`
-route rather than loaded from each app's origin, so an app behind HTTP basic
-auth cannot pop a credential prompt over the gallery.
+for current, enabled domains that pass a live HTTPS check. It features real-time
+HTTPS latency badges (graded green/amber/red with sonar animations), persistent
+disk-cached probing (`probe-cache.json`), hover micro-actions (1-click URL copy and
+inventory drilldown), search, categories, favorites, grid/list layouts, card sizing,
+density, hiding, and drag ordering; personal layout preferences stay in browser
+local storage and do not change DEL inventory or removal data. Domains that fail
+the check — or show only a login page while nothing listens behind it — are listed
+under **Unavailable** with the reason. Card icons are proxied through DEL's own
+`/app-icon/{domain}` route rather than loaded from each app's origin, so an app
+behind HTTP basic auth cannot pop a credential prompt over the gallery.
 
 The UI is self-contained (no third-party code, fonts self-hosted, content-hashed
-assets cached as immutable) in a dark cyanotype or light drafting-film theme
-(`localStorage["del.theme"]`, else the OS `prefers-color-scheme`, else dark).
-Every inventory table has search, sorting, per-column filters, quick filter
-chips, a column chooser, pagination and CSV export. `Ctrl`/`Cmd`+`K` opens a
-command palette for pages, applications, their sites and actions; apps opened
-in this browser are listed first. `g` then a letter jumps between pages, `/`
-focuses the site-plan filter on the dashboard (Enter opens the first match)
-and otherwise the table or gallery search, `t` toggles the theme and `?` lists
-every shortcut. See [docs/UI.md](docs/UI.md).
+assets cached as immutable) in a hyper-refined dark cyanotype or light drafting-film
+architectural CAD theme with dual-tier measuring grids (`localStorage["del.theme"]`,
+else the OS `prefers-color-scheme`, else dark). Every inventory table has search,
+sorting, per-column filters, quick filter chips, a column chooser, pagination and
+CSV export. `Ctrl`/`Cmd`+`K` opens an instant command palette for pages, applications,
+their sites, listening ports (`:port`), and actions; apps opened in this browser are
+listed first. Keyboard shortcuts include `g` jumps, `/` search, `[`/`]` drawer toggles,
+`h` help dock, `c` copy page URL, `t` theme toggle, and `?` for the shortcut cheat sheet.
+HUD notifications use frosted glass banners with interactive progress timers.
+See [docs/UI.md](docs/UI.md).
 
 The **Assistant** is a read-only Q&A over the latest inventory (Ollama Cloud
 `glm-5.3-flash`): a dedicated page at `/assistant` plus an **Ask** tab in the

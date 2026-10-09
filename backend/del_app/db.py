@@ -19,6 +19,9 @@ def get_db(db_path: str | None = None, *, read_snapshot: bool = False) -> sqlite
     conn = sqlite3.connect(path)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA journal_mode=WAL")
+    conn.execute("PRAGMA cache_size = -32000")
+    conn.execute("PRAGMA mmap_size = 67108864")
+    conn.execute("PRAGMA temp_store = MEMORY")
     conn.execute("PRAGMA busy_timeout=5000")
     conn.execute("PRAGMA foreign_keys=ON")
     # WAL already gives crash-safety; NORMAL drops one fsync per commit, which

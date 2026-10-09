@@ -187,7 +187,27 @@
     if (open) collapsed[name] = true; else delete collapsed[name];
   });
   var searchTimer = 0;
-  if (search) search.addEventListener("input", function () { clearTimeout(searchTimer); searchTimer = setTimeout(render, 80); });
+  if (search) {
+    search.addEventListener("input", function () { clearTimeout(searchTimer); searchTimer = setTimeout(render, 50); });
+    search.addEventListener("keydown", function (e) {
+      if (e.key === "Escape" && search.value) {
+        e.stopPropagation();
+        search.value = "";
+        render();
+        return;
+      }
+      if (e.key === "ArrowDown") {
+        var firstLink = gallery.querySelector(".app-launch-card:not([hidden]) .app-launch-link");
+        if (firstLink) { e.preventDefault(); firstLink.focus(); }
+      } else if (e.key === "Enter") {
+        var visibleLinks = gallery.querySelectorAll(".app-launch-card:not([hidden]) .app-launch-link");
+        if (visibleLinks.length === 1) {
+          e.preventDefault();
+          visibleLinks[0].click();
+        }
+      }
+    });
+  }
   if (searchOp) searchOp.addEventListener("change", render);
   if (category) category.addEventListener("change", render);
   document.querySelectorAll("[data-category-pill]").forEach(function (pill) {

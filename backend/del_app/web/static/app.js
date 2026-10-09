@@ -54,17 +54,46 @@
   // =========================================================================
   // Toasts (DEL.toast) — aria-live notifications
   // =========================================================================
-  function showToast(message, kind) {
+  function showToast(message, kind, duration) {
     var region = document.getElementById("toast-region");
     if (!region) return;
+    duration = duration || 3400;
+    kind = kind || "info";
+
     var toast = document.createElement("div");
-    toast.className = "toast toast-" + (kind || "info");
-    toast.textContent = message;
+    toast.className = "toast toast-" + kind;
+    toast.setAttribute("role", "status");
+
+    var iconName = kind === "ok" ? "check" : kind === "error" ? "close" : "bolt";
+    toast.innerHTML =
+      '<span class="toast-ico">' + icon(iconName) + '</span>' +
+      '<span class="toast-msg">' + escapeHtml(message) + '</span>' +
+      '<button type="button" class="toast-close" aria-label="Dismiss">×</button>' +
+      '<div class="toast-meter" aria-hidden="true"><div class="toast-meter-fill"></div></div>';
+
     region.appendChild(toast);
-    setTimeout(function () {
+
+    var fill = toast.querySelector(".toast-meter-fill");
+    if (fill) {
+      fill.style.transition = "width " + duration + "ms linear";
+      requestAnimationFrame(function () { fill.style.width = "0%"; });
+    }
+
+    function dismiss() {
+      if (toast.classList.contains("is-leaving")) return;
       toast.classList.add("is-leaving");
       setTimeout(function () { toast.remove(); }, 200);
-    }, 3200);
+    }
+
+    toast.querySelector(".toast-close").addEventListener("click", function (e) {
+      e.stopPropagation();
+      dismiss();
+    });
+    toast.addEventListener("click", function (e) {
+      if (e.target.tagName !== "A") dismiss();
+    });
+
+    setTimeout(dismiss, duration);
   }
   DEL.toast = showToast;
 
@@ -1374,9 +1403,15 @@
     }
     function applyPlanFilter() {
       var q = planFilter ? planFilter.value.trim().toLowerCase() : "";
+      var activeChip = $(".filter-chip.is-on", siteplan);
+      var statusFilter = activeChip ? activeChip.getAttribute("data-lot-filter") : "all";
+      if (statusFilter === "all") statusFilter = "";
+
       planLots.forEach(function (lot) {
         var hay = (lot.getAttribute("data-find") || "").toLowerCase();
-        lot.parentElement.hidden = !!(q && hay.indexOf(q) === -1);
+        var matchQ = !q || hay.indexOf(q) !== -1;
+        var matchStatus = !statusFilter || lot.classList.contains("is-" + statusFilter) || (statusFilter === "warning" && lot.classList.contains("has-warning"));
+        lot.parentElement.hidden = !(matchQ && matchStatus);
       });
       $$(".siteplan-group", siteplan).forEach(function (group) {
         var shown = 0;
@@ -1384,7 +1419,7 @@
         group.hidden = shown === 0;
         var c = $(".siteplan-group-count", group);
         if (c) {
-          var n = q ? shown : Number(c.getAttribute("data-count") || shown);
+          var n = (q || statusFilter) ? shown : Number(c.getAttribute("data-count") || shown);
           c.textContent = n + (n === 1 ? " app" : " apps");
         }
       });
@@ -1394,9 +1429,16 @@
       if (view) {
         $$("li", view).forEach(function (li) { total += 1; if (!li.hidden) visible += 1; });
       }
-      if (planCount) planCount.textContent = q ? (visible + " of " + total) : "";
-      if (planEmpty) planEmpty.hidden = !q || visible > 0;
+      if (planCount) planCount.textContent = (q || statusFilter) ? (visible + " of " + total) : "";
+      if (planEmpty) planEmpty.hidden = !(q || statusFilter) || visible > 0;
     }
+    $$("[data-lot-filter]", siteplan).forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        $$("[data-lot-filter]", siteplan).forEach(function (b) { b.classList.remove("is-on"); });
+        btn.classList.add("is-on");
+        applyPlanFilter();
+      });
+    });
     function showGroup(mode) {
       groupBtns.forEach(function (b) { b.setAttribute("aria-pressed", b.getAttribute("data-siteplan-group") === mode ? "true" : "false"); });
       $$("[data-siteplan-view]", siteplan).forEach(function (v) { v.hidden = v.getAttribute("data-siteplan-view") !== mode; });
@@ -1447,11 +1489,14 @@
     var actions = [
       { title: "Run a new scan", run: function () { if (DEL.runScan) DEL.runScan(); }, when: function () { return !!DEL.runScan; } },
       { title: "Switch light / dark theme", hint: "t", run: function () { DEL.theme.toggle(); } },
+      { title: "Toggle table density (compact / comfortable)", hint: "c", run: function () { var cur = root.getAttribute("data-density") === "compact" ? "comfortable" : "compact"; setDensity(cur); DEL.toast("Table density: " + cur, "info", 1800); } },
+      { title: "Open View Apps launcher", hint: "g v", run: function () { location.href = "/view-apps"; } },
+      { title: "Review orphaned resources", hint: "g o", run: function () { location.href = "/orphans"; } },
       { title: "Show keyboard shortcuts", hint: "?", run: function () { openDialog(shortcuts); } },
-      { title: "Open the Help panel", run: openHelp },
+      { title: "Open the Help panel", hint: "h", run: openHelp },
       { title: "Ask the assistant about this page", run: function () { setRailTab("ask"); }, when: function () { return !!document.getElementById("assistant-dock"); } },
       { title: "Export this table as CSV", run: function () { var b = $("[data-export-table]"); if (b) b.click(); }, when: function () { return !!$("[data-export-table]"); } },
-      { title: "Collapse or expand the sidebar", run: function () { if (sidebarCollapse) sidebarCollapse.click(); }, when: function () { return !isMobile(); } },
+      { title: "Collapse or expand the sidebar", hint: "[", run: function () { if (sidebarCollapse) sidebarCollapse.click(); }, when: function () { return !isMobile(); } },
     ];
     var apps = null, selected = 0, items = [];
     function loadApps() {
@@ -1499,14 +1544,15 @@
         }
         recent.forEach(function (a) { recentSlugs[a.slug] = true; });
       }
-      function appEntry(a) { return { title: a.name, url: a.url, status: a.status }; }
+      function appEntry(a) { return { title: a.name, url: a.url, status: a.status, ports: a.ports }; }
       function appHtml(a) {
-        return icon("app") + escapeHtml(a.title) + '<span class="cmdk-meta"><span class="badge status-' + escapeHtml(a.status || "unknown") + '">' + escapeHtml(a.status || "") + "</span></span>";
+        var portsText = (a.ports && a.ports.length) ? ('<span class="cmdk-meta-port">:' + escapeHtml(a.ports.slice(0, 2).join(", :")) + '</span>') : "";
+        return icon("app") + escapeHtml(a.title) + '<span class="cmdk-meta">' + portsText + '<span class="badge status-' + escapeHtml(a.status || "unknown") + '">' + escapeHtml(a.status || "") + "</span></span>";
       }
       group("Recent", recent.map(appEntry), appHtml);
       var appList = (apps || []).filter(function (a) {
         if (!q && recentSlugs[a.slug]) return false;
-        return !q || has(a.name, q) || has(a.slug, q) || has((a.domains || []).join(" "), q);
+        return !q || has(a.name, q) || has(a.slug, q) || has((a.domains || []).join(" "), q) || has((a.ports || []).join(" "), q);
       });
       group("Applications", appList.slice(0, q ? 40 : 8).map(appEntry), appHtml);
       if (q) {
@@ -1600,6 +1646,18 @@
       if (filter) { e.preventDefault(); filter.focus(); filter.select(); }
     } else if (e.key === "t") {
       DEL.theme.toggle();
+    } else if (e.key === "[" || e.key === "b") {
+      e.preventDefault();
+      if (sidebarCollapse && !isMobile()) sidebarCollapse.click();
+    } else if (e.key === "]" || e.key === "h") {
+      e.preventDefault();
+      if (railCollapseBtn && wideRail()) railCollapseBtn.click();
+      else if (glossaryFab) glossaryFab.click();
+    } else if (e.key === "c") {
+      e.preventDefault();
+      var curDensity = root.getAttribute("data-density") === "compact" ? "comfortable" : "compact";
+      setDensity(curDensity);
+      showToast("Table density: " + curDensity, "info", 1800);
     } else if (e.key === "?") {
       e.preventDefault();
       openDialog(shortcuts);

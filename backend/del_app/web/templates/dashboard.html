@@ -30,6 +30,18 @@
     </ul>
     <div class="siteplan-tools">
       {% if lots_total %}
+      <div class="siteplan-quick-filters" role="group" aria-label="Quick status filter">
+        <button type="button" class="filter-chip is-on" data-lot-filter="all">All</button>
+        <button type="button" class="filter-chip" data-lot-filter="running">
+          <span class="dot dot-ok" aria-hidden="true"></span>Running
+        </button>
+        <button type="button" class="filter-chip" data-lot-filter="stopped">
+          <span class="dot dot-warn" aria-hidden="true"></span>Stopped
+        </button>
+        <button type="button" class="filter-chip" data-lot-filter="warning">
+          <span class="lot-flag" aria-hidden="true"></span>Weak
+        </button>
+      </div>
       <label class="siteplan-find">
         <span class="sr-only">Filter the site plan by name, site, kind or status</span>
         <input type="search" id="siteplan-filter" placeholder="Name, site, or kind" autocomplete="off" autocapitalize="off" spellcheck="false" aria-controls="siteplan" enterkeyhint="go">

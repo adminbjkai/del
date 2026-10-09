@@ -84,7 +84,7 @@
   {% if domains %}
     {# data-stop-propagation, not an inline onclick: script-src 'self' blocks
        inline handlers. The listener lives in app.js. #}
-    {% for d in domains %}<a href="https://{{ d }}" target="_blank" rel="noopener noreferrer" data-stop-propagation>{{ d }}</a>{% if not loop.last %}{{ sep }}{% endif %}{% endfor %}
+    {% for d in domains %}<span class="domain-entry"><a href="https://{{ d }}" target="_blank" rel="noopener noreferrer" data-stop-propagation>{{ d }}</a><button type="button" class="copy-mini" data-copy="{{ d }}" title="Copy {{ d }}" aria-label="Copy {{ d }}">{{ i.icon('copy') }}</button></span>{% if not loop.last %}{{ sep }}{% endif %}{% endfor %}
   {% else %}—{% endif %}
 {%- endmacro %}
 

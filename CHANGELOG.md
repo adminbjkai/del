@@ -1,5 +1,51 @@
 # Changelog
 
+## 2026.10.09
+
+Engineering telemetry overhaul: deeper host resource efficiency, SQLite acceleration,
+architectural CAD styling with dual-tier measuring grids, live latency instrumentation,
+and high-convenience developer workflows.
+
+Host Resource & Backend Optimization:
+- **SQLite Engine Tuning**: Configured `PRAGMA cache_size = -32000` (32MB dedicated page cache),
+  `mmap_size = 67108864` (64MB memory-mapped zero-copy reads), and `temp_store = MEMORY` for
+  ultra-fast table sorting and joins.
+- **Batched Scanner Pipeline**: Replaced thousands of single-row SQLite deletes and inserts
+  with 400-item chunked queries and `conn.executemany(...)`, drastically reducing write lock duration.
+- **Direct Database Aggregation**: Offloaded disk usage calculations to SQLite `json_extract()`,
+  avoiding in-memory JSON parsing across thousands of resource rows. Scoped scan ID queries to
+  only the apps rendered on page.
+- **Fast Similarity Pruning**: Added length-difference fast-path pruning in `correlate.py` before
+  invoking `difflib.SequenceMatcher`, eliminating unnecessary CPU work during correlation passes.
+- **Persistent Probe Caching**: Added atomic disk caching (`probe-cache.json`) with background
+  revalidation for `/view-apps` domain health checks, eliminating 20s cold-start delays. Added
+  in-memory TTL cache to icon domains, eliminating 125+ redundant SQLite connections per load.
+- **Host Telemetry API**: Authenticated `GET /api/telemetry` providing real-time CPU load averages,
+  `/proc/meminfo` RAM breakdown, disk space, Docker reclaimable space, and scan engine state.
+
+CAD Instrument UI & High-Convenience Additions:
+- **Dual-Tier Measuring Grid**: Replaced generic background with precise 8px/32px CAD drafting
+  sub-grids with frosted glass panels and high-contrast telemetry styling.
+- **Latency Badges & Sonar Indicators**: Launcher tiles feature color-coded real-time latency
+  telemetry badges (`<100ms` green, `100-300ms` amber, `>300ms` red) with sonar radar pulses.
+- **Hover Micro-Actions & Universal 1-Click Copy**: Added hover action toolbars to launcher tiles
+  (instant URL copy and inventory drill-down) and micro-copy buttons to all domain links.
+- **Architectural HUD Toasts**: Upgraded notifications to frosted glass floating banners with
+  live progress countdown bars and manual dismiss.
+- **Command Palette Port Search**: `Ctrl+K` palette now indexes and searches published container/host
+  listening ports (e.g. `:8080`) and provides launcher quick-actions.
+- **Site Plan Quick Filters**: Added instant status filter chips (`All`, `Running`, `Stopped`, `Weak`)
+  with zero layout shift (CLS).
+- **Expanded Keyboard Navigation**: Added `[` (toggle left sidebar), `]` (toggle right drawer),
+  `b` (open launcher), `h` (help dock), `c` (copy URL), and arrow key navigation in the launcher.
+- **Assistant Code Header**: Code blocks in AI assistant threads now feature terminal titlebars
+  with 1-click clipboard copy.
+
+Hygiene:
+- Safely purged 118 broken dangling symlinks and obsolete test dumps using `/usr/bin/trash`.
+
+Upgrade: restart `del-web`. No migration.
+
 ## 2026.10.05
 
 A tighter survey sheet: the site plan is something you can find a lot in,

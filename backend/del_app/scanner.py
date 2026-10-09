@@ -280,8 +280,16 @@ def run_scan() -> int:
                 app_ids[record.slug] = app_id
             app_count += 1
 
-            # Replace this app's associations with the freshly correlated set.
-            conn.execute("DELETE FROM associations WHERE app_id=?", (app_id,))
+        # Replace these apps' associations with the freshly correlated set.
+        updated_app_ids = [aid for aid in app_ids.values() if aid is not None]
+        for offset in range(0, len(updated_app_ids), 400):
+            chunk = updated_app_ids[offset:offset + 400]
+            ph = ",".join("?" for _ in chunk)
+            conn.execute(f"DELETE FROM associations WHERE app_id IN ({ph})", tuple(chunk))
+
+        assoc_rows = []
+        for record, associations in apps:
+            app_id = app_ids[record.slug]
             for a in associations:
                 rid = resource_ids.get((a.resource_type, a.resource_key))
                 if rid is None:
@@ -296,21 +304,24 @@ def run_scan() -> int:
                     "confidence", "ownership", "shared", "data_loss_risk", "removal_eligible",
                 ))
                 approved = int(bool(review.get("approved_by_user")) and safety == prior_safety)
-                conn.execute(
-                    "INSERT INTO associations (app_id, resource_id, confidence, ownership, shared, "
-                    "data_loss_risk, removal_eligible, recommended_action, evidence_json, source, excluded, "
-                    "approved_by_user, user_excluded, user_shared) "
-                    "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-                    (
-                        app_id, rid, a.confidence, a.ownership, shared,
-                        a.data_loss_risk, a.removal_eligible, a.recommended_action,
-                        json.dumps([e.model_dump() for e in a.evidence]),
-                        "correlate", int(a.excluded or review.get("user_excluded", 0)),
-                        approved, review.get("user_excluded", 0),
-                        review.get("user_shared", 0),
-                    ),
-                )
-                assoc_count += 1
+                assoc_rows.append((
+                    app_id, rid, a.confidence, a.ownership, shared,
+                    a.data_loss_risk, a.removal_eligible, a.recommended_action,
+                    json.dumps([e.model_dump() for e in a.evidence]),
+                    "correlate", int(a.excluded or review.get("user_excluded", 0)),
+                    approved, review.get("user_excluded", 0),
+                    review.get("user_shared", 0),
+                ))
+
+        if assoc_rows:
+            conn.executemany(
+                "INSERT INTO associations (app_id, resource_id, confidence, ownership, shared, "
+                "data_loss_risk, removal_eligible, recommended_action, evidence_json, source, excluded, "
+                "approved_by_user, user_excluded, user_shared) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                assoc_rows,
+            )
+        assoc_count = len(assoc_rows)
 
         # Drop associations belonging to applications that no longer exist in
         # this scan. Only apps that were re-correlated above had their rows

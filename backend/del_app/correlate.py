@@ -1074,10 +1074,16 @@ def build_apps(
                 if not (r.data.get("has_compose") or r.data.get("has_env") or git.get("present")):
                     continue
             base = r.display
+            base_slug = _slugify(base)
+            base_len = len(base_slug)
             for slug, app in apps.items():
                 if (r.type, r.key) in app.assocs:
                     continue
-                ratio = difflib.SequenceMatcher(None, _slugify(base), slug).ratio()
+                slug_len = len(slug)
+                max_len = max(slug_len, base_len)
+                if max_len > 0 and abs(slug_len - base_len) / max_len > (1.0 - NAME_SIMILARITY_THRESHOLD):
+                    continue
+                ratio = difflib.SequenceMatcher(None, base_slug, slug).ratio()
                 if ratio >= NAME_SIMILARITY_THRESHOLD:
                     confidence = min(50, int(ratio * 60))
                     app.add(

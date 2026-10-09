@@ -138,8 +138,8 @@ being uncompromised.
 ├── backend/del_app/
 │   ├── main.py            FastAPI app factory, routes mounting
 │   ├── config.py          settings (port, paths) from /apps/del/config/del.toml
-│   ├── db.py              sqlite connection, migration runner
-│   ├── migrations/        001_init.sql (schema), 002_indexes.sql (secondary indexes)
+│   ├── db.py              sqlite connection, migration runner, WAL & mmap configuration
+│   ├── migrations/        001_init.sql through 005_drop_settings.sql (schema, indexes, assistant, reviews)
 │   ├── auth.py            login, argon2id hashing, sessions, CSRF, rate limit
 │   ├── models.py          typed dataclasses / pydantic models
 │   ├── discovery/
@@ -291,23 +291,38 @@ request prompts or targets until that tab is opened.
 - audit_log(id, ts, user_id, action, subject, details_json)  — no secrets ever.
   Deliberately not indexed: nothing in the codebase reads it. It needs a retention
   policy, not an index.
-- settings(key, value)
+- settings(key, value) — dropped in migration 005 in favor of `del.toml`.
 
-### Indexes (`002_indexes.sql`)
+### Migrations & Database Performance
 
-`001_init.sql` declared foreign keys but no indexes, and SQLite does not create
-them for foreign keys — so every page load rebuilt AUTOMATIC COVERING INDEXes over
-`associations` on the fly. Migration 002 adds 11 secondary indexes: four on
-`associations` (`resource_id`; `(app_id, excluded)`; `removal_eligible`; a partial
-index on `shared` where `shared = 1`), `resources(type, last_seen)`,
-`applications(last_seen)`, `job_steps(job_id, seq)`, `jobs(plan_id, status)`,
-`backups(job_id)`, `scans(status, id)` and `sessions(expires)`. Measured 2.4x
-across the 14 hot queries on a copy of the production DB, for about 4% growth.
+- `001_init.sql`: Base tables (users, sessions, scans, applications, resources, associations, manifests, plans, jobs, job_steps, backups, audit_log, settings).
+- `002_indexes.sql`: 11 secondary indexes on hot foreign keys and filters (associations, resources, applications, jobs, scans).
+- `003_assistant.sql`: Persistent conversation history (`assistant_threads`, `assistant_messages`) for Ollama AI advisor.
+- `004_association_reviews.sql`: Operator review annotations (`user_excluded`, `user_shared`, `approved_by_user`) preserved across scans.
+- `005_drop_settings.sql`: Removed obsolete `settings` table.
+
+Every SQLite connection initializes with:
+- `PRAGMA journal_mode = WAL;` (concurrent reader/writer isolation)
+- `PRAGMA synchronous = NORMAL;` (safe for WAL, minimizes fsync stalls)
+- `PRAGMA foreign_keys = ON;`
+- `PRAGMA busy_timeout = 5000;`
+- `PRAGMA cache_size = -32000;` (32MB dedicated page cache per connection)
+- `PRAGMA mmap_size = 67108864;` (64MB memory-mapped zero-copy I/O for hot reads)
+- `PRAGMA temp_store = MEMORY;` (in-memory sorting and transient tables)
 
 Two omissions are deliberate and were measured: no standalone
 `resources(last_seen)` (it makes the query planner flip a join and the whole set
 regresses; the composite covers it), and no `ANALYZE` (with `sqlite_stat1` present
 the dashboard's "uncertain" query picks a skip-scan and degrades ~10x).
+
+### Host Telemetry API (`/api/telemetry`)
+
+Authenticated endpoint providing real-time system performance telemetry:
+- System load averages (1m, 5m, 15m) via `os.getloadavg()`.
+- Host memory statistics parsed from `/proc/meminfo` (`total_bytes`, `available_bytes`, `used_pct`).
+- Root filesystem disk capacity and usage (`total_bytes`, `used_bytes`, `free_bytes`, `used_pct`).
+- Docker reclaimable space from cached `docker_df`.
+- Background scanner engine status (`running`, `scan_id`, `started`).
 
 ### Display timezone (UI)
 

@@ -7,7 +7,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from fastapi import APIRouter, Depends, Request, Response
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, JSONResponse
 
 from del_app import auth
 from del_app.auth import User
@@ -97,7 +97,7 @@ def _site_plan(
     return {"kind": group("kind", _KIND_ORDER), "status": group("status", _STATUS_ORDER)}
 
 
-def _changes(conn, latest: int | None) -> dict | None:
+def _changes(conn, latest: int | None, apps: list[dict] | None = None) -> dict | None:
     """What the latest completed scan changed relative to the one before it.
 
     Apps: first seen now, or seen last time and gone now. Resources: first seen
@@ -136,9 +136,12 @@ def _changes(conn, latest: int | None) -> dict | None:
     after = stats.get(latest, {}).get("app_status")
     status_changes = None
     if isinstance(before, dict) and isinstance(after, dict):
-        names = {r["slug"]: r["name"] for r in q(
-            conn, "SELECT slug, name FROM applications WHERE last_seen = ?", (latest,),
-        )}
+        if apps is not None:
+            names = {a["slug"]: a["name"] for a in apps}
+        else:
+            names = {r["slug"]: r["name"] for r in q(
+                conn, "SELECT slug, name FROM applications WHERE last_seen = ?", (latest,),
+            )}
         status_changes = [
             {"slug": slug, "name": names.get(slug, slug), "before": before[slug], "after": status}
             for slug, status in sorted(after.items())
@@ -222,7 +225,7 @@ def dashboard(
         """))
         dir_bytes = _disk_usage_bytes(conn, latest)
         attention = _attention_apps(conn, latest)
-        changes = _changes(conn, latest)
+        changes = _changes(conn, latest, apps=apps)
         next_scan = _next_scan(conn, latest, get_settings().scan_interval_hours)
         domain_map = enabled_domains_by_app(conn, [a["id"] for a in apps], latest)
     finally:
@@ -258,3 +261,48 @@ def dashboard(
         next_scan=next_scan,
         user=user,
     )
+
+
+@router.get("/api/telemetry")
+def host_telemetry(user: User = Depends(auth.require_user)) -> JSONResponse:
+    """Live host telemetry summary: CPU load averages, memory, disk, Docker storage, and scan state."""
+    import os
+    from del_app.scanner import scan_state
+
+    # Read memory from /proc/meminfo
+    mem: dict[str, int] = {}
+    try:
+        with open("/proc/meminfo", "r", encoding="utf-8") as f:
+            for line in f:
+                parts = line.split(":")
+                if parts[0] in ("MemTotal", "MemAvailable", "MemFree", "Buffers", "Cached"):
+                    mem[parts[0]] = int(parts[1].strip().split()[0]) * 1024
+    except Exception:
+        pass
+
+    # Disk stats for /apps and host root
+    disk: dict[str, Any] = {}
+    for target in ("/apps", "/"):
+        try:
+            st = os.statvfs(target)
+            disk[target] = {
+                "total_bytes": st.f_blocks * st.f_frsize,
+                "free_bytes": st.f_bavail * st.f_frsize,
+                "used_bytes": (st.f_blocks - st.f_bavail) * st.f_frsize,
+            }
+        except Exception:
+            pass
+
+    return JSONResponse({
+        "ok": True,
+        "load_avg": list(os.getloadavg()),
+        "memory": {
+            "total_bytes": mem.get("MemTotal"),
+            "available_bytes": mem.get("MemAvailable"),
+            "used_bytes": (mem["MemTotal"] - mem["MemAvailable"]) if "MemTotal" in mem and "MemAvailable" in mem else None,
+        },
+        "disk": disk,
+        "docker": docker_df(),
+        "scan": scan_state(),
+    })
+

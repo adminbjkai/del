@@ -3,6 +3,7 @@ and the favicon proxy."""
 from __future__ import annotations
 
 import base64
+import json
 import logging
 from pathlib import Path
 import re
@@ -39,6 +40,43 @@ _APP_PROBE_LOCK = threading.Lock()
 _PROBE_REFRESHING: set[str] = set()  # coalesces concurrent background refreshes
 _APP_PROBE_TTL = 300
 _APP_PROBE_TIMEOUT = 3.0
+
+
+def _probe_disk_path() -> Path:
+    return Path(get_settings().db_path).parent / "probe-cache.json"
+
+
+def _load_probe_cache() -> None:
+    p = _probe_disk_path()
+    if not p.is_file():
+        return
+    try:
+        data = json.loads(p.read_text(encoding="utf-8"))
+        now = time.monotonic()
+        for domain, entry in data.items():
+            if domain not in _APP_PROBE_CACHE and isinstance(entry, dict) and "result" in entry:
+                _APP_PROBE_CACHE[domain] = {
+                    "cached_at": now - 60.0,
+                    "result": entry["result"],
+                }
+    except Exception:
+        logger.warning("Could not load persisted probe cache", exc_info=True)
+
+
+def _persist_probe_cache() -> None:
+    p = _probe_disk_path()
+    try:
+        with _APP_PROBE_LOCK:
+            payload = {
+                d: {"result": v["result"]}
+                for d, v in _APP_PROBE_CACHE.items()
+                if "result" in v
+            }
+        tmp = p.with_suffix(".tmp")
+        tmp.write_text(json.dumps(payload, indent=2), encoding="utf-8")
+        tmp.replace(p)
+    except Exception:
+        logger.warning("Could not persist probe cache", exc_info=True)
 
 _CATEGORY_ORDER = [
     "Favorites",
@@ -210,6 +248,7 @@ def _run_probes(pending: list[str]) -> dict[str, dict[str, Any]]:
                     "cached_at": time.monotonic(),
                     "result": dict(result),
                 }
+    _persist_probe_cache()
     return results
 
 
@@ -243,6 +282,8 @@ def _probe_domains(domains: list[str], *, force: bool = False) -> dict[str, dict
     uncached: list[str] = []
 
     with _APP_PROBE_LOCK:
+        if not _APP_PROBE_CACHE:
+            _load_probe_cache()
         for domain in unique:
             cached = _APP_PROBE_CACHE.get(domain)
             if cached is None:
@@ -722,19 +763,31 @@ def view_apps(
     )
 
 
-_ICON_DOMAINS: dict[str, Any] = {"scan": None, "domains": frozenset()}
+_ICON_DOMAINS: dict[str, Any] = {"scan": None, "domains": frozenset(), "last_check": 0.0}
 
 
 def _icon_domains() -> frozenset:
     """Domains of enabled nginx sites in the latest scan, computed once per
     scan: a gallery view requests ~125 icons and each used to re-read and
     parse every site row."""
+    now = time.monotonic()
+    db_path = get_settings().db_path
+    with _ICON_LOCK:
+        if (
+            _ICON_DOMAINS["scan"] is not None
+            and _ICON_DOMAINS["scan"][0] == db_path
+            and _ICON_DOMAINS["domains"]
+            and (now - float(_ICON_DOMAINS.get("last_check", 0))) < 10.0
+        ):
+            return _ICON_DOMAINS["domains"]
+
     conn = get_db()
     try:
         latest = _latest_scan_id(conn)
-        key = (get_settings().db_path, latest)
+        key = (db_path, latest)
         with _ICON_LOCK:
-            if _ICON_DOMAINS["scan"] == key and latest is not None:
+            _ICON_DOMAINS["last_check"] = now
+            if _ICON_DOMAINS["scan"] == key and latest is not None and _ICON_DOMAINS["domains"]:
                 return _ICON_DOMAINS["domains"]
         domains = set()
         if latest is not None:
@@ -745,7 +798,7 @@ def _icon_domains() -> frozenset:
     finally:
         conn.close()
     with _ICON_LOCK:
-        _ICON_DOMAINS.update(scan=key, domains=frozenset(domains))
+        _ICON_DOMAINS.update(scan=key, domains=frozenset(domains), last_check=now)
     return frozenset(domains)
 
 

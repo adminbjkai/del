@@ -40,8 +40,24 @@
     for (var i = 0; i < lines.length; i++) {
       var line = lines[i];
       if (code !== null) {
-        if (/^```/.test(line)) { out.push("<pre><code>" + code.join("\n") + "</code></pre>"); code = null; }
-        else code.push(line);
+        if (/^```/.test(line)) {
+          var raw = code.join("\n");
+          var copyIco = (window.DEL && window.DEL.util && window.DEL.util.icon) ? window.DEL.util.icon("copy") : "";
+          out.push(
+            '<div class="code-block-wrap">' +
+              '<div class="code-block-head">' +
+                '<span class="code-block-lang">terminal</span>' +
+                '<button type="button" class="code-copy-btn" data-copy="' + raw.replace(/"/g, "&quot;") + '" title="Copy code snippet">' +
+                  copyIco + '<span>Copy</span>' +
+                '</button>' +
+              '</div>' +
+              '<pre><code>' + raw + '</code></pre>' +
+            '</div>'
+          );
+          code = null;
+        } else {
+          code.push(line);
+        }
         continue;
       }
       if (/^```/.test(line)) { flushPara(); closeList(); code = []; continue; }

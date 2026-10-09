@@ -101,6 +101,12 @@
                data-domain="{{ app.domain }}" data-category="{{ app.category }}"
                data-latency="{{ app.latency_ms or 999999 }}">
         <span class="gallery-drag-handle" aria-hidden="true" title="Drag to reorder">⋮⋮</span>
+        {% set lat = app.latency_ms %}
+        <span class="app-latency-pill {% if lat is none or lat == '' %}is-unknown{% elif lat < 100 %}is-fast{% elif lat < 300 %}is-med{% else %}is-slow{% endif %}"
+              title="Live HTTPS response time: {{ lat or '—' }} ms">
+          <span class="latency-dot" aria-hidden="true"></span>
+          <span class="latency-val">{{ lat if lat is not none else '—' }}<span class="latency-unit">ms</span></span>
+        </span>
         <a class="app-launch-link" href="{{ app.url }}" target="_blank" rel="noopener noreferrer">
           <span class="app-icon-shell">
             <img class="app-icon" src="{{ app.icon_url }}" alt="" loading="lazy" referrerpolicy="no-referrer">
@@ -115,6 +121,14 @@
         </a>
         {# After the link on purpose: Tab reaches each app before its star. #}
         <button type="button" class="app-favorite" aria-label="Add {{ app.name }} to favorites" aria-pressed="false" title="Favorite">{{ i.icon('star') }}</button>
+        <div class="card-quick-actions" aria-hidden="true">
+          <button type="button" class="quick-act-btn" data-copy="{{ app.url }}" title="Copy {{ app.url }}" aria-label="Copy URL">
+            {{ i.icon('copy') }}
+          </button>
+          <a href="/apps/{{ app.slug }}" class="quick-act-btn" title="View in Inventory" aria-label="View in Inventory">
+            {{ i.icon('apps') }}
+          </a>
+        </div>
         <div class="app-card-meta">
           <span class="card-state"><span class="live-dot" aria-hidden="true"></span>Online</span>
           <span title="{% if app.http_status in (401, 403) %}Sign-in required; the app behind it is listening{% else %}HTTP status of the root page{% endif %}">HTTP {{ app.http_status }}</span>

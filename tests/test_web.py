@@ -2066,6 +2066,39 @@ def test_palette_json_lists_apps(authed_client, settings_env):
     assert set(body) == {"apps"}
 
 
+def test_palette_json_includes_published_ports(authed_client, settings_env):
+    import json
+    from del_app.db import get_db, x
+
+    conn = get_db()
+    try:
+        scan_id = x(conn, "INSERT INTO scans (status) VALUES ('done')")
+        app_id = x(
+            conn,
+            "INSERT INTO applications (slug, name, status, kind, last_seen) VALUES (?,?,?,?,?)",
+            ("portapp", "Port App", "running", "compose", scan_id),
+        )
+        res_id = x(
+            conn,
+            "INSERT INTO resources (type, key, data_json, last_seen) VALUES (?,?,?,?)",
+            ("port", "0.0.0.0:8088", json.dumps({"port": 8088, "protocol": "tcp"}), scan_id),
+        )
+        x(
+            conn,
+            "INSERT INTO associations (app_id, resource_id, confidence, excluded) VALUES (?,?,?,0)",
+            (app_id, res_id, 90),
+        )
+        conn.commit()
+    finally:
+        conn.close()
+
+    resp = authed_client.get("/palette.json")
+    assert resp.status_code == 200
+    body = resp.json()
+    item = next(a for a in body["apps"] if a["slug"] == "portapp")
+    assert item["ports"] == ["8088"]
+
+
 def test_palette_json_requires_authentication(anon_client, settings_env):
     resp = anon_client.get("/palette.json", follow_redirects=False)
     assert resp.status_code == 303
@@ -3077,3 +3110,57 @@ def test_dashboard_title_block_shows_next_scan_when_auto_scan_is_on(authed_clien
     body = authed_client.get("/").text
     assert "every 6 h" in body
     assert "<dt>Next scan</dt><dd>after" in body
+
+
+def test_api_telemetry_requires_auth(anon_client, settings_env):
+    resp = anon_client.get("/api/telemetry", follow_redirects=False)
+    assert resp.status_code == 303
+
+
+def test_api_telemetry_returns_system_metrics(authed_client, settings_env):
+    resp = authed_client.get("/api/telemetry")
+    assert resp.status_code == 200
+    data = resp.json()
+    assert data["ok"] is True
+    assert "load_avg" in data
+    assert "memory" in data
+    assert "disk" in data
+    assert "docker" in data
+    assert "scan" in data
+
+
+def test_gallery_probe_cache_persistence(tmp_path, monkeypatch):
+    cache_file = tmp_path / "probe-cache.json"
+    monkeypatch.setattr(gallery, "_probe_disk_path", lambda: cache_file)
+
+    with gallery._APP_PROBE_LOCK:
+        gallery._APP_PROBE_CACHE.clear()
+
+    # Initially empty
+    gallery._load_probe_cache()
+    assert gallery._APP_PROBE_CACHE == {}
+
+    # Put data in cache and persist
+    with gallery._APP_PROBE_LOCK:
+        gallery._APP_PROBE_CACHE["example.com"] = {
+            "cached_at": 1234567.0,
+            "result": {
+                "healthy": True,
+                "status": 200,
+                "latency_ms": 42,
+            },
+        }
+    gallery._persist_probe_cache()
+    assert cache_file.exists()
+
+    # Clear memory cache and load back from disk
+    with gallery._APP_PROBE_LOCK:
+        gallery._APP_PROBE_CACHE.clear()
+    gallery._load_probe_cache()
+    assert "example.com" in gallery._APP_PROBE_CACHE
+    assert gallery._APP_PROBE_CACHE["example.com"]["result"]["status"] == 200
+    assert gallery._APP_PROBE_CACHE["example.com"]["result"]["latency_ms"] == 42
+
+    with gallery._APP_PROBE_LOCK:
+        gallery._APP_PROBE_CACHE.clear()
+
