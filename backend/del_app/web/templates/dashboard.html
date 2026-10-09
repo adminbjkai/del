@@ -121,7 +121,44 @@
   </a>
 </div>
 
-<div class="dash-cols">
+{# Live host telemetry: filled by app.js from /api/telemetry. #}
+<section class="panel telemetry-panel" id="telemetry-panel" aria-labelledby="telemetry-title" hidden>
+  <div class="panel-head">
+    <h2 id="telemetry-title">Host telemetry</h2>
+    <span class="panel-actions">
+      <span class="faint text-xs" id="telemetry-updated" role="status" aria-live="polite"></span>
+      <button type="button" class="btn btn-sm btn-ghost" id="telemetry-refresh" title="Read the host figures again">Refresh</button>
+    </span>
+  </div>
+  <div class="telemetry-grid" id="telemetry-grid">
+    <div class="telemetry-cell" data-metric="cpu">
+      <span class="telemetry-label">CPU load</span>
+      <span class="telemetry-value" data-field="cpu">—</span>
+      <span class="telemetry-hint" data-field="cpu-hint"></span>
+    </div>
+    <div class="telemetry-cell" data-metric="memory">
+      <span class="telemetry-label">Memory</span>
+      <span class="telemetry-value" data-field="memory">—</span>
+      <span class="telemetry-hint" data-field="memory-hint"></span>
+    </div>
+    <div class="telemetry-cell" data-metric="disk">
+      <span class="telemetry-label">Disk (/apps)</span>
+      <span class="telemetry-value" data-field="disk">—</span>
+      <span class="telemetry-bar" aria-hidden="true"><span class="telemetry-bar-fill" data-field="disk-bar"></span></span>
+      <span class="telemetry-hint" data-field="disk-hint"></span>
+    </div>
+    <div class="telemetry-cell" data-metric="docker">
+      <span class="telemetry-label">Docker reclaimable</span>
+      <span class="telemetry-value" data-field="docker">—</span>
+      <span class="telemetry-hint" data-field="docker-hint"></span>
+    </div>
+    <div class="telemetry-cell" data-metric="scan">
+      <span class="telemetry-label">Scan engine</span>
+      <span class="telemetry-value" data-field="scan">—</span>
+      <span class="telemetry-hint" data-field="scan-hint"></span>
+    </div>
+  </div>
+</section>
   <div class="dash-stack">
   <section class="panel" aria-labelledby="changes-title">
     <div class="panel-head">

@@ -40,6 +40,14 @@ async def _lifespan(app: FastAPI):
         start_scheduler(get_settings().scan_interval_hours, stop)
     except Exception:
         logger.exception("startup: scan scheduler not started")
+    # Seed the gallery probe cache from disk once so the first /view-apps load
+    # after a restart serves instantly and revalidates in the background.
+    try:
+        from del_app.web.gallery import warm_probe_cache
+
+        warm_probe_cache()
+    except Exception:
+        logger.exception("startup: probe cache not warmed")
     yield
     stop.set()
 

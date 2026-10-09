@@ -3,6 +3,7 @@ figures strip, what changed since the previous scan, apps that need
 attention, and recent jobs."""
 from __future__ import annotations
 
+import os
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
@@ -13,6 +14,7 @@ from del_app import auth
 from del_app.auth import User
 from del_app.config import get_settings
 from del_app.db import get_db, q
+from del_app.scanner import scan_state
 from del_app.web.docker_df import docker_df
 from del_app.web.orphans import _actionable_orphan_count
 from del_app.web.queries import (
@@ -263,25 +265,26 @@ def dashboard(
     )
 
 
-@router.get("/api/telemetry")
-def host_telemetry(user: User = Depends(auth.require_user)) -> JSONResponse:
-    """Live host telemetry summary: CPU load averages, memory, disk, Docker storage, and scan state."""
-    import os
-    from del_app.scanner import scan_state
+def _host_telemetry() -> dict[str, Any]:
+    """Point-in-time host figures for the dashboard instrument panel.
 
-    # Read memory from /proc/meminfo
+    Read-only and best-effort: any source that does not answer yields null
+    rather than a fabricated zero, so the panel can say "unknown" instead of
+    claiming an idle host.
+    """
+    # Memory from /proc/meminfo (kB values, converted to bytes).
     mem: dict[str, int] = {}
     try:
-        with open("/proc/meminfo", "r", encoding="utf-8") as f:
+        with open("/proc/meminfo", encoding="utf-8") as f:
             for line in f:
-                parts = line.split(":")
-                if parts[0] in ("MemTotal", "MemAvailable", "MemFree", "Buffers", "Cached"):
-                    mem[parts[0]] = int(parts[1].strip().split()[0]) * 1024
+                name, _, rest = line.partition(":")
+                if name in ("MemTotal", "MemAvailable"):
+                    mem[name] = int(rest.strip().split()[0]) * 1024
     except Exception:
         pass
 
-    # Disk stats for /apps and host root
-    disk: dict[str, Any] = {}
+    # Filesystem usage for the project root and the host root.
+    disk: dict[str, dict[str, int]] = {}
     for target in ("/apps", "/"):
         try:
             st = os.statvfs(target)
@@ -293,15 +296,34 @@ def host_telemetry(user: User = Depends(auth.require_user)) -> JSONResponse:
         except Exception:
             pass
 
-    return JSONResponse({
-        "ok": True,
-        "load_avg": list(os.getloadavg()),
+    try:
+        load = [round(v, 2) for v in os.getloadavg()]
+    except Exception:
+        load = []
+
+    total = mem.get("MemTotal")
+    available = mem.get("MemAvailable")
+    return {
+        "hostname": os.uname().nodename,
+        "cpu_count": os.cpu_count(),
+        "load_avg": load,
         "memory": {
-            "total_bytes": mem.get("MemTotal"),
-            "available_bytes": mem.get("MemAvailable"),
-            "used_bytes": (mem["MemTotal"] - mem["MemAvailable"]) if "MemTotal" in mem and "MemAvailable" in mem else None,
+            "total_bytes": total,
+            "available_bytes": available,
+            "used_bytes": (total - available) if total is not None and available is not None else None,
         },
         "disk": disk,
+    }
+
+
+@router.get("/api/telemetry")
+def host_telemetry(user: User = Depends(auth.require_user)) -> JSONResponse:
+    """Live host telemetry: CPU load, memory, disk, Docker storage, scan state.
+
+    Consumed by the dashboard instrument panel (app.js). Read-only."""
+    return JSONResponse({
+        "ok": True,
+        **_host_telemetry(),
         "docker": docker_df(),
         "scan": scan_state(),
     })

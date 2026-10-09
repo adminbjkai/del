@@ -1,5 +1,40 @@
 # Changelog
 
+## 2026.10.09 (b)
+
+Review pass: repair the regression the telemetry commit left behind, finish the
+feature it only half-wired, and stop the test suite from writing into the live
+database directory.
+
+Fixes:
+- **Gallery probe cache no longer blocks the wrong way.** The persistent disk
+  cache was loaded lazily inside `_probe_domains`, so a cold in-memory cache
+  silently meant "read the file" and the first gallery load stopped blocking
+  for its probes (it rendered empty instead). The disk cache is now warmed once,
+  at startup, by `gallery.warm_probe_cache()` (called from the app lifespan),
+  and restored entries are marked stale so the first load serves instantly and
+  revalidates in the background. Restores the "an empty cache must block"
+  contract the suite asserts.
+- **Tests no longer pollute production data.** A bare `_probe_domains` call in a
+  test derived its cache path from the real `settings.db_path` and wrote probe
+  results into the live `database/probe-cache.json`; the next run then read them
+  back as warm. The autouse conftest fixture now points the probe cache at a
+  throwaway path and resets the warm flag, and the polluted file was trashed
+  (it rebuilds on the next `/view-apps` load).
+
+Now actually used:
+- **Host telemetry panel.** `/api/telemetry` shipped last commit but nothing
+  consumed it. The dashboard now renders a **Host telemetry** strip from it:
+  CPU load relative to core count, memory used / total, `/apps` disk usage with
+  a bar, Docker reclaimable + volume bytes, and scan-engine state — refreshed on
+  demand and every 30 s while the tab is visible. Sources that do not answer show
+  "unavailable", never a fake zero. The endpoint gained `hostname` and
+  `cpu_count`, and its handler was tidied (module-level import, extracted
+  best-effort `_host_telemetry()`).
+
+Tests: 486 passed, 2 skipped (`pytest -W error`). Pyflakes and `node --check`
+clean. Upgrade: restart `del-web`. No migration.
+
 ## 2026.10.09
 
 Engineering telemetry overhaul: deeper host resource efficiency, SQLite acceleration,

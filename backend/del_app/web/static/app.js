@@ -1663,4 +1663,113 @@
       openDialog(shortcuts);
     }
   });
+
+  // =========================================================================
+  // Dashboard host telemetry panel (/api/telemetry)
+  // =========================================================================
+  var telemetryPanel = document.getElementById("telemetry-panel");
+  if (telemetryPanel) {
+    var telemetryGrid = document.getElementById("telemetry-grid");
+    var telemetryUpdated = document.getElementById("telemetry-updated");
+    var telemetryRefresh = document.getElementById("telemetry-refresh");
+
+    function teleField(name) { return $('[data-field="' + name + '"]', telemetryPanel); }
+    function teleSet(name, value, hint) {
+      var val = teleField(name);
+      if (val) val.textContent = value;
+      if (hint !== undefined) {
+        var h = teleField(name + "-hint");
+        if (h) h.textContent = hint;
+      }
+    }
+    function teleHot(metric, on) {
+      var cell = $('[data-metric="' + metric + '"]', telemetryGrid);
+      if (cell) cell.classList.toggle("is-hot", !!on);
+    }
+
+    function renderTelemetry(d) {
+      telemetryPanel.hidden = false;
+      // CPU load, relative to the core count so the number means something.
+      var load = (d.load_avg || [])[0];
+      var cores = d.cpu_count || 1;
+      if (load == null) {
+        teleSet("cpu", "—", "unavailable");
+        teleHot("cpu", false);
+      } else {
+        var pct = Math.round((load / cores) * 100);
+        teleSet("cpu", load.toFixed(2), pct + "% of " + cores + " cores");
+        teleHot("cpu", pct >= 100);
+      }
+
+      // Memory used / total.
+      var mem = d.memory || {};
+      if (mem.used_bytes == null || mem.total_bytes == null) {
+        teleSet("memory", "—", "unavailable");
+        teleHot("memory", false);
+      } else {
+        var memPct = Math.round((mem.used_bytes / mem.total_bytes) * 100);
+        teleSet("memory", formatBytes(mem.used_bytes), memPct + "% of " + formatBytes(mem.total_bytes));
+        teleHot("memory", memPct >= 90);
+      }
+
+      // Filesystem for the project root.
+      var disk = (d.disk || {})["/apps"];
+      var bar = teleField("disk-bar");
+      if (!disk || !disk.total_bytes) {
+        teleSet("disk", "—", "unavailable");
+        if (bar) bar.style.width = "0%";
+        teleHot("disk", false);
+      } else {
+        var diskPct = Math.round((disk.used_bytes / disk.total_bytes) * 100);
+        teleSet("disk", diskPct + "%", formatBytes(disk.free_bytes) + " free of " + formatBytes(disk.total_bytes));
+        if (bar) bar.style.width = diskPct + "%";
+        teleHot("disk", diskPct >= 90);
+      }
+
+      // Docker reclaimable / volume state.
+      var docker = d.docker || {};
+      if (docker.state === "ok") {
+        teleSet("docker", formatBytes(docker.reclaimable), formatBytes(docker.volumes) + " in volumes");
+      } else if (docker.state === "measuring") {
+        teleSet("docker", "…", "measuring");
+      } else {
+        teleSet("docker", "—", "Docker did not answer");
+      }
+
+      // Scan engine state.
+      var scan = d.scan || {};
+      if (scan.running) {
+        teleSet("scan", "Scanning", scan.scan_id ? "scan #" + scan.scan_id : "in progress");
+      } else if (scan.scan_id) {
+        teleSet("scan", "Idle", "last scan #" + scan.scan_id);
+      } else {
+        teleSet("scan", "Idle", "no scan yet");
+      }
+
+      telemetryUpdated.textContent = "updated " + new Date().toLocaleTimeString();
+    }
+
+    function loadTelemetry() {
+      if (telemetryRefresh) telemetryRefresh.disabled = true;
+      fetch("/api/telemetry", { credentials: "same-origin", headers: { "Accept": "application/json" } })
+        .then(function (r) { if (!r.ok) throw new Error("HTTP " + r.status); return r.json(); })
+        .then(renderTelemetry)
+        .catch(function () {
+          // A failed read stays quiet rather than showing a broken strip.
+          if (telemetryUpdated) telemetryUpdated.textContent = "telemetry unavailable";
+        })
+        .then(function () { if (telemetryRefresh) telemetryRefresh.disabled = false; });
+    }
+
+    if (telemetryRefresh) telemetryRefresh.addEventListener("click", loadTelemetry);
+    loadTelemetry();
+    var telePoll = setInterval(function () {
+      if (document.hidden) return;
+      loadTelemetry();
+    }, 30000);
+    document.addEventListener("visibilitychange", function () {
+      if (!document.hidden) loadTelemetry();
+    });
+    window.addEventListener("pagehide", function () { clearInterval(telePoll); });
+  }
 })();

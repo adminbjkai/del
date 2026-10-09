@@ -317,12 +317,19 @@ the dashboard's "uncertain" query picks a skip-scan and degrades ~10x).
 
 ### Host Telemetry API (`/api/telemetry`)
 
-Authenticated endpoint providing real-time system performance telemetry:
-- System load averages (1m, 5m, 15m) via `os.getloadavg()`.
-- Host memory statistics parsed from `/proc/meminfo` (`total_bytes`, `available_bytes`, `used_pct`).
-- Root filesystem disk capacity and usage (`total_bytes`, `used_bytes`, `free_bytes`, `used_pct`).
-- Docker reclaimable space from cached `docker_df`.
-- Background scanner engine status (`running`, `scan_id`, `started`).
+Authenticated, read-only endpoint feeding the dashboard's **Host telemetry**
+panel (rendered by `app.js`, refreshed on demand and every 30 s while the tab is
+visible). Every source is best-effort: a source that does not answer yields
+`null`, never a fabricated zero, so the panel can say "unavailable" rather than
+claim an idle host.
+- Host identity: `hostname`, `cpu_count`.
+- System load averages (1m, 5m, 15m) via `os.getloadavg()`; the panel shows the
+  1-minute load relative to `cpu_count`.
+- `memory`: `total_bytes`, `available_bytes`, `used_bytes` from `/proc/meminfo`.
+- `disk`: a map keyed by mount (`/apps`, `/`), each with `total_bytes`,
+  `free_bytes`, `used_bytes`.
+- `docker`: the cached `docker_df` value (`reclaimable`, `volumes`, `state`).
+- `scan`: background scanner engine status (`running`, `scan_id`, `started`).
 
 ### Display timezone (UI)
 

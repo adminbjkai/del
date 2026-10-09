@@ -1044,6 +1044,26 @@ a.figure:hover, a.stat-card:hover { background: var(--panel-2); color: var(--ink
 .figure-hint, .stat-hint { font-size: var(--t-xs); color: var(--ink-3); line-height: 1.25; }
 .figure.is-warn .figure-value, .stat-card.is-warn .stat-value { color: var(--warn); }
 
+/* --- Dashboard: live host telemetry panel -------------------------------- */
+.telemetry-panel { margin: 0 0 1rem; }
+.telemetry-grid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(9.2rem, 1fr));
+  border: 1px solid var(--rule-soft); border-radius: var(--r1); overflow: hidden; background: var(--well);
+}
+.telemetry-cell {
+  display: flex; flex-direction: column; gap: 0.15rem; padding: 0.5rem 0.75rem 0.6rem;
+  border-right: 1px solid var(--rule-soft); transition: background var(--ease);
+}
+.telemetry-cell:last-child { border-right: 0; }
+.telemetry-cell.is-hot { background: var(--hazard-bg); }
+.telemetry-label { font-size: var(--t-xs); font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--ink-3); }
+.telemetry-value { font-family: var(--mono); font-size: var(--t-lg); font-weight: 500; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.telemetry-cell.is-hot .telemetry-value { color: var(--hazard); }
+.telemetry-hint { font-size: var(--t-xs); color: var(--ink-3); line-height: 1.25; }
+.telemetry-bar { display: block; height: 5px; margin-top: 0.1rem; border-radius: 3px; background: var(--rule-soft); overflow: hidden; }
+.telemetry-bar-fill { display: block; height: 100%; width: 0; background: var(--chalk); transition: width 400ms var(--ease-snappy); }
+.telemetry-cell.is-hot .telemetry-bar-fill { background: var(--hazard); }
+
 /* --- Dashboard: change log + attention ----------------------------------- */
 .dash-cols { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(100%, 24rem), 1fr)); gap: 1rem; align-items: start; }
 .dash-stack { display: flex; flex-direction: column; gap: 1rem; min-width: 0; }

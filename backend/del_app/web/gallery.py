@@ -38,6 +38,11 @@ router = APIRouter()
 _APP_PROBE_CACHE: dict[str, dict[str, Any]] = {}
 _APP_PROBE_LOCK = threading.Lock()
 _PROBE_REFRESHING: set[str] = set()  # coalesces concurrent background refreshes
+# The in-memory cache is seeded from the disk file exactly once per process
+# (see `warm_probe_cache`), at startup, not lazily on the first request. A
+# lazy load inside `_probe_domains` would make "empty memory cache" mean two
+# different things and break the first-load blocking contract below.
+_PROBE_DISK_LOADED = False
 _APP_PROBE_TTL = 300
 _APP_PROBE_TIMEOUT = 3.0
 
@@ -47,20 +52,41 @@ def _probe_disk_path() -> Path:
 
 
 def _load_probe_cache() -> None:
+    """Seed the in-memory cache from the persisted file.
+
+    Entries are restored as already stale (`cached_at` in the past) so the
+    first gallery load serves them instantly and revalidates them in the
+    background — never a cold, empty gallery after a restart.
+    """
     p = _probe_disk_path()
     if not p.is_file():
         return
     try:
         data = json.loads(p.read_text(encoding="utf-8"))
         now = time.monotonic()
-        for domain, entry in data.items():
-            if domain not in _APP_PROBE_CACHE and isinstance(entry, dict) and "result" in entry:
-                _APP_PROBE_CACHE[domain] = {
-                    "cached_at": now - 60.0,
-                    "result": entry["result"],
-                }
+        with _APP_PROBE_LOCK:
+            for domain, entry in data.items():
+                if domain not in _APP_PROBE_CACHE and isinstance(entry, dict) and "result" in entry:
+                    _APP_PROBE_CACHE[domain] = {
+                        "cached_at": now - _APP_PROBE_TTL - 1.0,
+                        "result": entry["result"],
+                    }
     except Exception:
         logger.warning("Could not load persisted probe cache", exc_info=True)
+
+
+def warm_probe_cache() -> None:
+    """Load the persisted probe cache once, at process startup.
+
+    Called from the app lifespan; idempotent so a test or reload cannot double
+    load. Kept separate from `_load_probe_cache` so tests can exercise either
+    behaviour directly.
+    """
+    global _PROBE_DISK_LOADED
+    if _PROBE_DISK_LOADED:
+        return
+    _PROBE_DISK_LOADED = True
+    _load_probe_cache()
 
 
 def _persist_probe_cache() -> None:
@@ -282,8 +308,6 @@ def _probe_domains(domains: list[str], *, force: bool = False) -> dict[str, dict
     uncached: list[str] = []
 
     with _APP_PROBE_LOCK:
-        if not _APP_PROBE_CACHE:
-            _load_probe_cache()
         for domain in unique:
             cached = _APP_PROBE_CACHE.get(domain)
             if cached is None:

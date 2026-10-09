@@ -121,6 +121,10 @@ def test_dashboard_200(authed_client):
     resp = authed_client.get("/")
     assert resp.status_code == 200
     assert "Dashboard" in resp.text
+    # The Host telemetry panel is present in the markup and starts hidden;
+    # app.js fills it from /api/telemetry.
+    assert 'id="telemetry-panel"' in resp.text
+    assert "Host telemetry" in resp.text
 
 
 def test_dashboard_app_count_excludes_stale_scan_apps(authed_client, settings_env):
@@ -3127,6 +3131,17 @@ def test_api_telemetry_returns_system_metrics(authed_client, settings_env):
     assert "disk" in data
     assert "docker" in data
     assert "scan" in data
+    # Host identity + core count feed the dashboard's relative CPU reading.
+    assert data["hostname"]
+    assert isinstance(data["cpu_count"], int) and data["cpu_count"] >= 1
+    assert isinstance(data["load_avg"], list) and len(data["load_avg"]) == 3
+    # Best-effort sources answer with a number or null, never a fake 0.
+    assert set(data["memory"]) == {"total_bytes", "available_bytes", "used_bytes"}
+    assert set(data["disk"]).issubset({"/apps", "/"})
+    for fs in data["disk"].values():
+        assert set(fs) == {"total_bytes", "free_bytes", "used_bytes"}
+    assert data["docker"]["state"] in ("measuring", "ok", "unavailable")
+    assert "running" in data["scan"]
 
 
 def test_gallery_probe_cache_persistence(tmp_path, monkeypatch):
@@ -3163,4 +3178,49 @@ def test_gallery_probe_cache_persistence(tmp_path, monkeypatch):
 
     with gallery._APP_PROBE_LOCK:
         gallery._APP_PROBE_CACHE.clear()
+
+
+def test_warm_probe_cache_loads_disk_once_and_marks_entries_stale(tmp_path, monkeypatch):
+    """Startup warm-load seeds memory from disk and marks entries already stale,
+    so the first gallery load serves instantly and revalidates in the
+    background (a lazy load inside _probe_domains would break the
+    empty-cache-blocks contract this behaviour replaced)."""
+    import time as _time
+
+    cache_file = tmp_path / "probe-cache.json"
+    cache_file.write_text(
+        '{"warm.example.com": {"result": {"healthy": true, "status": 200, "latency_ms": 3}}}',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(gallery, "_probe_disk_path", lambda: cache_file)
+    monkeypatch.setattr(gallery, "_PROBE_DISK_LOADED", False)
+    with gallery._APP_PROBE_LOCK:
+        gallery._APP_PROBE_CACHE.clear()
+
+    gallery.warm_probe_cache()
+    assert "warm.example.com" in gallery._APP_PROBE_CACHE
+    entry = gallery._APP_PROBE_CACHE["warm.example.com"]
+    assert _time.monotonic() - entry["cached_at"] >= gallery._APP_PROBE_TTL
+
+    # Idempotent: a second call does not reload or clobber live entries.
+    with gallery._APP_PROBE_LOCK:
+        gallery._APP_PROBE_CACHE["warm.example.com"]["cached_at"] = _time.monotonic()
+    gallery.warm_probe_cache()
+    assert _time.monotonic() - gallery._APP_PROBE_CACHE["warm.example.com"]["cached_at"] < 1
+
+    with gallery._APP_PROBE_LOCK:
+        gallery._APP_PROBE_CACHE.clear()
+
+
+def test_probe_domains_does_not_read_disk_when_memory_is_empty(settings_env, monkeypatch):
+    """The lazy disk read was removed: an empty memory cache must mean
+    \"uncached\", not \"go read the file\", so a first load still blocks."""
+    monkeypatch.setattr(gallery, "_PROBE_DISK_LOADED", False)
+    with gallery._APP_PROBE_LOCK:
+        gallery._APP_PROBE_CACHE.clear()
+    calls = []
+    monkeypatch.setattr(gallery, "_run_probes", lambda pending: {d: {"healthy": True} for d in pending})
+    monkeypatch.setattr(gallery, "_load_probe_cache", lambda: calls.append("disk"))
+    gallery._probe_domains(["nope.example.com"])
+    assert calls == [], "_probe_domains must not read the disk cache on the request path"
 

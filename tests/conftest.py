@@ -37,6 +37,26 @@ def _no_host_work_from_background_threads(request, monkeypatch):
     monkeypatch.setattr(docker_df, "_compute", lambda: {"reclaimable": 0, "volumes": 0})
 
 
+@pytest.fixture(autouse=True)
+def _probe_cache_isolated(tmp_path_factory, monkeypatch):
+    """Keep the gallery probe cache out of the real database directory.
+
+    `_probe_disk_path` derives from `settings.db_path`, which is the production
+    path unless a test supplies `settings_env`. A bare `_probe_domains` call in
+    a test would otherwise persist its probe results into the live
+    `database/probe-cache.json` (and later read them back as "already warm").
+    """
+    from del_app.web import gallery
+
+    cache_file = tmp_path_factory.mktemp("probe") / "probe-cache.json"
+    monkeypatch.setattr(gallery, "_probe_disk_path", lambda: cache_file)
+    monkeypatch.setattr(gallery, "_PROBE_DISK_LOADED", False, raising=False)
+    yield
+    with gallery._APP_PROBE_LOCK:
+        gallery._APP_PROBE_CACHE.clear()
+    gallery._PROBE_REFRESHING.clear()
+
+
 @pytest.hookimpl(wrapper=True)
 def pytest_runtest_call(item):
     """Join every thread DEL code started during the test body, before any
